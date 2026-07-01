@@ -30,6 +30,8 @@ def render(workspace: Path) -> str:
     validation = load_json(validation_path) if validation_path.exists() else {"status": "not-run", "warnings": [], "errors": []}
     trace = read_jsonl(workspace / artifacts.get("propagation_trace", "propagation-trace.jsonl"))
     evidence_rows = load_csv_rows(workspace / artifacts.get("evidence_map", "evidence-map.csv"))
+    actors = load_json(workspace / artifacts.get("actors", "actors.json"))
+    execution = manifest.get("execution", {})
 
     lines: list[str] = []
     lines.append("# Aleph Skill Simulation Report")
@@ -45,10 +47,22 @@ def render(workspace: Path) -> str:
     lines.append(f"- Description: {change.get('description', '')}")
     lines.append(f"- Time: {change.get('time', '')}")
     lines.append(f"- Scope: {manifest.get('scope', {})}")
+    lines.append(f"- Execution profile: `{execution.get('profile', 'unknown')}`")
+    lines.append(f"- Research quality: `{execution.get('research_quality', 'unknown')}`")
     lines.append("")
     lines.append("## Evidence summary")
     lines.append("")
     lines.append(f"- Evidence rows: {len(evidence_rows)}")
+    direct_statuses = {"opened", "downloaded", "api", "local-file", "user-provided"}
+    direct_count = sum(1 for row in evidence_rows if row.get("retrieval_status") in direct_statuses)
+    high_quality = sum(
+        1
+        for row in evidence_rows
+        if row.get("retrieval_status") in direct_statuses
+        and row.get("source_tier") in {"primary", "authoritative-secondary", "user-provided"}
+    )
+    lines.append(f"- Directly accessed sources: {direct_count}")
+    lines.append(f"- Direct primary/authoritative sources: {high_quality}")
     lines.append("- Treat all generated branches as simulation unless explicitly sourced as observed facts.")
     lines.append("")
     lines.append("## Propagation highlights")
@@ -78,6 +92,25 @@ def render(workspace: Path) -> str:
             )
         )
     lines.append("")
+    lines.append("## Human decision tracks")
+    lines.append("")
+    lines.append(table_row(["Actor", "Research", "Roleplay", "Execution", "Knowledge cutoff"]))
+    lines.append(table_row(["---", "---", "---", "---", "---"]))
+    for actor in actors:
+        research = actor.get("research_track", {})
+        roleplay = actor.get("roleplay_track", {})
+        lines.append(
+            table_row(
+                [
+                    str(actor.get("public_role", actor.get("id", ""))),
+                    str(research.get("status", "missing")),
+                    str(roleplay.get("status", "missing")),
+                    f"{research.get('execution_mode', '?')} / {roleplay.get('execution_mode', '?')}",
+                    str(roleplay.get("knowledge_cutoff", "missing")),
+                ]
+            )
+        )
+    lines.append("")
     lines.append("## Validation and audit")
     lines.append("")
     lines.append(f"- Validation status: `{validation.get('status')}`")
@@ -88,9 +121,10 @@ def render(workspace: Path) -> str:
     lines.append("")
     lines.append("## Warnings and next steps")
     lines.append("")
-    lines.append("- Replace example evidence rows with real D Research ledger entries before using this report for analysis.")
-    lines.append("- Run artifact validation and backtests when observed-history data is available.")
-    lines.append("- Re-run branch probability normalization after adding or pruning branches.")
+    if validation.get("status") == "pass" and not validation.get("warnings"):
+        lines.append("- No validator warnings remain; uncertainty in modeled branches still applies.")
+    lines.append("- Backtest causal edges when the simulated period overlaps observed history.")
+    lines.append("- Re-run validation and quality scoring after changing evidence, edges, actors, or branches.")
     lines.append("")
     return "\n".join(lines)
 

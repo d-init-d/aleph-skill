@@ -1,54 +1,87 @@
 {
   "id": "actor:example",
-  "person_node": "entity:example-person",
+  "person_node": "factor:example",
   "public_role": "public decision maker",
   "scope_note": "Public-role behavior only; private personal data is out of scope.",
-  "evidence_ids": [
-    "evidence:example"
-  ],
+  "materiality": "material",
+  "evidence_ids": ["evidence:example"],
   "research_track": {
-    "status": "required",
+    "status": "completed",
+    "execution_mode": "isolated-pass",
+    "agent_ref": "main:research:actor-example",
+    "started_at": "2026-07-01T00:00:00Z",
+    "completed_at": "2026-07-01T00:01:00Z",
     "preferred_tool": "d-research",
-    "artifact": "actor dossier with sourced public-role claims",
-    "notes": "Research track gathers evidence only and must not roleplay."
+    "artifact": "actors.json#actor:example/research_track",
+    "notes": "Research track gathers evidence only and must not roleplay.",
+    "claims": [
+      {
+        "claim": "The actor operates under a documented institutional process.",
+        "evidence_ids": ["evidence:example"],
+        "confidence": 0.5
+      }
+    ]
   },
   "roleplay_track": {
-    "status": "required_for_material_decision_nodes",
-    "artifact": "roleplay hypothesis with simulated-time constraints",
-    "notes": "Roleplay track uses the completed dossier only; it is simulation, not evidence."
+    "status": "completed",
+    "execution_mode": "isolated-pass",
+    "agent_ref": "main:roleplay:actor-example",
+    "started_at": "2026-07-01T00:01:01Z",
+    "completed_at": "2026-07-01T00:02:00Z",
+    "artifact": "actors.json#actor:example/roleplay_track",
+    "knowledge_cutoff": "2026-06-01T00:00:00Z",
+    "dossier_evidence_ids": ["evidence:example"],
+    "notes": "Roleplay track uses the completed dossier only; it is simulation, not evidence.",
+    "isolation_note": "Template fixture uses two explicitly separated main-context passes.",
+    "hypotheses": [
+      {
+        "action": "Follow the institutionally constrained action.",
+        "probability": 0.6,
+        "reasoning": "The dossier supports procedural behavior under the stated constraints.",
+        "status": "simulation",
+        "evidence_ids": []
+      },
+      {
+        "action": "Delay or delegate the decision.",
+        "probability": 0.4,
+        "reasoning": "Uncertainty could make delay preferable.",
+        "status": "simulation",
+        "evidence_ids": []
+      }
+    ]
   },
   "adjudication": {
     "owner": "main simulator",
-    "rule": "Compare roleplay hypotheses against the dossier, generate alternatives, and assign conservative probabilities."
+    "accepted_hypotheses": ["Follow the institutionally constrained action."],
+    "rejected_hypotheses": [],
+    "confidence_cap": 0.65,
+    "rule": "Compare roleplay hypotheses against the dossier, preserve alternatives, and assign conservative probabilities."
   },
-  "biographical_foundation": {
-    "summary": "Public career facts relevant to the simulation."
-  },
+  "biographical_foundation": {"summary": "Public career facts relevant to the simulation."},
   "decision_patterns": [
     {
       "pattern": "Uses institutional process before major decisions.",
-      "evidence_ids": [
-        "evidence:example"
-      ],
+      "evidence_ids": ["evidence:example"],
       "confidence": 0.5
     }
   ],
   "stated_beliefs": [],
-  "institutional_constraints": [],
+  "institutional_constraints": ["Documented institutional process"],
   "relationships": [],
-  "crisis_behavior": {
-    "pattern": "uncertain",
-    "examples": []
-  },
-  "uncertainty_factors": [],
+  "crisis_behavior": {"pattern": "uncertain", "examples": []},
+  "uncertainty_factors": ["Sparse public-role evidence in the template fixture"],
   "predicted_responses": [
     {
-      "scenario": "example decision point",
-      "likely_action": "choose the institutionally constrained action",
+      "action": "Follow the institutionally constrained action.",
       "probability": 0.6,
-      "alternative_action": "delay or delegate",
-      "alternative_probability": 0.4,
-      "reasoning": "Prediction is based on public-role evidence, roleplay hypotheses, and institutional constraints."
+      "reasoning": "Supported by the public-role dossier and bounded roleplay hypothesis.",
+      "status": "simulation"
+    },
+    {
+      "action": "Delay or delegate the decision.",
+      "probability": 0.4,
+      "reasoning": "Preserved as a plausible alternative under uncertainty.",
+      "status": "simulation"
     }
   ]
 }

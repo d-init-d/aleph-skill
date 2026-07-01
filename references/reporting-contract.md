@@ -36,6 +36,7 @@ For each material human actor, report:
 - which roleplay outputs were accepted, downgraded, or rejected,
 - which alternative actions became branches,
 - why private or unsupported information was excluded.
+- the execution mode and distinct research/roleplay agent references from `human-track-ledger.jsonl`.
 
 ## Audit appendix
 
@@ -76,3 +77,5 @@ When writing artifacts, include paths to:
 - branch ledger,
 - validation report,
 - final report.
+
+Before calling the report complete, run final validation with `--require-report` and run `scripts/evaluate_simulation_quality.py --threshold 85 --enforce`. A validator pass confirms structural/audit gates; the quality score additionally checks evidence strength, human-track execution, and efficiency.

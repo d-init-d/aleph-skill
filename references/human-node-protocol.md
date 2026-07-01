@@ -14,7 +14,11 @@ For every material human decision node, split work into three roles:
 2. Human Roleplay track: receives only the dossier, allowed actions, constraints, and simulated-time facts. It generates hypotheses and never gathers evidence.
 3. Main simulator: adjudicates both tracks, compares hypotheses against evidence, creates alternative branches, and assigns conservative probabilities.
 
-Use actual subagents when the host runtime and user authorization allow it. If subagents are unavailable, run the tracks as separated passes in the main context and store separate notes so evidence and roleplay cannot merge.
+Inspect the exposed tools before deciding. If a task/subagent/agent tool exists, subagents are available: dispatch one research subagent and, only after its dossier is frozen, a different roleplay subagent for each material actor. Sequential dispatch is acceptable when concurrency is limited. Do not use the same subagent for both roles.
+
+If no subagent tool exists, run two isolated main-context passes with distinct `agent_ref` values and an explicit fallback reason. A sentence saying the tracks were separated is not evidence of separation.
+
+Record each execution in `human-track-ledger.jsonl` with actor ID, track, execution mode, distinct agent reference, start/completion timestamps, input artifacts, output artifact, and status. The validator cross-checks this ledger against `actors.json`.
 
 ## When deep research is required
 
@@ -54,6 +58,8 @@ Use `templates/actor-dossier.json` with:
 - uncertainty_factors,
 - predicted_responses.
 
+The research track must contain sourced `claims`. The roleplay track must contain a simulated-time `knowledge_cutoff`, the dossier evidence IDs it received, and at least two hypotheses whose probabilities sum to `1.0`. Roleplay hypotheses must use `status: simulation` and an empty `evidence_ids` list. Actor predicted responses must also provide at least two normalized alternatives.
+
 Cap any single predicted response at 0.80 unless the action is legally or institutionally mandatory.
 
 ## Research track prompt
@@ -78,6 +84,7 @@ After roleplay:
 - assign probability conservatively,
 - create alternative branches,
 - mark the roleplay row as `simulation`, not `fact`.
+- preserve the raw hypothesis in the roleplay track and the simulator's acceptance/rejection decision in `adjudication`.
 
 ## Common errors
 

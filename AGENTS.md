@@ -10,16 +10,19 @@ Core behavior:
 4. If D Research is missing, ask the user once per task whether they want to install or enable it; if they decline, continue in limited mode and lower confidence.
 5. Refuse or narrow requests that require private personal data, doxxing, stalking, minors, private accounts, access-control bypass, captcha evasion, or paywall bypass.
 6. Build causal edges only when the mechanism, evidence, lag, context modifiers, strength, and confidence are explicit.
-7. For material person nodes, split Human Research and Human Roleplay tracks. Use subagents when allowed; otherwise keep the passes separated in the main context. Treat roleplay as hypothesis generation, never evidence.
-8. Always run validation scripts when creating artifacts.
+7. For material person nodes, inspect the host tools. If a task/subagent/agent tool exists, dispatch distinct research and roleplay subagents for every material actor; research must finish before roleplay starts. Otherwise record the unavailable capability and run isolated passes. Treat roleplay as hypothesis generation, never evidence.
+8. Record both human tracks in `human-track-ledger.jsonl`; prose claims of separation are insufficient.
+9. Initialize artifacts before research, obey the selected source/repair budget, and checkpoint progress in the manifest.
+10. Always run draft validation, render the report, run final validation with `--require-report`, and enforce quality score 85 when creating artifacts.
 
 Useful commands:
 
 - `python scripts/preflight.py --d-research <path>`
-- `python scripts/init_simulation_workspace.py --slug <slug> --change-point "<description>"`
+- `python scripts/init_simulation_workspace.py --slug <slug> --change-point "<description>" --profile standard`
 - `python scripts/validate_skill_package.py .`
-- `python scripts/validate_simulation_artifacts.py --workspace <run-dir>`
+- `python scripts/validate_simulation_artifacts.py --workspace <run-dir> --mode final --require-report --write-report`
 - `python scripts/render_simulation_report.py --workspace <run-dir> --out <report.md>`
+- `python scripts/evaluate_simulation_quality.py --workspace <run-dir> --threshold 85 --enforce`
 
 Output standards:
 

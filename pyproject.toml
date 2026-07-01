@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aleph-skill"
-version = "1.0.0"
+version = "1.1.0"
 description = "Evidence-grounded causal timeline simulation with branching futures and disciplined uncertainty."
 requires-python = ">=3.10"
 license = { text = "CC-BY-NC-4.0" }

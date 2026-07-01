@@ -44,6 +44,20 @@ Map D Research ledger rows into simulation artifacts:
 | confidence | node/claim confidence input |
 | contradiction_status | warning or contested claim |
 
+## Source-quality gate
+
+Every evidence row must declare:
+
+- `source_tier`: `primary`, `authoritative-secondary`, `secondary`, `tertiary`, or `user-provided`;
+- `retrieval_status`: `opened`, `downloaded`, `api`, `local-file`, `user-provided`, `search-snippet`, or `blocked`;
+- a concrete excerpt/value, retrieval time, confidence, and contradiction status.
+
+For `standard` runs, directly access at least two primary/authoritative sources. For `deep` runs, directly access at least four. A blocked source cannot support a claim. A search snippet is only provisional and its confidence cannot exceed `0.45`; tertiary evidence cannot exceed `0.60`. Do not leave `contradiction_status: unchecked` in `standard` or `deep` output.
+
+At least 50% of `basic`/quick evidence, 60% of `standard` evidence, and 70% of `deep` evidence must be directly opened, downloaded, obtained through a public API, supplied by the user, or read from a local file. Discovery snippets cannot be allowed to dominate the final ledger.
+
+Source count is not source quality. Stop when the profile budget is reached and the critical claims are covered; report remaining gaps rather than padding the ledger with weak duplicates.
+
 ## Prompt pattern
 
 Use a narrow research prompt:
@@ -70,6 +84,8 @@ Exclude private contact details, family/private life, private accounts, health s
 ```
 
 For material human decision nodes, D Research feeds only the Human Research track. The roleplay track receives the finished dossier and simulated-time situation, not raw browsing authority.
+
+When a subagent tool exists, the Human Research subagent must invoke or follow D Research itself and return structured claims. The main simulator then freezes the dossier before dispatching a different Roleplay subagent.
 
 ## Fallback mode
 

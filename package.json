@@ -1,6 +1,6 @@
 {
   "name": "aleph-skill-tools",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Evidence-grounded causal timeline simulation with branching futures and disciplined uncertainty.",
   "private": true,
   "license": "CC-BY-NC-4.0",
@@ -10,9 +10,11 @@
     "validate:skill": "python scripts/validate_skill_package.py .",
     "sim:init": "python scripts/init_simulation_workspace.py",
     "sim:validate": "python scripts/validate_simulation_artifacts.py",
+    "sim:quality": "python scripts/evaluate_simulation_quality.py",
+    "test": "python -m unittest discover -s tests -v",
     "butterfly:score": "python scripts/score_butterfly.py",
     "report:render": "python scripts/render_simulation_report.py",
     "install:dry-run": "python scripts/install_adapters.py --target agents --scope user --dry-run",
-    "self-test": "python scripts/validate_skill_package.py . && python scripts/validate_simulation_artifacts.py --examples && python scripts/preflight.py --json"
+    "self-test": "python scripts/validate_skill_package.py . && python scripts/validate_simulation_artifacts.py --examples && python -m unittest discover -s tests -v && python scripts/preflight.py --json"
   }
 }

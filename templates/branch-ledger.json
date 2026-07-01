@@ -1,13 +1,13 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "branches": [
     {
       "id": "branch:most-likely",
       "name": "Most likely branch",
       "probability": 0.45,
       "summary": "Primary branch under current assumptions.",
-      "causal_trace": [],
-      "key_decision_points": [],
+      "causal_trace": ["causal:example-increases-target"],
+      "key_decision_points": ["actor:example"],
       "end_state": {
         "summary": "End state for this branch."
       },
@@ -15,15 +15,15 @@
         "evidence:example"
       ],
       "confidence": 0.5,
-      "warnings": []
+      "warnings": ["Template branch; replace before production use."]
     },
     {
       "id": "branch:alternative",
       "name": "Alternative branch",
       "probability": 0.35,
       "summary": "Plausible alternative branch.",
-      "causal_trace": [],
-      "key_decision_points": [],
+      "causal_trace": ["causal:example-increases-target"],
+      "key_decision_points": ["actor:example"],
       "end_state": {
         "summary": "End state for this branch."
       },
@@ -31,15 +31,15 @@
         "evidence:example"
       ],
       "confidence": 0.4,
-      "warnings": []
+      "warnings": ["Template branch; replace before production use."]
     },
     {
       "id": "branch:stress",
       "name": "Stress branch",
       "probability": 0.2,
       "summary": "Lower-probability stress branch.",
-      "causal_trace": [],
-      "key_decision_points": [],
+      "causal_trace": ["causal:example-increases-target"],
+      "key_decision_points": ["actor:example"],
       "end_state": {
         "summary": "End state for this branch."
       },
@@ -47,7 +47,7 @@
         "evidence:example"
       ],
       "confidence": 0.35,
-      "warnings": []
+      "warnings": ["Template branch; replace before production use."]
     }
   ]
 }

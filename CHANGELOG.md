@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.1.0 - 2026-07-02
+
+### Added
+
+- Execution profiles with bounded source and repair-loop budgets.
+- Strict schema `1.1.0` with cross-artifact reference integrity and source-quality metadata.
+- Auditable `human-track-ledger.jsonl` for distinct Human Research and Human Roleplay executions.
+- Mandatory subagent use when a task/subagent tool is exposed, with isolated-pass fallback only when unavailable.
+- Final-report validation and a 100-point simulation quality evaluator.
+
+### Improved
+
+- Validator now rejects unresolved references, weakly labeled evidence, unchecked contradictions, incomplete human tracks, unnormalized actor hypotheses, missing context/lag data, and branch-cap violations.
+- Workspace initialization now starts checkpoints immediately and applies `quick`, `standard`, or `deep` budgets.
+- Report rendering now summarizes evidence access quality and human-track execution.
+- Workflow now checkpoints artifacts before research expands and caps repair loops to prevent runaway context/time use.
+
+### Forward testing
+
+- Tested through OpenCode with DeepSeek V4 Flash, GLM 5.2, Kimi K2.7 Code, MiniMax M3 on Ollama Cloud, and Qwen 3.7 Max on Cline Pass.
+- The baseline exposed inconsistent source quality, missing human subagent separation, and long repair loops; v1.1 gates were designed from those observed failures.
+
 ## v1.0.0 - 2026-07-01
 
 Initial production release.

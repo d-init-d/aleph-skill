@@ -18,6 +18,8 @@ Pass conditions:
 - Avoids claiming a single true alternate history.
 - Separates public-role actor research from any roleplay hypothesis for material decision makers.
 - Reports weak edges such as moral hazard timing.
+- Records two distinct human-track executions per material actor when a subagent tool is exposed.
+- Passes final validation with report required and scores at least 85.
 
 ## Test 2: 2026 oil shock
 
@@ -34,6 +36,7 @@ Pass conditions:
 - Shows propagation through transport costs, inflation, rates, growth, and EM stress.
 - Separates central-bank/government decision research from any roleplay hypothesis.
 - Reports sensitivity to pass-through and policy reaction assumptions.
+- Uses directly opened primary/authoritative evidence rather than relying on search snippets.
 
 ## Test 3: Waterloo
 
@@ -50,6 +53,7 @@ Pass conditions:
 - Branches on coalition recovery, French consolidation, Prussian reform, and German unification.
 - Avoids presentist hindsight in actor knowledge.
 - Keeps commander/statesman roleplay as simulation-only and separate from sourced historical research.
+- Resolves every evidence/node/edge/actor/branch/trace ID reference.
 
 ## Package checks
 
@@ -58,6 +62,7 @@ Run:
 ```powershell
 python scripts\validate_skill_package.py .
 python scripts\validate_simulation_artifacts.py --examples
+python -m unittest discover -s tests -v
 python scripts\preflight.py --json
 ```
 

@@ -1,7 +1,7 @@
 {
   "id": "causal:example-increases-target",
   "from": "factor:example",
-  "to": "factor:target",
+  "to": "factor:example",
   "relation": "increases",
   "sign": 1,
   "base_strength": 0.4,
@@ -23,5 +23,5 @@
   "evidence": [
     "evidence:example"
   ],
-  "status": "proposed"
+  "status": "inference"
 }

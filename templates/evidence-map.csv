@@ -1,2 +1,2 @@
-evidence_id,claim,source,source_type,date,access_method,quote_or_value,confidence,contradiction_status,notes
-evidence:example,Example claim,https://github.com/d-init-d/aleph-skill,example,2026-07-01,user-provided,Example evidence value,0.50,unchecked,Starter row for smoke tests; replace with a real evidence ledger in production simulations
+evidence_id,claim,source,source_type,source_tier,date,retrieved_at,access_method,retrieval_status,quote_or_value,confidence,contradiction_status,notes
+evidence:example,Example claim,https://github.com/d-init-d/aleph-skill,repository,primary,2026-07-01,2026-07-01T00:00:00Z,user-provided,user-provided,Example evidence value used only by the template smoke test,0.50,no-conflict-found,Replace this fixture row with real D Research ledger entries

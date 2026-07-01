@@ -34,7 +34,27 @@ For material human actors, the skill requires a split workflow:
 2. **Human Roleplay track** - uses only the completed dossier and simulated-time situation to generate hypotheses. It must not browse or invent private motives.
 3. **Main simulator** - adjudicates both tracks, creates alternatives, assigns conservative probabilities, and labels roleplay as `simulation`, never `fact`.
 
-When a runtime supports subagents and the user allows them, run Research and Roleplay as separate subagents. Otherwise, keep them as separated passes in the main context.
+When a runtime exposes a task/subagent tool, Research and Roleplay must run as two distinct subagent executions for every material actor. The roleplay subagent starts only after the research dossier is frozen. If no such tool exists, the agent records the reason and uses two isolated passes. Both executions are auditable in `human-track-ledger.jsonl`; a prose claim that separation happened is not enough.
+
+## Quality gates
+
+The `v1.1` artifact contract adds:
+
+- execution profiles (`quick`, `standard`, `deep`) with source and repair-loop budgets,
+- directly accessed source tiers and contradiction status,
+- referential integrity across evidence, nodes, edges, actors, branches, and traces,
+- explicit human-track timestamps, agent references, hypotheses, and knowledge cutoffs,
+- checkpointed completion, strict final validation, and a 100-point quality score.
+
+For a completed workspace, run:
+
+```powershell
+python scripts\validate_simulation_artifacts.py --workspace <run-dir> --mode draft --write-report
+python scripts\render_simulation_report.py --workspace <run-dir>
+python scripts\validate_simulation_artifacts.py --workspace <run-dir> --mode final --require-report --write-report
+python scripts\render_simulation_report.py --workspace <run-dir>
+python scripts\evaluate_simulation_quality.py --workspace <run-dir> --threshold 85 --enforce
+```
 
 ## Package structure
 
