@@ -4,7 +4,7 @@ Use these prompts to test whether the skill loads the right references, applies 
 
 ## Lehman bailout
 
-Use $aleph-timeline-simulator to simulate: What if Lehman Brothers was bailed out in September 2008? Build 3-5 timeline branches through 2016 with sourced mechanisms and confidence warnings.
+Use $aleph-skill to simulate: What if Lehman Brothers was bailed out in September 2008? Build 3-5 timeline branches through 2016 with sourced mechanisms and confidence warnings. Use D Research for evidence and split material human decisions into research and roleplay tracks.
 
 Expected behavior:
 
@@ -15,7 +15,7 @@ Expected behavior:
 
 ## Oil shock
 
-Use $aleph-timeline-simulator to simulate an oil price +40% shock starting June 2026. Focus on inflation, central-bank reaction, growth, shipping, and emerging markets over 24 months.
+Use $aleph-skill to simulate an oil price +40% shock starting June 2026. Focus on inflation, central-bank reaction, growth, shipping, and emerging markets over 24 months. Use D Research for evidence and split material human decisions into research and roleplay tracks.
 
 Expected behavior:
 
@@ -26,7 +26,7 @@ Expected behavior:
 
 ## Waterloo
 
-Use $aleph-timeline-simulator to simulate: What if Napoleon won at Waterloo in 1815? Build a cautious alternate-history tree through 1870.
+Use $aleph-skill to simulate: What if Napoleon won at Waterloo in 1815? Build a cautious alternate-history tree through 1870. Use D Research for evidence and split material human decisions into research and roleplay tracks.
 
 Expected behavior:
 

@@ -32,7 +32,7 @@ def render(workspace: Path) -> str:
     evidence_rows = load_csv_rows(workspace / artifacts.get("evidence_map", "evidence-map.csv"))
 
     lines: list[str] = []
-    lines.append("# Aleph Timeline Simulation Report")
+    lines.append("# Aleph Skill Simulation Report")
     lines.append("")
     lines.append(f"Generated: {utc_now()}")
     lines.append(f"Workspace: `{workspace}`")
@@ -89,7 +89,7 @@ def render(workspace: Path) -> str:
     lines.append("## Warnings and next steps")
     lines.append("")
     lines.append("- Replace example evidence rows with real D Research ledger entries before using this report for analysis.")
-    lines.append("- Run Aleph validation and backtests when local Aleph artifacts are available.")
+    lines.append("- Run artifact validation and backtests when observed-history data is available.")
     lines.append("- Re-run branch probability normalization after adding or pruning branches.")
     lines.append("")
     return "\n".join(lines)

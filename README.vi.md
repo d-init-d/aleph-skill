@@ -1,85 +1,59 @@
-# Aleph Timeline Simulator
+# Aleph Skill
 
-**Agent Skill production-ready để mô phỏng timeline theo hiệu ứng cánh bướm: counterfactual history, causal graph, human decision nodes, propagation, branch audit, và tích hợp Aleph KB.**
+**Agent Skill mô phỏng dòng thời gian dựa trên chứng cứ: đứng tại một điểm thay đổi, mở ra các nhánh quá khứ-hiện tại-tương lai khả dĩ, rồi buộc từng thế giới giả lập phải chịu trách nhiệm trước nguồn, cơ chế nhân-quả và độ bất định.**
 
-[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
-[![Release](https://img.shields.io/github/v/release/d-init-d/aleph-timeline-simulator?sort=semver)](https://github.com/d-init-d/aleph-timeline-simulator/releases)
+[![Release](https://img.shields.io/github/v/release/d-init-d/aleph-skill?sort=semver)](https://github.com/d-init-d/aleph-skill/releases)
 
-README tiếng Anh: [README.md](README.md)
+Aleph Skill dùng cho counterfactual history, hiệu ứng cánh bướm, causal graph, human decision nodes, propagation, branch audit, và báo cáo mô phỏng có phân tách rõ `fact`, `inference`, `simulation`, `counterfactual`.
 
-> Skill này biến một điểm thay đổi thành workflow mô phỏng có kiểm chứng: nghiên cứu baseline, dựng node, chỉ nhận edge có mechanism/evidence, propagate theo thời gian, tạo nhiều nhánh xác suất, và audit uncertainty.
+## Nên dùng cùng D Research
 
-## Dùng khi nào
+Skill này được thiết kế để đạt chất lượng tốt nhất khi đi cùng [`d-research-skill`](https://github.com/d-init-d/d-research-skill).
 
-Dùng skill này khi agent cần:
+D Research nên phụ trách tìm nguồn, dựng evidence ledger, kiểm tra mâu thuẫn, và nghiên cứu public-role actor. Nếu khi gọi skill mà chưa có D Research, agent nên hỏi người dùng một lần xem có muốn cài/bật D Research không. Nếu người dùng từ chối, vẫn chạy được nhưng phải đánh dấu `research_quality: basic` và hạ confidence.
 
-- mô phỏng alternate history hoặc counterfactual timeline;
-- phân tích hiệu ứng cánh bướm từ một điểm thay đổi;
-- dựng Aleph-style causal graph với người, sự kiện, yếu tố, bối cảnh, indicator;
-- tạo nhiều nhánh tương lai/quá khứ giả định với xác suất;
-- dùng D Research để xây evidence ledger cho node/edge/human dossier;
-- viết report tách rõ `fact`, `inference`, `simulation`, `counterfactual`.
+## Human node: bắt buộc tách research và roleplay
 
-Không dùng để khẳng định một tương lai chắc chắn, profile người riêng tư, doxxing, stalking, bypass login/paywall/captcha/rate limit, hoặc thu thập dữ liệu cá nhân nhạy cảm.
+Với nhân vật/người ra quyết định có ảnh hưởng đáng kể:
 
-## Cấu trúc
+1. **Human Research track** - nghiên cứu hồ sơ public-role bằng D Research hoặc nguồn công khai; không nhập vai.
+2. **Human Roleplay track** - chỉ dùng dossier đã hoàn thành và thông tin có tại thời điểm mô phỏng; không tìm nguồn, không bịa đời tư.
+3. **Main simulator** - đối chiếu roleplay với chứng cứ, tạo nhánh thay thế, gán xác suất thận trọng, và luôn đánh dấu roleplay là `simulation`, không phải `fact`.
 
-- `SKILL.md` - lõi Agent Skills portable cho Codex, Claude Code, OpenCode, `.agents`.
-- `references/` - hướng dẫn workflow, Aleph integration, D Research, node, edge, propagation, human node, branch, safety, reporting.
-- `templates/` - manifest, node, edge, actor dossier, evidence map, branch ledger, propagation trace, validation report.
-- `scripts/` - preflight, init workspace, validate, bridge Aleph, score butterfly, render report, install adapters.
-- `adapters/` - ghi chú cài đặt cho Codex, Claude Code, OpenCode, generic Agent Skills.
+Nếu runtime cho phép subagent và người dùng đồng ý, chạy research/roleplay bằng subagent riêng. Nếu không, vẫn phải giữ thành hai pass tách biệt trong cùng ngữ cảnh.
 
-## Cài đặt nhanh
+## Cài đặt
 
-```bash
-git clone https://github.com/d-init-d/aleph-timeline-simulator.git
-cd aleph-timeline-simulator
+```powershell
+git clone https://github.com/d-init-d/aleph-skill.git
+cd aleph-skill
+```
+
+Kiểm tra:
+
+```powershell
+python scripts\validate_skill_package.py .
+python scripts\validate_simulation_artifacts.py --examples
+python scripts\preflight.py --json
 npm run self-test
 ```
 
-Cài vào Codex:
+Đường dẫn skill:
 
-```bash
-python scripts/install_adapters.py --target codex --scope user --copy
-```
+- Codex: `~/.codex/skills/aleph-skill`
+- Claude Code: `~/.claude/skills/aleph-skill` hoặc `.claude/skills/aleph-skill`
+- OpenCode: `~/.config/opencode/skills/aleph-skill` hoặc `.opencode/skills/aleph-skill`
+- Generic Agent Skills: `~/.agents/skills/aleph-skill` hoặc `.agents/skills/aleph-skill`
 
-Cài vào Claude Code:
-
-```bash
-python scripts/install_adapters.py --target claude-code --scope user --copy
-```
-
-Cài vào OpenCode:
-
-```bash
-python scripts/install_adapters.py --target opencode --scope user --copy
-```
-
-## Quick start
-
-```bash
-python scripts/init_simulation_workspace.py --slug oil-shock-2026 --change-point "Oil price rises 40 percent starting June 2026" --out-dir simulations
-python scripts/validate_simulation_artifacts.py --workspace simulations/oil-shock-2026 --write-report
-python scripts/score_butterfly.py --trace simulations/oil-shock-2026/propagation-trace.jsonl
-python scripts/render_simulation_report.py --workspace simulations/oil-shock-2026
-```
-
-Prompt mẫu:
+## Prompt mẫu
 
 ```text
-Use $aleph-timeline-simulator to simulate an oil price +40% shock starting June 2026. Focus on inflation, central-bank reaction, growth, shipping, and emerging markets over 24 months. Use D Research for evidence and Aleph-style causal branches.
+Use $aleph-skill to simulate an oil price +40% shock starting June 2026.
+Focus on inflation, central-bank reaction, growth, shipping, and emerging markets over 24 months.
+Use D Research for evidence, split material human decisions into research and roleplay tracks,
+and produce at least three branches with probabilities and uncertainty warnings.
 ```
 
-## Kiểm tra
+## Giới hạn an toàn
 
-```bash
-python scripts/validate_skill_package.py .
-python scripts/validate_simulation_artifacts.py --examples
-python scripts/preflight.py --json
-npm run self-test
-```
-
-## License
-
-Source-available cho mục đích phi thương mại theo **CC-BY-NC-4.0**. Xem [LICENSE](LICENSE).
+Không dùng skill này để tuyên bố một tương lai chắc chắn, profiling người riêng tư, doxxing, stalking, xử lý dữ liệu trẻ vị thành niên, tài khoản riêng tư, bypass captcha/paywall/access-control, hoặc suy đoán nhạy cảm không có chứng cứ.

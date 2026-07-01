@@ -21,7 +21,6 @@ REQUIRED_FILES = [
     "package.json",
     "pyproject.toml",
     "references/simulation-workflow.md",
-    "references/aleph-core-integration.md",
     "references/d-research-integration.md",
     "references/node-builder.md",
     "references/causal-edge-protocol.md",
@@ -39,6 +38,7 @@ REQUIRED_FILES = [
     "templates/branch-ledger.json",
     "templates/propagation-trace.jsonl",
     "templates/validation-report.json",
+    "templates/subagent-research-prompt.md",
     "templates/subagent-roleplay-prompt.md",
     "adapters/codex.md",
     "adapters/claude-code.md",
@@ -48,10 +48,17 @@ REQUIRED_FILES = [
     "scripts/init_simulation_workspace.py",
     "scripts/validate_skill_package.py",
     "scripts/validate_simulation_artifacts.py",
-    "scripts/aleph_bridge.py",
     "scripts/score_butterfly.py",
     "scripts/render_simulation_report.py",
     "scripts/install_adapters.py",
+]
+
+FORBIDDEN_PUBLIC_REFERENCES = [
+    "d-init-d/" + "Aleph",
+    "aleph_" + "bridge.py",
+    "aleph-" + "core-integration.md",
+    "Aleph " + "core bridge",
+    "private " + "Aleph",
 ]
 
 
@@ -115,11 +122,23 @@ def validate(root: Path) -> dict[str, object]:
             except json.JSONDecodeError as exc:
                 errors.append(f"{rel} is invalid JSON: {exc}")
 
+    text_file_suffixes = {".md", ".py", ".json", ".toml", ".yaml", ".yml", ".csv"}
+    for path in root.rglob("*"):
+        if ".git" in path.parts or path.is_dir() or path.suffix.lower() not in text_file_suffixes:
+            continue
+        if path.name == "validate_skill_package.py":
+            continue
+        text = read_text(path)
+        rel = path.relative_to(root).as_posix()
+        for forbidden in FORBIDDEN_PUBLIC_REFERENCES:
+            if forbidden in text:
+                errors.append(f"{rel} contains removed/private-base reference: {forbidden}")
+
     return {"status": "pass" if not errors else "fail", "errors": errors, "warnings": warnings}
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Validate the Aleph Timeline Simulator skill package.")
+    parser = argparse.ArgumentParser(description="Validate the Aleph Skill package.")
     parser.add_argument("root", nargs="?", default=".", help="Skill root directory.")
     args = parser.parse_args()
     root = Path(args.root).resolve()

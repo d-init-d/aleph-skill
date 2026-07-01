@@ -1,6 +1,6 @@
 # Propagation engine
 
-This skill uses Aleph-style propagation. The formula is a modeling convention, not a guarantee.
+This skill uses structured causal propagation. The formula is a modeling convention, not a guarantee.
 
 ## Per-hop formula
 

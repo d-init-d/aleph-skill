@@ -6,6 +6,16 @@ Use this protocol for public-role people whose decisions can change the simulati
 
 Collect only public-role information relevant to the simulation. Do not collect private contact details, family/private-life details, private accounts, medical or financial data, sexuality/orientation, real-time whereabouts, photos for identification, or doxxing material. Refuse requests involving minors, private individuals, stalking, harassment, or re-identification.
 
+## Mandatory split for material actors
+
+For every material human decision node, split work into three roles:
+
+1. Human Research track: builds the sourced actor dossier. It uses D Research when available and never roleplays.
+2. Human Roleplay track: receives only the dossier, allowed actions, constraints, and simulated-time facts. It generates hypotheses and never gathers evidence.
+3. Main simulator: adjudicates both tracks, compares hypotheses against evidence, creates alternative branches, and assigns conservative probabilities.
+
+Use actual subagents when the host runtime and user authorization allow it. If subagents are unavailable, run the tracks as separated passes in the main context and store separate notes so evidence and roleplay cannot merge.
+
 ## When deep research is required
 
 Use deep research when a person:
@@ -33,6 +43,9 @@ Use `templates/actor-dossier.json` with:
 - identity,
 - public_role,
 - evidence_ids,
+- research_track,
+- roleplay_track,
+- adjudication,
 - decision_patterns,
 - stated_beliefs,
 - institutional_constraints,
@@ -43,9 +56,13 @@ Use `templates/actor-dossier.json` with:
 
 Cap any single predicted response at 0.80 unless the action is legally or institutionally mandatory.
 
-## Roleplay use
+## Research track prompt
 
-Roleplay is optional and only for high-stakes decision points. It may help generate hypotheses about actions, but it is not evidence.
+Use `templates/subagent-research-prompt.md` for a dedicated research pass. It must return only sourced public-role claims and uncertainty notes.
+
+## Roleplay track prompt
+
+Use `templates/subagent-roleplay-prompt.md` only after the dossier is ready.
 
 Before roleplay:
 
@@ -70,4 +87,5 @@ Avoid:
 - overfitting to one famous decision,
 - ignoring advisors and legal constraints,
 - using modern knowledge unavailable at the simulation date,
-- turning personality speculation into causal evidence.
+- turning personality speculation into causal evidence,
+- letting roleplay outputs become evidence ledger rows.

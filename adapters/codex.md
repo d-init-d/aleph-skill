@@ -4,8 +4,8 @@ Codex can consume the portable `SKILL.md` core directly.
 
 ## Recommended locations
 
-- User skill: `~/.codex/skills/aleph-timeline-simulator`
-- Development workspace: keep this repository at `D:\Downloads\aleth-skill\aleph-timeline-simulator` and copy or symlink after validation.
+- User skill: `~/.codex/skills/aleph-skill`
+- Development workspace: keep this repository at `D:\Downloads\aleth-skill\aleph-skill` and copy or symlink after validation.
 
 ## Install command
 
@@ -26,7 +26,7 @@ python scripts\install_adapters.py --target codex --scope user --copy
 Use the Codex skill validator:
 
 ```powershell
-python C:\Users\dmn05\.codex\skills\.system\skill-creator\scripts\quick_validate.py D:\Downloads\aleth-skill\aleph-timeline-simulator
+python C:\Users\dmn05\.codex\skills\.system\skill-creator\scripts\quick_validate.py D:\Downloads\aleth-skill\aleph-skill
 ```
 
 Keep `agents/openai.yaml`; it provides Codex UI metadata and does not affect other platforms.

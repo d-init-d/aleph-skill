@@ -1,6 +1,6 @@
 # Simulation workflow
 
-Use this protocol for every Aleph timeline simulation.
+Use this protocol for every Aleph Skill timeline simulation.
 
 ## Phase 1: Define
 
@@ -39,7 +39,7 @@ Build the factual baseline at the change time:
 - existing causal relations,
 - unresolved contradictions.
 
-Use D Research for deep/public-source work when available. Preserve contradictions instead of smoothing them into a single narrative.
+Use D Research for deep/public-source work when available. If D Research is missing, ask the user once whether they want to install or enable it; otherwise continue in limited mode. Preserve contradictions instead of smoothing them into a single narrative.
 
 ## Phase 3: Construct
 
@@ -106,7 +106,7 @@ Validation must cover:
 - mechanism completeness,
 - confidence calibration,
 - branch probability normalization,
-- human-node research quality,
+- human-node research quality and research/roleplay separation,
 - sensitivity points,
 - safety/privacy compliance.
 

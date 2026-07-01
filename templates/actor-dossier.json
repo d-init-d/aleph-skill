@@ -6,6 +6,21 @@
   "evidence_ids": [
     "evidence:example"
   ],
+  "research_track": {
+    "status": "required",
+    "preferred_tool": "d-research",
+    "artifact": "actor dossier with sourced public-role claims",
+    "notes": "Research track gathers evidence only and must not roleplay."
+  },
+  "roleplay_track": {
+    "status": "required_for_material_decision_nodes",
+    "artifact": "roleplay hypothesis with simulated-time constraints",
+    "notes": "Roleplay track uses the completed dossier only; it is simulation, not evidence."
+  },
+  "adjudication": {
+    "owner": "main simulator",
+    "rule": "Compare roleplay hypotheses against the dossier, generate alternatives, and assign conservative probabilities."
+  },
   "biographical_foundation": {
     "summary": "Public career facts relevant to the simulation."
   },
@@ -33,7 +48,7 @@
       "probability": 0.6,
       "alternative_action": "delay or delegate",
       "alternative_probability": 0.4,
-      "reasoning": "Prediction is based on public-role evidence and institutional constraints."
+      "reasoning": "Prediction is based on public-role evidence, roleplay hypotheses, and institutional constraints."
     }
   ]
 }

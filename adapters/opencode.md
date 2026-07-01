@@ -4,12 +4,12 @@ OpenCode discovers Agent Skills through several project and global paths.
 
 ## Supported locations
 
-- Project OpenCode: `.opencode/skills/aleph-timeline-simulator`
-- Global OpenCode: `~/.config/opencode/skills/aleph-timeline-simulator`
-- Project Claude-compatible: `.claude/skills/aleph-timeline-simulator`
-- Global Claude-compatible: `~/.claude/skills/aleph-timeline-simulator`
-- Project Agent-compatible: `.agents/skills/aleph-timeline-simulator`
-- Global Agent-compatible: `~/.agents/skills/aleph-timeline-simulator`
+- Project OpenCode: `.opencode/skills/aleph-skill`
+- Global OpenCode: `~/.config/opencode/skills/aleph-skill`
+- Project Claude-compatible: `.claude/skills/aleph-skill`
+- Global Claude-compatible: `~/.claude/skills/aleph-skill`
+- Project Agent-compatible: `.agents/skills/aleph-skill`
+- Global Agent-compatible: `~/.agents/skills/aleph-skill`
 
 ## Optional permission example
 
@@ -19,7 +19,7 @@ OpenCode can hide, ask, or allow skills through `opencode.json`. Do not ship thi
 {
   "permission": {
     "skill": {
-      "aleph-timeline-simulator": "allow"
+      "aleph-skill": "allow"
     }
   }
 }

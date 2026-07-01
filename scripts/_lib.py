@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 
-SKILL_NAME = "aleph-timeline-simulator"
+SKILL_NAME = "aleph-skill"
 
 
 def skill_root() -> Path:
@@ -130,20 +130,13 @@ def copy_skill_tree(src: Path, dest: Path, force: bool = False) -> None:
     shutil.copytree(src, dest, ignore=ignore)
 
 
-def common_aleph_candidates() -> list[Path]:
-    return [
-        Path(os.environ.get("ALEPH_REPO", "")) if os.environ.get("ALEPH_REPO") else None,
-        skill_root().parent / "Aleph",
-        skill_root().parent.parent / "Aleph",
-        Path(r"D:\Downloads\aleph-qweb 3.7\Aleph"),
-    ]  # type: ignore[return-value]
-
-
 def common_d_research_candidates() -> list[Path]:
     return [
         Path(os.environ.get("D_RESEARCH_SKILL", "")) if os.environ.get("D_RESEARCH_SKILL") else None,
         Path.home() / ".codex" / "skills" / "d-research",
         Path.home() / ".agents" / "skills" / "d-research",
+        Path.home() / ".claude" / "skills" / "d-research",
+        Path.home() / ".config" / "opencode" / "skills" / "d-research",
         Path(r"D:\Downloads\aleph-qweb 3.7\d-research-skill"),
     ]  # type: ignore[return-value]
 

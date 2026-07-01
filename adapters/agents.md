@@ -4,14 +4,14 @@ Use this adapter for runtimes that implement the Agent Skills directory conventi
 
 ## Recommended locations
 
-- User skill: `~/.agents/skills/aleph-timeline-simulator`
-- Project skill: `.agents/skills/aleph-timeline-simulator`
+- User skill: `~/.agents/skills/aleph-skill`
+- Project skill: `.agents/skills/aleph-skill`
 
 ## Compatibility contract
 
 The portable core depends only on:
 
-- a directory named `aleph-timeline-simulator`,
+- a directory named `aleph-skill`,
 - a top-level `SKILL.md`,
 - YAML frontmatter with `name` and `description`,
 - Markdown instructions,

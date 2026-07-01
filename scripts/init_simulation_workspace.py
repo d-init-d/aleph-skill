@@ -53,7 +53,7 @@ def build_workspace(args: argparse.Namespace) -> Path:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Create an Aleph simulation workspace from templates.")
+    parser = argparse.ArgumentParser(description="Create an Aleph Skill simulation workspace from templates.")
     parser.add_argument("--slug", help="Workspace slug.")
     parser.add_argument("--change-point", default="Example change point", help="Change point description.")
     parser.add_argument("--time", default="2026-06-01", help="Change point date.")

@@ -29,7 +29,7 @@ def destination(target: str, scope: str, project_dir: Path) -> Path:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Install Aleph Timeline Simulator into agent skill paths.")
+    parser = argparse.ArgumentParser(description="Install Aleph Skill into agent skill paths.")
     parser.add_argument("--target", required=True, choices=["codex", "claude-code", "opencode", "agents"])
     parser.add_argument("--scope", default="user", choices=["user", "project"])
     parser.add_argument("--project-dir", default=".", help="Project directory for project-scope installs.")

@@ -23,7 +23,18 @@ NODE_REQUIRED = {
     "sensitivity",
 }
 EDGE_REQUIRED = {"id", "from", "to", "relation", "sign", "base_strength", "confidence", "mechanism", "lag_distribution", "evidence", "status"}
-ACTOR_REQUIRED = {"id", "person_node", "public_role", "scope_note", "evidence_ids", "decision_patterns", "predicted_responses"}
+ACTOR_REQUIRED = {
+    "id",
+    "person_node",
+    "public_role",
+    "scope_note",
+    "evidence_ids",
+    "research_track",
+    "roleplay_track",
+    "adjudication",
+    "decision_patterns",
+    "predicted_responses",
+}
 
 
 def load_structured(path: Path) -> Any:
@@ -64,6 +75,12 @@ def validate_actor(actor: dict[str, Any], index: int, errors: list[str]) -> None
     missing = ACTOR_REQUIRED - set(actor)
     if missing:
         errors.append(f"actor[{index}] missing required fields: {sorted(missing)}")
+    research_notes = str(actor.get("research_track", {}).get("notes", "")).lower()
+    roleplay_notes = str(actor.get("roleplay_track", {}).get("notes", "")).lower()
+    if "must not roleplay" not in research_notes:
+        errors.append(f"actor[{index}] research track must explicitly forbid roleplay")
+    if "simulation" not in roleplay_notes or "not evidence" not in roleplay_notes:
+        errors.append(f"actor[{index}] roleplay track must be marked as simulation, not evidence")
     for response in actor.get("predicted_responses", []):
         probability = float(response.get("probability", 0))
         if probability > 0.8:
@@ -161,7 +178,7 @@ def validate_examples() -> dict[str, Any]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Validate Aleph simulation artifacts.")
+    parser = argparse.ArgumentParser(description="Validate Aleph Skill simulation artifacts.")
     parser.add_argument("--workspace", help="Simulation workspace directory.")
     parser.add_argument("--examples", action="store_true", help="Validate bundled templates as examples.")
     parser.add_argument("--write-report", action="store_true", help="Write validation-report.json into workspace.")

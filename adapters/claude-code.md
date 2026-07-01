@@ -4,8 +4,8 @@ Claude Code supports Agent Skills and can load this portable core without Claude
 
 ## Recommended locations
 
-- User skill: `~/.claude/skills/aleph-timeline-simulator`
-- Project skill: `.claude/skills/aleph-timeline-simulator`
+- User skill: `~/.claude/skills/aleph-skill`
+- Project skill: `.claude/skills/aleph-skill`
 
 ## Portability rule
 
