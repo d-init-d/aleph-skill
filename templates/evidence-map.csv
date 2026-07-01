@@ -1,0 +1,2 @@
+evidence_id,claim,source,source_type,date,access_method,quote_or_value,confidence,contradiction_status,notes
+evidence:example,Example claim,https://github.com/d-init-d/aleph-timeline-simulator,example,2026-07-01,user-provided,Example evidence value,0.50,unchecked,Starter row for smoke tests; replace with a real evidence ledger in production simulations

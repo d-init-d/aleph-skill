@@ -1,0 +1,19 @@
+{
+  "name": "aleph-timeline-simulator-tools",
+  "version": "1.0.0",
+  "description": "Portable Agent Skill for evidence-backed Aleph causal timeline simulation.",
+  "private": true,
+  "license": "CC-BY-NC-4.0",
+  "type": "module",
+  "scripts": {
+    "preflight": "python scripts/preflight.py",
+    "validate:skill": "python scripts/validate_skill_package.py .",
+    "sim:init": "python scripts/init_simulation_workspace.py",
+    "sim:validate": "python scripts/validate_simulation_artifacts.py",
+    "butterfly:score": "python scripts/score_butterfly.py",
+    "aleph:check": "python scripts/aleph_bridge.py check",
+    "report:render": "python scripts/render_simulation_report.py",
+    "install:dry-run": "python scripts/install_adapters.py --target agents --scope user --dry-run",
+    "self-test": "python scripts/validate_skill_package.py . && python scripts/validate_simulation_artifacts.py --examples && python scripts/preflight.py --json"
+  }
+}

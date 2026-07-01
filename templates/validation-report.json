@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0.0",
+  "validated_at": "2026-07-01T00:00:00Z",
+  "status": "pass",
+  "checks": {
+    "manifest": "pass",
+    "nodes": "pass",
+    "edges": "pass",
+    "branches": "pass",
+    "trace": "pass",
+    "actors": "pass",
+    "probabilities_sum_to_one": "pass"
+  },
+  "warnings": [],
+  "errors": []
+}

@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0.0",
+  "branches": [
+    {
+      "id": "branch:most-likely",
+      "name": "Most likely branch",
+      "probability": 0.45,
+      "summary": "Primary branch under current assumptions.",
+      "causal_trace": [],
+      "key_decision_points": [],
+      "end_state": {
+        "summary": "End state for this branch."
+      },
+      "evidence_ids": [
+        "evidence:example"
+      ],
+      "confidence": 0.5,
+      "warnings": []
+    },
+    {
+      "id": "branch:alternative",
+      "name": "Alternative branch",
+      "probability": 0.35,
+      "summary": "Plausible alternative branch.",
+      "causal_trace": [],
+      "key_decision_points": [],
+      "end_state": {
+        "summary": "End state for this branch."
+      },
+      "evidence_ids": [
+        "evidence:example"
+      ],
+      "confidence": 0.4,
+      "warnings": []
+    },
+    {
+      "id": "branch:stress",
+      "name": "Stress branch",
+      "probability": 0.2,
+      "summary": "Lower-probability stress branch.",
+      "causal_trace": [],
+      "key_decision_points": [],
+      "end_state": {
+        "summary": "End state for this branch."
+      },
+      "evidence_ids": [
+        "evidence:example"
+      ],
+      "confidence": 0.35,
+      "warnings": []
+    }
+  ]
+}

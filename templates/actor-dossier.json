@@ -1,0 +1,39 @@
+{
+  "id": "actor:example",
+  "person_node": "entity:example-person",
+  "public_role": "public decision maker",
+  "scope_note": "Public-role behavior only; private personal data is out of scope.",
+  "evidence_ids": [
+    "evidence:example"
+  ],
+  "biographical_foundation": {
+    "summary": "Public career facts relevant to the simulation."
+  },
+  "decision_patterns": [
+    {
+      "pattern": "Uses institutional process before major decisions.",
+      "evidence_ids": [
+        "evidence:example"
+      ],
+      "confidence": 0.5
+    }
+  ],
+  "stated_beliefs": [],
+  "institutional_constraints": [],
+  "relationships": [],
+  "crisis_behavior": {
+    "pattern": "uncertain",
+    "examples": []
+  },
+  "uncertainty_factors": [],
+  "predicted_responses": [
+    {
+      "scenario": "example decision point",
+      "likely_action": "choose the institutionally constrained action",
+      "probability": 0.6,
+      "alternative_action": "delay or delegate",
+      "alternative_probability": 0.4,
+      "reasoning": "Prediction is based on public-role evidence and institutional constraints."
+    }
+  ]
+}

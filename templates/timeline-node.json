@@ -1,0 +1,33 @@
+{
+  "id": "factor:example",
+  "type": "factor",
+  "name": "Example Factor",
+  "status": "simulation",
+  "confidence": 0.5,
+  "sources": [
+    "evidence:example"
+  ],
+  "description": "A concrete node used in an Aleph timeline simulation.",
+  "time": "2026-06-01",
+  "state_before": {
+    "summary": "Baseline state before the change point."
+  },
+  "trigger": {
+    "kind": "factor_change",
+    "description": "The perturbation that changes this node."
+  },
+  "mechanism": "The node changes because the stated trigger affects the observed or modeled state through a documented causal mechanism.",
+  "state_after": {
+    "summary": "State after the perturbation is applied."
+  },
+  "lag": "P0D",
+  "evidence_ids": [
+    "evidence:example"
+  ],
+  "probability": 1.0,
+  "alternative_explanations": [],
+  "sensitivity": {
+    "level": "medium",
+    "drivers": []
+  }
+}

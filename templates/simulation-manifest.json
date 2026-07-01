@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0.0",
+  "simulation_id": "sim-example",
+  "created_at": "2026-07-01T00:00:00Z",
+  "status": "draft",
+  "change_point": {
+    "type": "factor_change",
+    "target": "factor:example",
+    "description": "Example change point",
+    "magnitude": 0.4,
+    "time": "2026-06-01",
+    "location": "global"
+  },
+  "scope": {
+    "horizon": "P24M",
+    "domain": "mixed",
+    "depth": "medium"
+  },
+  "active_contexts": [],
+  "assumptions": [],
+  "artifact_paths": {
+    "nodes": "nodes.json",
+    "edges": "edges.json",
+    "actors": "actors.json",
+    "evidence_map": "evidence-map.csv",
+    "branch_ledger": "branch-ledger.json",
+    "propagation_trace": "propagation-trace.jsonl",
+    "validation_report": "validation-report.json"
+  }
+}
