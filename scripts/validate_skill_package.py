@@ -68,7 +68,9 @@ def validate(root: Path) -> dict[str, object]:
     errors: list[str] = []
     warnings: list[str] = []
     if root.name != SKILL_NAME:
-        errors.append(f"folder name must be {SKILL_NAME}, got {root.name}")
+        warnings.append(
+            f"folder name is {root.name}; install the skill as {SKILL_NAME} for Agent Skills discovery"
+        )
 
     for rel in REQUIRED_FILES:
         if not (root / rel).exists():
