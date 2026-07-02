@@ -1,114 +1,107 @@
 # Aleph Skill
 
-**Evidence-grounded causal timeline simulation for agents: a way to stand at one point of change, unfold the possible past-present-future branches, and keep every imagined world accountable to sources, mechanisms, and uncertainty.**
+**Evidence-grounded timeline simulation for agents that need to reason from one change point across counterfactual pasts, alternate presents, and branching futures.**
 
+[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
 [![Release](https://img.shields.io/github/v/release/d-init-d/aleph-skill?sort=semver)](https://github.com/d-init-d/aleph-skill/releases)
+[![Agent Skill](https://img.shields.io/badge/Agent%20Skill-portable-6f42c1)](https://agentskills.io/)
+[![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
+[![Self-test](https://img.shields.io/badge/self--test-npm%20run%20self--test-brightgreen)](#verification)
 
-Aleph Skill turns a single change point into a disciplined simulation workflow: research the baseline, build causal nodes, admit only mechanism-backed edges, propagate effects over time, branch into multiple futures, and report what is known, inferred, simulated, and still uncertain.
+Vietnamese overview: [README.vi.md](README.vi.md)
 
-It is designed for Codex, OpenCode, Claude Code, and generic Agent Skills runtimes.
+> Aleph Skill turns a “what if?” into an auditable scenario model: sources become evidence, evidence becomes nodes, nodes become causal edges, and causal edges unfold into probabilistic timelines with explicit uncertainty.
 
-## What it is for
+It is built for Codex, OpenCode, Claude Code, and generic Agent Skills runtimes.
 
-Use Aleph Skill for:
+## At a glance
 
-- counterfactual history and alternate-history analysis,
-- present-day intervention analysis projected into multiple future branches,
-- hybrid timelines that carry a past divergence through an alternate present into the future,
-- butterfly-effect simulations from a specific intervention,
-- policy, market, geopolitical, social, or technology scenario trees,
-- human decision nodes where public-role behavior matters,
-- structured causal reports with evidence ledgers, branch probabilities, and audit trails.
+| Area | What Aleph Skill provides |
+|---|---|
+| Primary use | Counterfactual history, present-day intervention analysis, hybrid past-to-future timelines, and butterfly-effect scenario trees. |
+| Simulation model | Evidence-backed nodes, mechanism-tested causal edges, propagation traces, branch probabilities, and uncertainty labels. |
+| Human decisions | Public-role actor dossiers separated from simulated decision hypotheses, so roleplay never becomes evidence. |
+| Research depth | Adaptive expansion based on temporal span, domain breadth, geography, actor density, causal depth, evidence uncertainty, and stakes. |
+| Outputs | Professional scenario reports, evidence maps, causal graphs, branch ledgers, propagation traces, validation reports, and audit metadata. |
+| Runtime posture | Portable markdown skill with stdlib-first helper scripts and optional adapters for major agent environments. |
+| Safety posture | No deterministic prophecy, private-person profiling, doxxing, access-control bypass, or unsupported sensitive claims. |
 
-Do not use it to claim one future is certain, profile private people, bypass access controls, deanonymize people, or collect sensitive personal information.
+## When to use it
 
-## Recommended companion: D Research
+Use Aleph Skill when an agent needs to:
 
-Aleph Skill is strongest when used with [`d-research-skill`](https://github.com/d-init-d/d-research-skill).
+- reconstruct an observed baseline before a point of change;
+- simulate how a past divergence could alter a later present;
+- project a present-day intervention into multiple future branches;
+- model policy, market, geopolitical, social, climate, technology, or institutional scenarios;
+- map butterfly effects through causal chains, thresholds, feedback loops, and lagged consequences;
+- reason about public-role human decisions without turning private speculation into fact;
+- produce a decision-grade report that separates `fact`, `inference`, `simulation`, and `counterfactual`.
 
-D Research should handle source discovery, evidence ledgers, contradiction checks, and public-role actor research. If D Research is not installed when the skill is invoked, the agent should ask the user once whether they want to install or enable it. If the user declines, the simulation should continue in limited mode with lower confidence and an explicit `research_quality: limited` warning.
+Do not use it to claim one future is certain, profile private people, deanonymize people, bypass access controls, or collect sensitive personal information.
 
-## Human decision protocol
+## Product scope
 
-For material human actors, the skill requires a split workflow:
+This repository is a portable Agent Skill package, not a hosted forecasting service, Python package, API server, crawler, or benchmark leaderboard.
 
-1. **Human Research track** - uses D Research or public sources to build a public-role dossier. It must not roleplay.
-2. **Human Roleplay track** - uses only the completed dossier and simulated-time situation to generate hypotheses. It must not browse or invent private motives.
-3. **Main simulator** - adjudicates both tracks, creates alternatives, assigns conservative probabilities, and labels roleplay as `simulation`, never `fact`.
+An agent reads `SKILL.md` as the entry point, then loads only the reference files and templates needed for the scenario. The helper scripts are deliberately small and local: they initialize workspaces, validate artifacts, score butterfly amplification, render reports, and check package integrity. They support the workflow; they do not replace the agent’s reasoning.
 
-When a runtime exposes a task/subagent tool, Research and Roleplay must run as two distinct subagent executions for every material actor. The roleplay subagent starts only after the research dossier is frozen. If no such tool exists, the agent records the reason and uses two isolated passes. Both executions are auditable in `human-track-ledger.jsonl`; a prose claim that separation happened is not enough.
+For the strongest evidence layer, pair Aleph Skill with [D Research](https://github.com/d-init-d/d-research-skill), a companion skill for browser-first research and auditable evidence workflows. Aleph remains the causal simulation layer; D Research is recommended rather than bundled, so the skill stays portable.
 
-## Quality gates
+## Workflow lifecycle
 
-The `v1.2` artifact contract provides:
+| Phase | What happens | Main artifacts |
+|---|---|---|
+| 0. Frame | Define the change point, observation cutoff, horizon, geography, domains, and inferred temporal mode. | `simulation-manifest.json` |
+| 1. Research | Build the baseline, source map, evidence map, contradiction notes, and uncertainty register. | `evidence-map.csv` |
+| 2. Construct | Create entity, event, factor, context, indicator, claim, source, and actor nodes. | `timeline-node.json`, `actor-dossier.json` |
+| 3. Link | Admit only causal edges with a concrete mechanism, lag, context modifier, evidence, strength, and confidence. | `causal-edge.json` |
+| 4. Propagate | Trace effects through thresholds, feedback loops, amplification paths, and decay. | `propagation-trace.jsonl` |
+| 5. Branch | Produce multiple plausible timelines with probabilities that sum to 1.0. | `branch-ledger.json` |
+| 6. Human decisions | Keep sourced public-role research separate from simulated decision hypotheses. | `human-track-ledger.jsonl` |
+| 7. Report and audit | Render a professional scenario report and validate readiness before delivery. | `validation-report.json`, final Markdown report |
 
-- adaptive complexity assessment that expands research according to event scale, uncertainty, causal depth, actors, geography, and stakes,
-- evidence-saturation stopping rather than time, source, or repair limits,
-- retrospective, prospective, and hybrid temporal modes inferred from dates,
-- future branch indicators and disconfirming conditions,
-- directly accessed source tiers and contradiction status,
-- referential integrity across evidence, nodes, edges, actors, branches, and traces,
-- explicit human-track timestamps, agent references, hypotheses, and knowledge cutoffs,
-- checkpointed completion, strict final validation, and a 100-point quality score.
+## Core capabilities
 
-For a completed workspace, run:
+1. **Retrospective counterfactuals** — simulate how a historical divergence could change a later historical state.
+2. **Prospective interventions** — treat the current baseline as fixed and project future outcomes from a new intervention.
+3. **Hybrid projections** — carry a past divergence into an alternate present, then branch into future scenarios.
+4. **Adaptive depth** — expand research and validation according to scenario complexity rather than fixed speed profiles.
+5. **Mechanism-first causality** — reject edges that lack a plausible transmission channel, lag, context, and evidence.
+6. **Human-node discipline** — use public-role information for actor dossiers and label all roleplay as simulation.
+7. **Future monitoring** — attach leading indicators and disconfirming conditions to prospective branches.
+8. **Professional reporting** — produce executive summaries, methodology notes, evidence quality, causal architecture, branch probabilities, sensitivity analysis, limitations, and audit appendices.
+9. **Portable validation** — enforce referential integrity across evidence, nodes, edges, actors, branches, traces, and reports.
 
-```powershell
-python scripts\validate_simulation_artifacts.py --workspace <run-dir> --mode draft --write-report
-python scripts\render_simulation_report.py --workspace <run-dir>
-python scripts\validate_simulation_artifacts.py --workspace <run-dir> --mode final --require-report --write-report
-python scripts\render_simulation_report.py --workspace <run-dir>
-python scripts\evaluate_simulation_quality.py --workspace <run-dir> --threshold 90 --enforce
-```
-
-## Package structure
+## Repository layout
 
 ```text
 aleph-skill/
-  SKILL.md
-  AGENTS.md
-  agents/openai.yaml
-  adapters/
-  examples/
-  references/
-  scripts/
-  templates/
-  package.json
-  pyproject.toml
+  SKILL.md                  # agent entry point
+  AGENTS.md                 # concise agent-framework instructions
+  README.md                 # public overview
+  README.vi.md              # Vietnamese overview
+  LICENSE                   # CC BY-NC 4.0
+  agents/openai.yaml        # Codex UI metadata
+  adapters/                 # runtime-specific notes
+  examples/                 # forward-test prompts and example artifacts
+  references/               # workflow, safety, causal, reporting, and research guides
+  scripts/                  # stdlib-first validation and rendering helpers
+  templates/                # JSON/CSV/JSONL artifact starters
+  package.json              # local verification scripts
+  pyproject.toml            # Python project metadata
 ```
-
-## Core workflow
-
-| Phase | Purpose |
-|---|---|
-| Frame | Capture the change point, observation cutoff, simulation end, domains, geographies, and inferred temporal mode. |
-| Assess | Score adaptive complexity and decompose critical causal questions. |
-| Research | Run D Research-style source waves until evidence saturation. |
-| Construct | Build entity, event, factor, context, indicator, claim, and source nodes. |
-| Link | Admit causal edges only when mechanism, evidence, lag, strength, and confidence are explicit. |
-| Propagate | Trace effects through the graph with thresholds, feedback loops, and uncertainty. |
-| Branch | Produce at least three plausible timelines whose probabilities sum to 1.0. |
-| Validate | Audit provenance, temporal integrity, mechanisms, confidence, human-node separation, safety, saturation, and sensitivity. |
 
 ## Install
 
-Clone:
+Clone the repository:
 
 ```powershell
 git clone https://github.com/d-init-d/aleph-skill.git
 cd aleph-skill
 ```
 
-Validate:
-
-```powershell
-python scripts\validate_skill_package.py .
-python scripts\validate_simulation_artifacts.py --examples
-python scripts\preflight.py --json
-npm run self-test
-```
-
-Dry-run adapter install:
+Dry-run adapter installation:
 
 ```powershell
 python scripts\install_adapters.py --target codex --scope user --dry-run
@@ -117,26 +110,52 @@ python scripts\install_adapters.py --target opencode --scope user --dry-run
 python scripts\install_adapters.py --target agents --scope user --dry-run
 ```
 
-## Platform paths
+Supported skill locations:
 
-- Codex: `~/.codex/skills/aleph-skill`
-- Claude Code: `~/.claude/skills/aleph-skill` or `.claude/skills/aleph-skill`
-- OpenCode: `~/.config/opencode/skills/aleph-skill` or `.opencode/skills/aleph-skill`
-- Generic Agent Skills: `~/.agents/skills/aleph-skill` or `.agents/skills/aleph-skill`
+| Runtime | User / global path | Project path |
+|---|---|---|
+| Codex | `~/.codex/skills/aleph-skill` | runtime-dependent |
+| Claude Code | `~/.claude/skills/aleph-skill` | `.claude/skills/aleph-skill` |
+| OpenCode | `~/.config/opencode/skills/aleph-skill` | `.opencode/skills/aleph-skill` |
+| Generic Agent Skills | `~/.agents/skills/aleph-skill` | `.agents/skills/aleph-skill` |
+
+## Verification
+
+Run the local release gate:
+
+```powershell
+python scripts\validate_skill_package.py .
+python scripts\validate_simulation_artifacts.py --examples
+python scripts\preflight.py --json
+npm run self-test
+```
+
+For a completed simulation workspace:
+
+```powershell
+python scripts\validate_simulation_artifacts.py --workspace <run-dir> --mode draft --write-report
+python scripts\render_simulation_report.py --workspace <run-dir>
+python scripts\validate_simulation_artifacts.py --workspace <run-dir> --mode final --require-report --write-report
+python scripts\evaluate_simulation_quality.py --workspace <run-dir> --threshold 90 --enforce
+```
 
 ## Example prompt
 
 ```text
 Use $aleph-skill to simulate an oil price +40% shock starting June 2026.
 Focus on inflation, central-bank reaction, growth, shipping, and emerging markets over 24 months.
-Use D Research for evidence, split material human decisions into research and roleplay tracks,
-and produce at least three branches with probabilities and uncertainty warnings.
+Use D Research where available for the evidence layer, keep sourced actor dossiers separate from simulated decisions,
+and produce at least three branches with probabilities, indicators, contradictions, and uncertainty warnings.
 ```
 
-## Safety posture
+## Safety boundary
 
 Aleph Skill is for lawful, evidence-backed scenario analysis. It refuses or narrows requests involving private-person profiling, doxxing, stalking, minors, private accounts, access-control bypass, captcha evasion, paywall bypass, or unsupported claims about sensitive personal traits.
 
+It does not predict the future. It builds transparent, source-aware simulations so users can inspect assumptions, mechanisms, uncertainties, and alternatives.
+
 ## License
 
-Source-available for non-commercial use under the Creative Commons Attribution-NonCommercial 4.0 International License. See `LICENSE`.
+Source-available for non-commercial use under the [Creative Commons Attribution-NonCommercial 4.0 International License](https://creativecommons.org/licenses/by-nc/4.0/).
+
+SPDX-License-Identifier: `CC-BY-NC-4.0`
