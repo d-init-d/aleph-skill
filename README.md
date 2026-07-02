@@ -13,6 +13,8 @@ It is designed for Codex, OpenCode, Claude Code, and generic Agent Skills runtim
 Use Aleph Skill for:
 
 - counterfactual history and alternate-history analysis,
+- present-day intervention analysis projected into multiple future branches,
+- hybrid timelines that carry a past divergence through an alternate present into the future,
 - butterfly-effect simulations from a specific intervention,
 - policy, market, geopolitical, social, or technology scenario trees,
 - human decision nodes where public-role behavior matters,
@@ -24,7 +26,7 @@ Do not use it to claim one future is certain, profile private people, bypass acc
 
 Aleph Skill is strongest when used with [`d-research-skill`](https://github.com/d-init-d/d-research-skill).
 
-D Research should handle source discovery, evidence ledgers, contradiction checks, and public-role actor research. If D Research is not installed when the skill is invoked, the agent should ask the user once whether they want to install or enable it. If the user declines, the simulation should continue in limited mode with lower confidence and an explicit `research_quality: basic` warning.
+D Research should handle source discovery, evidence ledgers, contradiction checks, and public-role actor research. If D Research is not installed when the skill is invoked, the agent should ask the user once whether they want to install or enable it. If the user declines, the simulation should continue in limited mode with lower confidence and an explicit `research_quality: limited` warning.
 
 ## Human decision protocol
 
@@ -38,9 +40,12 @@ When a runtime exposes a task/subagent tool, Research and Roleplay must run as t
 
 ## Quality gates
 
-The `v1.1` artifact contract adds:
+The `v1.2` artifact contract provides:
 
-- execution profiles (`quick`, `standard`, `deep`) with source and repair-loop budgets,
+- adaptive complexity assessment that expands research according to event scale, uncertainty, causal depth, actors, geography, and stakes,
+- evidence-saturation stopping rather than time, source, or repair limits,
+- retrospective, prospective, and hybrid temporal modes inferred from dates,
+- future branch indicators and disconfirming conditions,
 - directly accessed source tiers and contradiction status,
 - referential integrity across evidence, nodes, edges, actors, branches, and traces,
 - explicit human-track timestamps, agent references, hypotheses, and knowledge cutoffs,
@@ -53,7 +58,7 @@ python scripts\validate_simulation_artifacts.py --workspace <run-dir> --mode dra
 python scripts\render_simulation_report.py --workspace <run-dir>
 python scripts\validate_simulation_artifacts.py --workspace <run-dir> --mode final --require-report --write-report
 python scripts\render_simulation_report.py --workspace <run-dir>
-python scripts\evaluate_simulation_quality.py --workspace <run-dir> --threshold 85 --enforce
+python scripts\evaluate_simulation_quality.py --workspace <run-dir> --threshold 90 --enforce
 ```
 
 ## Package structure
@@ -76,13 +81,14 @@ aleph-skill/
 
 | Phase | Purpose |
 |---|---|
-| Define | Capture the change point, magnitude, horizon, domain, and assumptions. |
-| Research | Reconstruct the baseline world state with sources and contradictions. |
+| Frame | Capture the change point, observation cutoff, simulation end, domains, geographies, and inferred temporal mode. |
+| Assess | Score adaptive complexity and decompose critical causal questions. |
+| Research | Run D Research-style source waves until evidence saturation. |
 | Construct | Build entity, event, factor, context, indicator, claim, and source nodes. |
 | Link | Admit causal edges only when mechanism, evidence, lag, strength, and confidence are explicit. |
 | Propagate | Trace effects through the graph with thresholds, feedback loops, and uncertainty. |
 | Branch | Produce at least three plausible timelines whose probabilities sum to 1.0. |
-| Validate | Audit provenance, mechanisms, confidence, human-node separation, safety, and sensitivity. |
+| Validate | Audit provenance, temporal integrity, mechanisms, confidence, human-node separation, safety, saturation, and sensitivity. |
 
 ## Install
 

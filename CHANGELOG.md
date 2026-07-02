@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.2.0 - 2026-07-02
+
+### Changed
+
+- Removed user/model-selected `quick`, `standard`, and `deep` execution profiles and all fixed source/repair caps.
+- Replaced budget-based completion with adaptive complexity assessment and evidence-saturation gates modeled on the D Research workflow.
+- Research now expands in waves according to temporal span, domain/geographic breadth, actor density, causal depth, evidence uncertainty, and stakes.
+
+### Added
+
+- Automatic retrospective, prospective, and hybrid temporal modes.
+- Present-day intervention → future branch simulation with strict post-cutoff fact boundaries.
+- Past divergence → alternate present → future projection workflow.
+- Required future leading indicators, disconfirming conditions, and monitoring guidance.
+- Professional decision-grade report renderer with executive summary, methodology, evidence quality, causal architecture, branches, sensitivity, audit, and source appendix.
+- Adaptive source-quality thresholds that rise with causal complexity without limiting how long research may run.
+- Validator rejection of legacy execution profiles/caps and non-schema research-quality aliases.
+- Exact professional-report section parity between `SKILL.md`, the renderer, and final validation.
+
+### Verification
+
+- Passed the portable Agent Skills validator and the full `npm run self-test` release gate with 20 unit tests.
+- Re-ran read-only OpenCode regressions with DeepSeek V4 Flash, GLM 5.2, Kimi K2.7 Code, MiniMax M3 on Ollama Cloud, and Qwen 3.7 Max on Cline Pass.
+- Added deterministic gates for omissions observed in weaker or non-deterministic model outputs; a run is not complete merely because a model produced plausible prose.
+
 ## v1.1.0 - 2026-07-02
 
 ### Added

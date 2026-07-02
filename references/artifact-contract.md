@@ -4,7 +4,7 @@ Use schema version `1.1.0`. The bundled templates are canonical. Read them befor
 
 ## Construction rule
 
-1. Initialize with `scripts/init_simulation_workspace.py --profile <profile> --out-dir <user-workspace>/simulation-output`.
+1. Initialize with `scripts/init_simulation_workspace.py --time <date> --horizon <duration> --observation-cutoff <date> --out-dir <user-workspace>/simulation-output`.
 2. Keep output outside the installed skill directory.
 3. Read every starter artifact in the new workspace.
 4. Duplicate complete template objects when adding nodes, edges, actors, and branches.
@@ -24,7 +24,7 @@ Use schema version `1.1.0`. The bundled templates are canonical. Read them befor
 
 Do not substitute aliases such as `observed`, `modeled`, `verified`, or `web-search-summary`.
 
-Respect the profile budget exactly; the manifest cannot be expanded to fit evidence already collected. At least 50% of basic/quick rows, 60% of standard rows, and 70% of deep rows must be directly accessed rather than search snippets.
+Do not add a speed profile, source cap, or repair cap. Record adaptive complexity, research waves, sources examined, saturation state, stop reason, and critical gaps. Minimum decomposition, source quality, stabilization, branch diversity, and future-monitoring requirements rise with complexity; they are floors rather than work limits.
 
 ## Reference fields
 
@@ -46,7 +46,7 @@ An assumption ID belongs in `assumption_ref`, not in an evidence array.
 
 Every node uses all keys from `templates/timeline-node.json`:
 
-`id`, `type`, `name`, `status`, `confidence`, `sources`, `assumption_ref`, `description`, `time`, `state_before`, `trigger`, `mechanism`, `state_after`, `lag`, `evidence_ids`, `probability`, `alternative_explanations`, `sensitivity`.
+`id`, `type`, `name`, `status`, `timeline`, `confidence`, `sources`, `assumption_ref`, `description`, `time`, `state_before`, `trigger`, `mechanism`, `state_after`, `lag`, `evidence_ids`, `probability`, `alternative_explanations`, `sensitivity`.
 
 Do not create shortened entity/event objects. If a field is uncertain, provide an explicit unknown/unchanged state and lower confidence.
 
@@ -62,8 +62,8 @@ Write exactly one research row and one roleplay row per material actor to `human
 
 ## Branch contract
 
-Every branch uses all keys from `templates/branch-ledger.json`. Branch probabilities sum to `1.0`; no branch exceeds `0.60`. `end_state` is an object with a `summary`.
+Every branch uses all keys from `templates/branch-ledger.json`. Branch probabilities sum to `1.0`; no branch exceeds `0.60`. `end_state` contains `time` and `summary`. Prospective/hybrid branches require `leading_indicators` and `disconfirming_conditions`.
 
 ## Completion contract
 
-Set manifest status to `completed`, resolve D Research/subagent capability states, respect the profile source maximum, record repair loops, and mark all checkpoints true only when their artifacts exist. Then run draft validation, render, final validation with report required, re-render, and quality scoring.
+Set manifest status to `completed`, resolve D Research/subagent capability states, finish adaptive scope assessment, reach evidence saturation, record repair cycles, and mark all checkpoints true only when their artifacts exist. Then run draft validation, render, final validation with report required, re-render, and quality scoring.

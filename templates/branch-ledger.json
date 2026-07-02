@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.1.0",
+  "schema_version": "1.2.0",
   "branches": [
     {
       "id": "branch:most-likely",
@@ -8,9 +8,9 @@
       "summary": "Primary branch under current assumptions.",
       "causal_trace": ["causal:example-increases-target"],
       "key_decision_points": ["actor:example"],
-      "end_state": {
-        "summary": "End state for this branch."
-      },
+      "end_state": {"time": "2028-07-01", "summary": "End state for this branch."},
+      "leading_indicators": ["Observe factor:example for movement consistent with this branch."],
+      "disconfirming_conditions": ["The expected factor movement does not appear within the modeled lag window."],
       "evidence_ids": [
         "evidence:example"
       ],
@@ -24,9 +24,9 @@
       "summary": "Plausible alternative branch.",
       "causal_trace": ["causal:example-increases-target"],
       "key_decision_points": ["actor:example"],
-      "end_state": {
-        "summary": "End state for this branch."
-      },
+      "end_state": {"time": "2028-07-01", "summary": "End state for this branch."},
+      "leading_indicators": ["Observe factor:example for movement consistent with this branch."],
+      "disconfirming_conditions": ["The expected factor movement does not appear within the modeled lag window."],
       "evidence_ids": [
         "evidence:example"
       ],
@@ -40,9 +40,9 @@
       "summary": "Lower-probability stress branch.",
       "causal_trace": ["causal:example-increases-target"],
       "key_decision_points": ["actor:example"],
-      "end_state": {
-        "summary": "End state for this branch."
-      },
+      "end_state": {"time": "2028-07-01", "summary": "End state for this branch."},
+      "leading_indicators": ["Observe factor:example for movement consistent with this branch."],
+      "disconfirming_conditions": ["The expected factor movement does not appear within the modeled lag window."],
       "evidence_ids": [
         "evidence:example"
       ],

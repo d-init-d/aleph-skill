@@ -1,7 +1,7 @@
 {
   "name": "aleph-skill-tools",
-  "version": "1.1.0",
-  "description": "Evidence-grounded causal timeline simulation with branching futures and disciplined uncertainty.",
+  "version": "1.2.0",
+  "description": "Adaptive evidence-saturated causal simulation across counterfactual pasts, alternate presents, and branching futures.",
   "private": true,
   "license": "CC-BY-NC-4.0",
   "type": "module",

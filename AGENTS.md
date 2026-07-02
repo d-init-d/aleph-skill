@@ -12,17 +12,17 @@ Core behavior:
 6. Build causal edges only when the mechanism, evidence, lag, context modifiers, strength, and confidence are explicit.
 7. For material person nodes, inspect the host tools. If a task/subagent/agent tool exists, dispatch distinct research and roleplay subagents for every material actor; research must finish before roleplay starts. Otherwise record the unavailable capability and run isolated passes. Treat roleplay as hypothesis generation, never evidence.
 8. Record both human tracks in `human-track-ledger.jsonl`; prose claims of separation are insufficient.
-9. Initialize artifacts before research, obey the selected source/repair budget, and checkpoint progress in the manifest.
-10. Always run draft validation, render the report, run final validation with `--require-report`, and enforce quality score 85 when creating artifacts.
+9. Initialize artifacts before research, assess complexity adaptively, research in D Research-style waves until evidence saturation, and checkpoint progress in the manifest. Never impose a speed profile, source cap, or repair cap.
+10. Always run draft validation, render the report, run final validation with `--require-report`, and enforce an excellent quality score of at least 90 when creating artifacts.
 
 Useful commands:
 
 - `python scripts/preflight.py --d-research <path>`
-- `python scripts/init_simulation_workspace.py --slug <slug> --change-point "<description>" --profile standard`
+- `python scripts/init_simulation_workspace.py --slug <slug> --change-point "<description>" --time <date> --horizon <duration> --observation-cutoff <date>`
 - `python scripts/validate_skill_package.py .`
 - `python scripts/validate_simulation_artifacts.py --workspace <run-dir> --mode final --require-report --write-report`
 - `python scripts/render_simulation_report.py --workspace <run-dir> --out <report.md>`
-- `python scripts/evaluate_simulation_quality.py --workspace <run-dir> --threshold 85 --enforce`
+- `python scripts/evaluate_simulation_quality.py --workspace <run-dir> --threshold 90 --enforce`
 
 Output standards:
 

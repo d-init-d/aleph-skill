@@ -21,6 +21,8 @@ REQUIRED_FILES = [
     "package.json",
     "pyproject.toml",
     "references/simulation-workflow.md",
+    "references/adaptive-research-workflow.md",
+    "references/temporal-modes.md",
     "references/artifact-contract.md",
     "references/d-research-integration.md",
     "references/node-builder.md",

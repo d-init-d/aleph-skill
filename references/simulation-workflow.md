@@ -1,149 +1,113 @@
 # Simulation workflow
 
-Use this protocol for every Aleph Skill timeline simulation.
+Use this protocol for every Aleph simulation. Research depth adapts to causal complexity and continues to evidence saturation; it is never selected from a speed profile.
 
-## Execution profiles and checkpoints
+## Phase 1: Frame
 
-Choose one profile before research and record it in the manifest:
-
-| Profile | Sources | Repair loops | Use |
-|---|---:|---:|---|
-| `quick` | 4-8 | 1 | bounded exploration |
-| `standard` | 6-12 | 2 | default evidence-grounded simulation |
-| `deep` | 12-25 | 3 | audit-grade or high-stakes analysis |
-
-Initialize the workspace before opening sources. Update the manifest after each checkpoint: `initialized`, `baseline_researched`, `human_tracks_completed`, `graph_built`, `propagated`, `branched`, and `validated`. Write partial work to artifacts immediately; do not hold the whole simulation in context.
-
-Stop source expansion at the profile maximum unless a named critical gap remains. If the gap cannot be closed within budget, record it and lower confidence. Do not trade completion for unbounded browsing.
-
-## Phase 1: Define
-
-Capture a change point before research or propagation:
+Capture:
 
 ```json
 {
   "change_point": {
     "type": "event_occurs | event_prevented | factor_change | entity_action",
-    "target": "node id or plain-language target",
+    "target": "node ID or plain-language target",
     "description": "specific intervention",
-    "magnitude": "qualitative or normalized numeric magnitude",
-    "time": "YYYY-MM-DD or YYYY",
+    "magnitude": "qualitative or normalized magnitude",
+    "time": "ISO-8601 date",
     "location": "place or institutional scope"
   },
-  "scope": {
-    "horizon": "duration to simulate",
-    "domain": "economics | geopolitics | technology | society | mixed",
-    "depth": "shallow | medium | deep"
+  "temporal_frame": {
+    "observation_cutoff": "last observed date",
+    "simulation_end": "requested end date",
+    "mode": "inferred from dates"
   },
-  "active_contexts": []
+  "scope": {
+    "horizon": "ISO duration",
+    "domains": [],
+    "geographies": []
+  }
 }
 ```
 
-Ask only if the missing field would materially change the result. Otherwise make a conservative assumption and record it.
+Read `references/temporal-modes.md`. Ask only when missing information would materially change the intervention or horizon; otherwise record a conservative assumption.
 
-## Phase 2: Research
+## Phase 2: Assess and decompose
 
-Build the factual baseline at the change time:
+Score the seven adaptive-complexity dimensions, explain them, and decompose the root question into baseline, mechanism, actor, threshold, spillover, branch, and monitoring subquestions. Record critical paths before research.
 
-- key entities and decision makers,
-- ongoing events,
-- measurable factors,
-- active contexts,
-- known indicators,
-- existing causal relations,
-- unresolved contradictions.
+Read `references/adaptive-research-workflow.md`. Reassess complexity when new domains, actors, feedback loops, contradictions, or long-lag effects appear.
 
-Use D Research for deep/public-source work when available. If D Research is missing, ask the user once whether they want to install or enable it; otherwise continue in limited mode. Preserve contradictions instead of smoothing them into a single narrative.
+## Phase 3: Research in waves
 
-Prefer directly opened primary and authoritative sources. A search-result snippet is discovery, not strong evidence; cap its confidence at `0.45`. Complete a contradiction pass before setting `baseline_researched: true`.
+Use D Research to:
 
-## Phase 3: Construct
+1. map primary and authoritative sources,
+2. fan out queries,
+3. probe sources browser-first,
+4. extract evidence into the ledger,
+5. research public-role actors,
+6. search contradictions,
+7. expand unresolved frontiers.
 
-Build nodes from evidence and assumptions. Each node must declare:
+Write findings and artifacts after every wave so long runs survive context resets. Continue until all critical questions are covered and additional sources stop changing material claims, mechanisms, actors, thresholds, branches, or probabilities.
 
-- `id`,
-- `type`,
-- `name`,
-- `status`,
-- `confidence`,
-- `sources` or `assumption_ref`,
-- `description`.
+## Phase 4: Construct and link
 
-Use `references/node-builder.md` for type-specific fields.
+Build nodes from evidence and assumptions. Each node declares its timeline label. Admit an edge only when it has a transmission channel, causal rationale, lag distribution, context modifiers, strength, confidence, and evidence.
 
-## Phase 4: Link
+Use `references/node-builder.md` and `references/causal-edge-protocol.md`.
 
-Create causal edges only after the edge passes the mechanism test:
+## Phase 5: Model human decisions
 
-- What transmits the effect?
-- How does it reach the target?
-- Why is this causal rather than correlation?
-- When does the effect arrive?
-- Under which contexts is it stronger or weaker?
+For every material actor:
 
-Use `references/causal-edge-protocol.md`.
+1. dispatch the D Research public-role track,
+2. freeze the dossier and knowledge cutoff,
+3. dispatch a different roleplay track without browsing authority,
+4. adjudicate at least two normalized actions,
+5. preserve the execution ledger.
 
-## Phase 5: Propagate
+Use `references/human-node-protocol.md`.
 
-Run hop-by-hop propagation. Keep a trace for every effect above threshold:
+## Phase 6: Propagate and branch
 
-- source node,
-- target node,
-- input change,
-- edge weights,
-- lag,
-- output effect,
-- mechanism,
-- evidence,
-- uncertainty.
+Run hop-by-hop propagation. Record source, target, edge ID, input change, weights, lag, output effect, mechanism, evidence, and uncertainty. Branch at uncertain edges, actor decisions, thresholds, feedback loops, dynamic contexts, and material exogenous shocks.
 
-Use `references/propagation-engine.md`.
+For prospective and hybrid work, attach leading indicators and disconfirming conditions to every branch. Use `references/propagation-engine.md` and `references/branch-management.md`.
 
-## Phase 6: Branch
+## Phase 7: Challenge and calibrate
 
-Branch on:
+Before synthesis:
 
-- uncertain edges,
-- human decision points,
-- threshold crossings,
-- feedback loops,
-- dynamic context creation,
-- low-probability high-impact events.
+- search for contrary evidence,
+- compare alternative explanations,
+- backtest against observed analogues where possible,
+- verify temporal knowledge boundaries,
+- test high-sensitivity assumptions,
+- redistribute branch probabilities when edges fail,
+- launch another research wave for any critical gap.
 
-Use `references/branch-management.md`.
+## Phase 8: Saturation gate
 
-## Phase 7: Validate
+Do not declare completion until:
 
-If the simulated period overlaps known history, backtest against observed data. If it reaches the future, run audit gates only and label the result as scenario analysis.
+- critical questions and paths are covered,
+- main mechanisms have directly accessed primary/authoritative support,
+- contradiction searches no longer materially change confidence,
+- branch structure and sensitivity rankings stabilize,
+- no critical evidence gap remains,
+- the manifest records the stop reason and research waves completed.
 
-Validation must cover:
+There is no time, source-count, or repair-cycle limit. Evidence saturation—not impatience—is the stopping rule.
 
-- provenance coverage,
-- mechanism completeness,
-- confidence calibration,
-- branch probability normalization,
-- human-node research quality and research/roleplay separation,
-- sensitivity points,
-- safety/privacy compliance.
+## Phase 9: Validate and report
 
-Run validation in this order:
+Run:
 
-1. draft validation while the report may still be absent,
-2. render the Markdown report,
-3. final validation with `--require-report`,
-4. re-render so the report contains final validation results,
-5. quality scoring with threshold `85`.
+1. draft artifact validation,
+2. professional report rendering,
+3. final validation with the report required,
+4. re-render to embed final validation state,
+5. quality enforcement.
 
-Attempt no more than the profile's repair-loop budget. If errors remain, return a partial result with the exact validator codes instead of looping indefinitely.
-
-## Stopping rules
-
-Stop propagation when:
-
-- the horizon is reached,
-- all remaining effects fall below threshold,
-- max hops is reached,
-- cycle damping caps are reached,
-- evidence gaps make further propagation misleading.
-
-When stopping due to evidence gaps, report the missing evidence and the next research step.
+If a hard gate still fails, continue research or repair. If an external blocker makes a critical question unreachable, return a partial result and a blocker report rather than claiming completion.

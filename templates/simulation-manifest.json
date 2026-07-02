@@ -1,25 +1,60 @@
 {
-  "schema_version": "1.1.0",
+  "schema_version": "1.2.0",
   "simulation_id": "sim-example",
   "created_at": "2026-07-01T00:00:00Z",
   "status": "completed",
   "change_point": {
     "type": "factor_change",
     "target": "factor:example",
-    "description": "Example change point",
+    "description": "Example present-day change point",
     "magnitude": 0.4,
-    "time": "2026-06-01",
+    "time": "2026-07-01",
     "location": "global",
     "assumption_ref": "assumption:change-point"
   },
+  "temporal_frame": {
+    "mode": "prospective_intervention",
+    "observation_cutoff": "2026-07-01",
+    "simulation_start": "2026-07-01",
+    "simulation_end": "2028-07-01",
+    "future_projection": true,
+    "calibration_strategy": "Calibrate mechanisms against observed history up to the cutoff; treat every post-cutoff state as a probabilistic simulation.",
+    "monitoring_indicators": ["factor:example"]
+  },
   "scope": {
     "horizon": "P24M",
-    "domain": "mixed",
-    "depth": "medium"
+    "domains": ["mixed"],
+    "geographies": ["global"]
   },
   "execution": {
-    "profile": "basic",
-    "research_quality": "basic",
+    "adaptive_scope": {
+      "assessed": true,
+      "overall_complexity": 0.0,
+      "dimensions": {
+        "temporal_span": 0.0,
+        "domain_breadth": 0.0,
+        "geographic_breadth": 0.0,
+        "actor_density": 0.0,
+        "causal_depth": 0.0,
+        "evidence_uncertainty": 0.0,
+        "stakes": 0.0
+      },
+      "rationale": "Minimal linked fixture used to validate the portable artifact contract.",
+      "decomposition": {
+        "subquestions": ["What changes after the intervention?"],
+        "critical_paths": ["factor:example -> factor:example"],
+        "research_waves_completed": 1
+      }
+    },
+    "research_quality": "best-available",
+    "research_control": {
+      "policy": "evidence-saturation",
+      "sources_examined": 1,
+      "saturation_reached": true,
+      "consecutive_no_new_material_claims": 1,
+      "stop_reason": "All fixture claims are covered and further sources would add no material information.",
+      "unresolved_critical_gaps": []
+    },
     "d_research": {
       "status": "available",
       "invoked": true
@@ -30,14 +65,10 @@
       "detection_method": "template smoke test",
       "fallback_reason": "No subagent runtime is available in the template fixture."
     },
-    "research_budget": {
-      "min_sources": 1,
-      "max_sources": 6,
-      "max_repair_loops": 2
-    },
-    "repair_loops_used": 0,
+    "repair_cycles_completed": 0,
     "checkpoints": {
       "initialized": true,
+      "scope_assessed": true,
       "baseline_researched": true,
       "human_tracks_completed": true,
       "graph_built": true,

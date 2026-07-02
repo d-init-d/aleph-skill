@@ -3,9 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import shutil
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -13,7 +14,7 @@ from urllib.parse import urlparse
 from _lib import load_csv_rows, load_json, load_optional_yaml, skill_root, utc_now, write_json
 
 
-SCHEMA_VERSION = "1.1.0"
+SCHEMA_VERSION = "1.2.0"
 NODE_REQUIRED = {
     "id",
     "type",
@@ -27,6 +28,7 @@ NODE_REQUIRED = {
     "lag",
     "evidence_ids",
     "status",
+    "timeline",
     "probability",
     "confidence",
     "alternative_explanations",
@@ -70,6 +72,8 @@ BRANCH_REQUIRED = {
     "evidence_ids",
     "confidence",
     "warnings",
+    "leading_indicators",
+    "disconfirming_conditions",
 }
 EVIDENCE_REQUIRED = {
     "evidence_id",
@@ -88,6 +92,7 @@ EVIDENCE_REQUIRED = {
 }
 CHECKPOINTS = {
     "initialized",
+    "scope_assessed",
     "baseline_researched",
     "human_tracks_completed",
     "graph_built",
@@ -102,11 +107,16 @@ RETRIEVAL_STATUSES = {"opened", "downloaded", "api", "local-file", "user-provide
 CONTRADICTION_STATUSES = {"corroborated", "contested", "contradicted", "no-conflict-found", "not-applicable", "unchecked"}
 DIRECT_RETRIEVAL = {"opened", "downloaded", "api", "local-file", "user-provided"}
 HIGH_QUALITY_TIERS = {"primary", "authoritative-secondary", "user-provided"}
-PROFILE_BUDGETS = {
-    "basic": {"min_sources": 1, "max_sources": 6, "max_repair_loops": 2},
-    "quick": {"min_sources": 4, "max_sources": 8, "max_repair_loops": 1},
-    "standard": {"min_sources": 6, "max_sources": 12, "max_repair_loops": 2},
-    "deep": {"min_sources": 12, "max_sources": 25, "max_repair_loops": 3},
+TIMELINE_MODES = {"retrospective_counterfactual", "prospective_intervention", "hybrid_projection"}
+TIMELINE_LABELS = {"shared_baseline", "observed_baseline", "simulated_branch"}
+COMPLEXITY_DIMENSIONS = {
+    "temporal_span",
+    "domain_breadth",
+    "geographic_breadth",
+    "actor_density",
+    "causal_depth",
+    "evidence_uncertainty",
+    "stakes",
 }
 
 
@@ -129,6 +139,13 @@ def is_number(value: Any) -> bool:
         return math.isfinite(float(value))
     except (TypeError, ValueError):
         return False
+
+
+def complexity_value(value: Any) -> float:
+    if not is_number(value):
+        return 0.0
+    result = float(value)
+    return result if 0.0 <= result <= 1.0 else 0.0
 
 
 def probability(value: Any, path: str, errors: list[str]) -> float:
@@ -181,8 +198,86 @@ def validate_references(refs: Any, known: set[str], path: str, errors: list[str]
     return [str(value) for value in values if nonempty(value)]
 
 
+def validate_temporal_frame(manifest: dict[str, Any], mode: str, errors: list[str]) -> None:
+    frame = manifest.get("temporal_frame", {})
+    for field in ["mode", "observation_cutoff", "simulation_start", "simulation_end", "future_projection", "calibration_strategy", "monitoring_indicators"]:
+        if field not in frame:
+            errors.append(issue("MISSING_FIELD", f"manifest.temporal_frame.{field}", "required field is missing"))
+    timeline_mode = frame.get("mode")
+    if timeline_mode not in TIMELINE_MODES:
+        errors.append(issue("ENUM", "manifest.temporal_frame.mode", f"use one of {sorted(TIMELINE_MODES)}"))
+    change_time = parse_time(manifest.get("change_point", {}).get("time"))
+    cutoff = parse_time(frame.get("observation_cutoff"))
+    start = parse_time(frame.get("simulation_start"))
+    end = parse_time(frame.get("simulation_end"))
+    if any(value is None for value in [change_time, cutoff, start, end]):
+        errors.append(issue("TEMPORAL_FRAME", "manifest.temporal_frame", "change point, cutoff, start, and end must be ISO-8601 dates"))
+        return
+    assert change_time is not None and cutoff is not None and start is not None and end is not None
+    if start != change_time:
+        errors.append(issue("TEMPORAL_FRAME", "manifest.temporal_frame.simulation_start", "must equal the change-point time"))
+    if end < start:
+        errors.append(issue("TEMPORAL_FRAME", "manifest.temporal_frame.simulation_end", "cannot be earlier than the simulation start"))
+    expected_future = end > cutoff
+    if frame.get("future_projection") is not expected_future:
+        errors.append(issue("TEMPORAL_FRAME", "manifest.temporal_frame.future_projection", f"must be {expected_future}"))
+    if timeline_mode == "retrospective_counterfactual" and end > cutoff:
+        errors.append(issue("TIMELINE_MODE", "manifest.temporal_frame.mode", "retrospective mode must end on or before the observation cutoff"))
+    if timeline_mode == "prospective_intervention" and (change_time < cutoff or end <= cutoff):
+        errors.append(issue("TIMELINE_MODE", "manifest.temporal_frame.mode", "prospective mode requires a change at/after the cutoff and a future end"))
+    if timeline_mode == "hybrid_projection" and not (change_time < cutoff < end):
+        errors.append(issue("TIMELINE_MODE", "manifest.temporal_frame.mode", "hybrid mode requires change point < cutoff < simulation end"))
+    if not nonempty(frame.get("calibration_strategy")):
+        errors.append(issue("TEMPORAL_FRAME", "manifest.temporal_frame.calibration_strategy", "required"))
+    if mode == "final" and expected_future and not ensure_list(frame.get("monitoring_indicators")):
+        errors.append(issue("FUTURE_MONITORING", "manifest.temporal_frame.monitoring_indicators", "future projections require monitoring indicators"))
+
+
+def validate_adaptive_scope(execution: dict[str, Any], mode: str, errors: list[str]) -> None:
+    adaptive = execution.get("adaptive_scope", {})
+    if adaptive.get("assessed") is not True and mode == "final":
+        errors.append(issue("ADAPTIVE_SCOPE", "manifest.execution.adaptive_scope.assessed", "must be true for final validation"))
+    dimensions = adaptive.get("dimensions", {})
+    missing = COMPLEXITY_DIMENSIONS - set(dimensions)
+    if missing:
+        errors.append(issue("ADAPTIVE_SCOPE", "manifest.execution.adaptive_scope.dimensions", f"missing {sorted(missing)}"))
+    values: list[float] = []
+    for name in COMPLEXITY_DIMENSIONS:
+        value = dimensions.get(name)
+        if not is_number(value) or not 0.0 <= float(value) <= 1.0:
+            errors.append(issue("ADAPTIVE_SCOPE", f"manifest.execution.adaptive_scope.dimensions.{name}", "must be within [0, 1]"))
+        else:
+            values.append(float(value))
+    overall = adaptive.get("overall_complexity")
+    complexity = 0.0
+    if not is_number(overall) or not 0.0 <= float(overall) <= 1.0:
+        errors.append(issue("ADAPTIVE_SCOPE", "manifest.execution.adaptive_scope.overall_complexity", "must be within [0, 1]"))
+    else:
+        complexity = float(overall)
+        if values and abs(complexity - sum(values) / len(values)) > 0.05:
+            errors.append(issue("ADAPTIVE_SCOPE", "manifest.execution.adaptive_scope.overall_complexity", "must approximate the mean of the seven dimensions"))
+    if not nonempty(adaptive.get("rationale")):
+        errors.append(issue("ADAPTIVE_SCOPE", "manifest.execution.adaptive_scope.rationale", "required"))
+    decomposition = adaptive.get("decomposition", {})
+    subquestions = ensure_list(decomposition.get("subquestions"))
+    critical_paths = ensure_list(decomposition.get("critical_paths"))
+    waves = decomposition.get("research_waves_completed")
+    if not isinstance(waves, int) or waves < 0:
+        errors.append(issue("ADAPTIVE_SCOPE", "manifest.execution.adaptive_scope.decomposition.research_waves_completed", "must be a non-negative integer"))
+    if mode == "final":
+        minimum_subquestions = max(1, math.ceil(1 + 5 * complexity))
+        minimum_paths = max(1, math.ceil(1 + 3 * complexity))
+        minimum_waves = max(1, math.ceil(1 + 3 * complexity))
+        if len(subquestions) < minimum_subquestions:
+            errors.append(issue("ADAPTIVE_DEPTH", "manifest.execution.adaptive_scope.decomposition.subquestions", f"complexity {complexity:.2f} requires at least {minimum_subquestions}"))
+        if len(critical_paths) < minimum_paths:
+            errors.append(issue("ADAPTIVE_DEPTH", "manifest.execution.adaptive_scope.decomposition.critical_paths", f"complexity {complexity:.2f} requires at least {minimum_paths}"))
+        if isinstance(waves, int) and waves < minimum_waves:
+            errors.append(issue("ADAPTIVE_DEPTH", "manifest.execution.adaptive_scope.decomposition.research_waves_completed", f"complexity {complexity:.2f} requires at least {minimum_waves}"))
+
+
 def validate_manifest(manifest: dict[str, Any], mode: str, errors: list[str], warnings: list[str]) -> None:
-    for field in ["schema_version", "simulation_id", "created_at", "status", "change_point", "scope", "execution", "artifact_paths"]:
+    for field in ["schema_version", "simulation_id", "created_at", "status", "change_point", "temporal_frame", "scope", "execution", "artifact_paths"]:
         if field not in manifest:
             errors.append(issue("MISSING_FIELD", f"manifest.{field}", "required field is missing"))
     if manifest.get("schema_version") != SCHEMA_VERSION:
@@ -194,13 +289,46 @@ def validate_manifest(manifest: dict[str, Any], mode: str, errors: list[str], wa
     for field in ["type", "target", "description", "time", "location", "assumption_ref"]:
         if not nonempty(change.get(field)):
             errors.append(issue("MISSING_FIELD", f"manifest.change_point.{field}", "required value is missing"))
+    validate_temporal_frame(manifest, mode, errors)
+
+    scope = manifest.get("scope", {})
+    if not nonempty(scope.get("horizon")):
+        errors.append(issue("MISSING_FIELD", "manifest.scope.horizon", "required"))
+    for field in ["domains", "geographies"]:
+        if not ensure_list(scope.get(field)):
+            errors.append(issue("MISSING_FIELD", f"manifest.scope.{field}", "requires at least one value"))
 
     execution = manifest.get("execution", {})
-    if execution.get("profile") not in {"basic", "quick", "standard", "deep"}:
-        errors.append(issue("ENUM", "manifest.execution.profile", "use basic, quick, standard, or deep"))
+    for legacy_key in ["profile", "research_budget", "max_sources", "max_repair_loops", "depth"]:
+        if legacy_key in execution:
+            errors.append(issue("LEGACY_EXECUTION_CONTROL", f"manifest.execution.{legacy_key}", "speed profiles and fixed work caps are forbidden"))
+    validate_adaptive_scope(execution, mode, errors)
     quality = execution.get("research_quality")
-    if quality not in {"basic", "standard", "deep"}:
-        errors.append(issue("ENUM", "manifest.execution.research_quality", "use basic, standard, or deep"))
+    if quality not in {"best-available", "limited", "unknown"}:
+        errors.append(issue("ENUM", "manifest.execution.research_quality", "use best-available, limited, or unknown"))
+    if mode == "final" and quality == "unknown":
+        errors.append(issue("RESEARCH_QUALITY", "manifest.execution.research_quality", "must be resolved before final validation"))
+
+    control = execution.get("research_control", {})
+    for legacy_key in ["max_sources", "max_repair_loops", "time_limit", "source_limit"]:
+        if legacy_key in control:
+            errors.append(issue("LEGACY_EXECUTION_CONTROL", f"manifest.execution.research_control.{legacy_key}", "fixed time, source, and repair caps are forbidden"))
+    if control.get("policy") != "evidence-saturation":
+        errors.append(issue("RESEARCH_CONTROL", "manifest.execution.research_control.policy", "must be evidence-saturation"))
+    for field in ["sources_examined", "consecutive_no_new_material_claims"]:
+        if not isinstance(control.get(field), int) or control.get(field, -1) < 0:
+            errors.append(issue("RESEARCH_CONTROL", f"manifest.execution.research_control.{field}", "must be a non-negative integer"))
+    if mode == "final" and control.get("saturation_reached") is not True:
+        errors.append(issue("EVIDENCE_SATURATION", "manifest.execution.research_control.saturation_reached", "must be true before declaring the simulation complete"))
+    if mode == "final" and not nonempty(control.get("stop_reason")):
+        errors.append(issue("EVIDENCE_SATURATION", "manifest.execution.research_control.stop_reason", "required"))
+    if mode == "final" and ensure_list(control.get("unresolved_critical_gaps")):
+        errors.append(issue("CRITICAL_GAPS", "manifest.execution.research_control.unresolved_critical_gaps", "completed simulations cannot retain critical evidence gaps"))
+    complexity = complexity_value(execution.get("adaptive_scope", {}).get("overall_complexity"))
+    minimum_stable_waves = max(1, math.ceil(1 + 2 * complexity))
+    if mode == "final" and isinstance(control.get("consecutive_no_new_material_claims"), int) and control["consecutive_no_new_material_claims"] < minimum_stable_waves:
+        errors.append(issue("EVIDENCE_SATURATION", "manifest.execution.research_control.consecutive_no_new_material_claims", f"complexity {complexity:.2f} requires at least {minimum_stable_waves} consecutive research waves without material changes"))
+
     d_research = execution.get("d_research", {})
     if d_research.get("status") not in {"available", "unavailable", "unknown"}:
         errors.append(issue("ENUM", "manifest.execution.d_research.status", "use available, unavailable, or unknown"))
@@ -208,6 +336,8 @@ def validate_manifest(manifest: dict[str, Any], mode: str, errors: list[str], wa
         errors.append(issue("D_RESEARCH", "manifest.execution.d_research.status", "must be detected before final validation"))
     if mode == "final" and d_research.get("status") == "available" and d_research.get("invoked") is not True:
         errors.append(issue("D_RESEARCH", "manifest.execution.d_research.invoked", "must be true when D Research is available"))
+    if d_research.get("status") == "unavailable" and quality == "best-available":
+        warnings.append(issue("RESEARCH_QUALITY", "manifest.execution.research_quality", "D Research is unavailable; justify best-available quality explicitly"))
 
     subagents = execution.get("subagents", {})
     if subagents.get("status") not in {"available", "unavailable", "unknown"}:
@@ -218,21 +348,9 @@ def validate_manifest(manifest: dict[str, Any], mode: str, errors: list[str], wa
         target = errors if mode == "final" else warnings
         target.append(issue("SUBAGENT_UNKNOWN", "manifest.execution.subagents.status", "capability was not established"))
 
-    budget = execution.get("research_budget", {})
-    for field in ["min_sources", "max_sources", "max_repair_loops"]:
-        if not isinstance(budget.get(field), int) or budget.get(field, 0) < 1:
-            errors.append(issue("BUDGET", f"manifest.execution.research_budget.{field}", "must be a positive integer"))
-    if isinstance(budget.get("min_sources"), int) and isinstance(budget.get("max_sources"), int):
-        if budget["min_sources"] > budget["max_sources"]:
-            errors.append(issue("BUDGET", "manifest.execution.research_budget", "min_sources cannot exceed max_sources"))
-    expected_budget = PROFILE_BUDGETS.get(execution.get("profile"))
-    if expected_budget and budget != expected_budget:
-        errors.append(issue("PROFILE_BUDGET", "manifest.execution.research_budget", f"profile {execution.get('profile')!r} requires {expected_budget}; do not expand it to fit collected evidence"))
-    repair_loops = execution.get("repair_loops_used")
-    if not isinstance(repair_loops, int) or repair_loops < 0:
-        errors.append(issue("BUDGET", "manifest.execution.repair_loops_used", "must be a non-negative integer"))
-    elif isinstance(budget.get("max_repair_loops"), int) and repair_loops > budget["max_repair_loops"]:
-        warnings.append(issue("REPAIR_BUDGET", "manifest.execution.repair_loops_used", "exceeds the planned repair-loop budget"))
+    repairs = execution.get("repair_cycles_completed")
+    if not isinstance(repairs, int) or repairs < 0:
+        errors.append(issue("REPAIR_CYCLES", "manifest.execution.repair_cycles_completed", "must be a non-negative integer"))
 
     checkpoints = execution.get("checkpoints", {})
     missing = CHECKPOINTS - set(checkpoints)
@@ -261,7 +379,7 @@ def validate_evidence(
     ids: set[str] = set()
     direct_count = 0
     high_quality_direct = 0
-    quality = manifest.get("execution", {}).get("research_quality", "basic")
+    quality = manifest.get("execution", {}).get("research_quality", "unknown")
     for index, row in enumerate(rows):
         path = f"evidence[{index}]"
         evidence_id = row.get("evidence_id", "").strip()
@@ -283,7 +401,7 @@ def validate_evidence(
             errors.append(issue("ENUM", f"{path}.retrieval_status", f"use one of {sorted(RETRIEVAL_STATUSES)}"))
         if contradiction not in CONTRADICTION_STATUSES:
             errors.append(issue("ENUM", f"{path}.contradiction_status", f"use one of {sorted(CONTRADICTION_STATUSES)}"))
-        if quality in {"standard", "deep"} and contradiction == "unchecked":
+        if quality == "best-available" and contradiction == "unchecked":
             errors.append(issue("CONTRADICTION_PASS", f"{path}.contradiction_status", "cannot remain unchecked"))
 
         confidence = probability(row.get("confidence"), f"{path}.confidence", errors)
@@ -306,30 +424,41 @@ def validate_evidence(
         if len(row.get("quote_or_value", "").split()) < 5:
             warnings.append(issue("THIN_EVIDENCE", f"{path}.quote_or_value", "use a more specific excerpt or value"))
 
-    budget = manifest.get("execution", {}).get("research_budget", {})
-    if len(rows) < budget.get("min_sources", 1):
-        errors.append(issue("SOURCE_BUDGET", "evidence_map", f"has {len(rows)} rows, below minimum {budget.get('min_sources')}"))
-    if len(rows) > budget.get("max_sources", len(rows)):
-        target = errors if mode == "final" else warnings
-        target.append(issue("SOURCE_BUDGET", "evidence_map", f"has {len(rows)} rows, above planned maximum {budget.get('max_sources')}"))
-    minimum_high_quality = {"basic": 1, "standard": 2, "deep": 4}.get(quality, 1)
+    execution = manifest.get("execution", {})
+    complexity = complexity_value(execution.get("adaptive_scope", {}).get("overall_complexity"))
+    minimum_high_quality = 1 if quality == "limited" else max(1, math.ceil(1 + 8 * complexity))
     if high_quality_direct < minimum_high_quality:
         errors.append(issue("SOURCE_QUALITY", "evidence_map", f"needs at least {minimum_high_quality} directly accessed primary/authoritative sources"))
     direct_ratio = direct_count / len(rows) if rows else 0.0
-    minimum_direct_ratio = {"basic": 0.50, "standard": 0.60, "deep": 0.70}.get(quality, 0.50)
+    minimum_direct_ratio = 0.50 if quality == "limited" else 0.60 + 0.25 * complexity
     if direct_ratio < minimum_direct_ratio:
-        errors.append(issue("DIRECT_ACCESS", "evidence_map", f"directly accessed ratio is {direct_ratio:.2f}; {quality} quality requires at least {minimum_direct_ratio:.2f}"))
+        errors.append(issue("DIRECT_ACCESS", "evidence_map", f"directly accessed ratio is {direct_ratio:.2f}; adaptive complexity requires at least {minimum_direct_ratio:.2f}"))
+    control = execution.get("research_control", {})
+    if isinstance(control.get("sources_examined"), int) and control["sources_examined"] < len(rows):
+        target = errors if mode == "final" else warnings
+        target.append(issue("RESEARCH_CONTROL", "manifest.execution.research_control.sources_examined", "cannot be lower than the number of retained evidence rows at final validation"))
 
     return ids, {
         "evidence_rows": len(rows),
         "direct_sources": direct_count,
         "high_quality_direct_sources": high_quality_direct,
         "direct_source_ratio": round(direct_ratio, 4),
+        "minimum_direct_source_ratio": round(minimum_direct_ratio, 4),
+        "required_high_quality_sources": minimum_high_quality,
     }
 
 
-def validate_nodes(nodes: list[Any], evidence_ids: set[str], errors: list[str], warnings: list[str]) -> set[str]:
+def validate_nodes(
+    nodes: list[Any],
+    evidence_ids: set[str],
+    manifest: dict[str, Any],
+    errors: list[str],
+    warnings: list[str],
+) -> set[str]:
     ids: set[str] = set()
+    frame = manifest.get("temporal_frame", {})
+    cutoff = parse_time(frame.get("observation_cutoff"))
+    change_time = parse_time(manifest.get("change_point", {}).get("time"))
     for index, raw in enumerate(nodes):
         path = f"nodes[{index}]"
         if not isinstance(raw, dict):
@@ -350,6 +479,8 @@ def validate_nodes(nodes: list[Any], evidence_ids: set[str], errors: list[str], 
             errors.append(issue("ENUM", f"{path}.type", f"use one of {sorted(NODE_TYPES)}"))
         if node.get("status") not in STATUSES:
             errors.append(issue("ENUM", f"{path}.status", f"use one of {sorted(STATUSES)}"))
+        if node.get("timeline") not in TIMELINE_LABELS:
+            errors.append(issue("ENUM", f"{path}.timeline", f"use one of {sorted(TIMELINE_LABELS)}"))
         probability(node.get("confidence"), f"{path}.confidence", errors)
         probability(node.get("probability"), f"{path}.probability", errors)
         refs = validate_references(node.get("evidence_ids"), evidence_ids, f"{path}.evidence_ids", errors)
@@ -358,6 +489,18 @@ def validate_nodes(nodes: list[Any], evidence_ids: set[str], errors: list[str], 
             errors.append(issue("FACT_PROVENANCE", f"{path}.evidence_ids", "fact nodes require evidence"))
         if node.get("status") in {"simulation", "counterfactual"} and not refs and not nonempty(node.get("assumption_ref")):
             errors.append(issue("ASSUMPTION", path, "modeled nodes require evidence or assumption_ref"))
+        node_time = parse_time(node.get("time"))
+        if node_time is None:
+            errors.append(issue("TEMPORAL_NODE", f"{path}.time", "must be an ISO-8601 date"))
+        else:
+            if cutoff is not None and node_time > cutoff and node.get("status") == "fact":
+                errors.append(issue("FUTURE_FACT", f"{path}.status", "post-cutoff nodes cannot be facts"))
+            if node.get("timeline") == "simulated_branch" and node.get("status") == "fact":
+                errors.append(issue("SIMULATED_FACT", f"{path}.status", "simulated-branch nodes cannot be facts"))
+            if cutoff is not None and node_time > cutoff and node.get("timeline") == "observed_baseline":
+                errors.append(issue("FUTURE_BASELINE", f"{path}.timeline", "future nodes cannot be observed baseline"))
+            if change_time is not None and node_time < change_time and node.get("timeline") == "simulated_branch":
+                warnings.append(issue("PRECHANGE_SIMULATION", f"{path}.timeline", "pre-change nodes usually belong to the shared baseline"))
         if len(str(node.get("mechanism", "")).split()) < 10:
             errors.append(issue("MECHANISM", f"{path}.mechanism", "must explain a concrete causal channel"))
         if not ensure_list(node.get("alternative_explanations")):
@@ -419,7 +562,13 @@ def parse_time(value: Any) -> datetime | None:
     if not nonempty(value):
         return None
     try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        normalized = str(value).strip()
+        if re.fullmatch(r"\d{4}", normalized):
+            normalized = f"{normalized}-01-01"
+        parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
     except ValueError:
         return None
 
@@ -621,16 +770,23 @@ def validate_branches(
     edge_ids: set[str],
     actor_ids: set[str],
     evidence_ids: set[str],
+    manifest: dict[str, Any],
     errors: list[str],
 ) -> int:
     if not isinstance(data, dict):
         errors.append(issue("TYPE", "branch_ledger", "must be an object"))
         return 0
     branches = ensure_list(data.get("branches"))
-    if len(branches) < 3:
-        errors.append(issue("BRANCH_COUNT", "branch_ledger.branches", "must contain at least 3 branches"))
+    complexity = complexity_value(manifest.get("execution", {}).get("adaptive_scope", {}).get("overall_complexity"))
+    minimum_branches = max(3, math.ceil(3 + 2 * complexity))
+    if len(branches) < minimum_branches:
+        errors.append(issue("BRANCH_COUNT", "branch_ledger.branches", f"complexity {complexity:.2f} requires at least {minimum_branches} branches"))
     ids: set[str] = set()
     total = 0.0
+    frame = manifest.get("temporal_frame", {})
+    future_projection = frame.get("future_projection") is True
+    cutoff = parse_time(frame.get("observation_cutoff"))
+    simulation_end = parse_time(frame.get("simulation_end"))
     for index, branch in enumerate(branches):
         path = f"branches[{index}]"
         if not isinstance(branch, dict):
@@ -654,6 +810,20 @@ def validate_branches(
         validate_references(branch.get("evidence_ids"), evidence_ids, f"{path}.evidence_ids", errors)
         if not isinstance(branch.get("end_state"), dict) or not nonempty(branch.get("end_state", {}).get("summary")):
             errors.append(issue("END_STATE", f"{path}.end_state.summary", "required"))
+        end_time = parse_time(branch.get("end_state", {}).get("time"))
+        if end_time is None:
+            errors.append(issue("END_STATE", f"{path}.end_state.time", "must be an ISO-8601 date"))
+        else:
+            if simulation_end is not None and end_time > simulation_end:
+                errors.append(issue("END_STATE", f"{path}.end_state.time", "cannot exceed the simulation end"))
+            if future_projection and cutoff is not None and end_time <= cutoff:
+                errors.append(issue("FUTURE_BRANCH", f"{path}.end_state.time", "future branches must end after the observation cutoff"))
+        if future_projection:
+            minimum_monitors = max(1, math.ceil(1 + 2 * complexity))
+            if len(ensure_list(branch.get("leading_indicators"))) < minimum_monitors:
+                errors.append(issue("FUTURE_MONITORING", f"{path}.leading_indicators", f"complexity {complexity:.2f} requires at least {minimum_monitors} observable leading indicators"))
+            if len(ensure_list(branch.get("disconfirming_conditions"))) < minimum_monitors:
+                errors.append(issue("FUTURE_MONITORING", f"{path}.disconfirming_conditions", f"complexity {complexity:.2f} requires at least {minimum_monitors} disconfirming conditions"))
     if branches and abs(total - 1.0) > 0.0001:
         errors.append(issue("PROBABILITY_SUM", "branch_ledger.branches", f"sum is {total:.6f}, expected 1.0"))
     return len(branches)
@@ -664,10 +834,13 @@ def validate_trace(
     node_ids: set[str],
     edge_ids: set[str],
     evidence_ids: set[str],
+    manifest: dict[str, Any],
     errors: list[str],
 ) -> None:
     if not rows:
         errors.append(issue("TRACE_EMPTY", "propagation_trace", "requires at least one propagation row"))
+    simulation_start = parse_time(manifest.get("temporal_frame", {}).get("simulation_start"))
+    simulation_end = parse_time(manifest.get("temporal_frame", {}).get("simulation_end"))
     for index, row in enumerate(rows):
         path = f"propagation_trace[{index}]"
         for field in ["step", "time", "edge_id", "from", "to", "output_effect", "mechanism", "evidence_ids"]:
@@ -680,19 +853,48 @@ def validate_trace(
                 errors.append(issue("UNKNOWN_REF", f"{path}.{endpoint}", str(row.get(endpoint))))
         if not is_number(row.get("output_effect")):
             errors.append(issue("TYPE", f"{path}.output_effect", "must be a finite number"))
+        row_time = parse_time(row.get("time"))
+        if row_time is None:
+            errors.append(issue("TEMPORAL_TRACE", f"{path}.time", "must be an ISO-8601 date"))
+        elif simulation_start is not None and simulation_end is not None and not simulation_start <= row_time <= simulation_end:
+            errors.append(issue("TEMPORAL_TRACE", f"{path}.time", "must fall within the simulation window"))
         validate_references(row.get("evidence_ids"), evidence_ids, f"{path}.evidence_ids", errors)
 
 
-def validate_report(path: Path, errors: list[str], warnings: list[str], required: bool) -> None:
+REPORT_SECTIONS = [
+    "executive summary",
+    "methodology and scope",
+    "baseline and change point",
+    "evidence and source quality",
+    "causal architecture and propagation",
+    "scenario branches",
+    "human decision tracks",
+    "sensitivity, contradictions, and limitations",
+    "validation and audit",
+    "source appendix",
+    "warnings and next steps",
+]
+
+
+def validate_report(
+    path: Path,
+    manifest: dict[str, Any],
+    errors: list[str],
+    warnings: list[str],
+    required: bool,
+) -> None:
     if not path.exists():
         target = errors if required else warnings
         target.append(issue("FINAL_REPORT", "artifact_paths.final_report", f"file does not exist: {path}"))
         return
     text = path.read_text(encoding="utf-8")
-    expected = ["change point", "evidence", "propagation", "branch", "human", "validation", "warning"]
+    expected = list(REPORT_SECTIONS)
+    if manifest.get("temporal_frame", {}).get("future_projection") is True:
+        expected.append("future monitoring and probability updates")
+    target = errors if required else warnings
     for term in expected:
         if term not in text.lower():
-            warnings.append(issue("REPORT_SECTION", path.name, f"missing section or discussion for {term!r}"))
+            target.append(issue("REPORT_SECTION", path.name, f"missing required professional-report section {term!r}"))
 
 
 def validate_workspace(workspace: Path, mode: str = "final", require_report: bool = False) -> dict[str, Any]:
@@ -730,7 +932,14 @@ def validate_workspace(workspace: Path, mode: str = "final", require_report: boo
     nodes = ensure_list(nodes_raw) if nodes_raw is not None else []
     edges = ensure_list(edges_raw) if edges_raw is not None else []
     actors = ensure_list(actors_raw) if actors_raw is not None else []
-    node_ids = validate_nodes(nodes, evidence_ids, errors, warnings)
+    node_ids = validate_nodes(nodes, evidence_ids, manifest, errors, warnings)
+    if manifest.get("temporal_frame", {}).get("future_projection") is True:
+        validate_references(
+            manifest.get("temporal_frame", {}).get("monitoring_indicators"),
+            node_ids,
+            "manifest.temporal_frame.monitoring_indicators",
+            errors,
+        )
     edge_ids = validate_edges(edges, node_ids, evidence_ids, errors, warnings)
     subagent_status = manifest.get("execution", {}).get("subagents", {}).get("status", "unknown")
     actor_ids = validate_actors(actors, node_ids, evidence_ids, subagent_status, errors)
@@ -738,12 +947,12 @@ def validate_workspace(workspace: Path, mode: str = "final", require_report: boo
     human_ledger_path = workspace / str(artifact_paths.get("human_track_ledger", "human-track-ledger.jsonl"))
     human_rows = read_jsonl(human_ledger_path, errors, "human_track_ledger")
     validate_human_track_ledger(human_rows, actors, subagent_status, errors)
-    branch_count = validate_branches(branches_raw, edge_ids, actor_ids, evidence_ids, errors) if branches_raw is not None else 0
+    branch_count = validate_branches(branches_raw, edge_ids, actor_ids, evidence_ids, manifest, errors) if branches_raw is not None else 0
     trace_path = workspace / str(artifact_paths.get("propagation_trace", "propagation-trace.jsonl"))
     trace_rows = read_jsonl(trace_path, errors, "propagation_trace")
-    validate_trace(trace_rows, node_ids, edge_ids, evidence_ids, errors)
+    validate_trace(trace_rows, node_ids, edge_ids, evidence_ids, manifest, errors)
     report_path = workspace / str(artifact_paths.get("final_report", "REPORT.md"))
-    validate_report(report_path, errors, warnings, require_report)
+    validate_report(report_path, manifest, errors, warnings, require_report)
 
     metrics.update({
         "nodes": len(nodes),
@@ -759,6 +968,7 @@ def validate_workspace(workspace: Path, mode: str = "final", require_report: boo
         "human_tracks": "pass" if not any("actor" in error.lower() or "track" in error.lower() or "roleplay" in error.lower() for error in errors) else "fail",
         "branches": "pass" if not any("branch" in error.lower() for error in errors) else "fail",
         "trace": "pass" if not any("trace" in error.lower() for error in errors) else "fail",
+        "temporal": "pass" if not any("temporal" in error.lower() or "future_" in error.lower() or "timeline_mode" in error.lower() for error in errors) else "fail",
     })
     return {
         "schema_version": SCHEMA_VERSION,
@@ -792,7 +1002,19 @@ def validate_examples() -> dict[str, Any]:
         for name in ["evidence-map.csv", "propagation-trace.jsonl", "human-track-ledger.jsonl"]:
             shutil.copyfile(templates / name, workspace / name)
         (workspace / "REPORT.md").write_text(
-            "# Example\n\n## Change point\n\n## Evidence\n\n## Propagation\n\n## Branches\n\n## Human tracks\n\n## Validation\n\n## Warnings\n",
+            "# Example\n\n"
+            "## Executive summary\n\n"
+            "## Methodology and scope\n\n"
+            "## Baseline and change point\n\n"
+            "## Evidence and source quality\n\n"
+            "## Causal architecture and propagation\n\n"
+            "## Scenario branches\n\n"
+            "## Future monitoring and probability updates\n\n"
+            "## Human decision tracks\n\n"
+            "## Sensitivity, contradictions, and limitations\n\n"
+            "## Validation and audit\n\n"
+            "## Source appendix\n\n"
+            "## Warnings and next steps\n",
             encoding="utf-8",
             newline="\n",
         )

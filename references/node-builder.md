@@ -12,6 +12,7 @@ Every node should include:
   "type": "entity | event | factor | context | indicator | claim | source",
   "name": "human-readable name",
   "status": "fact | inference | simulation | counterfactual | assumption",
+  "timeline": "shared_baseline | observed_baseline | simulated_branch",
   "confidence": 0.0,
   "sources": [],
   "description": ""
@@ -131,10 +132,8 @@ Add:
 
 Prefer primary data, official records, peer-reviewed research, institutional reports, and high-quality journalism in that order.
 
-## Completeness levels
+## Adaptive completeness
 
-- Minimal: required universal fields plus one source or assumption reference.
-- Standard: type-specific fields plus mechanism relevance.
-- Deep: standard plus contradiction pass, source-quality score, and sensitivity notes.
+Node detail follows causal materiality and adaptive complexity rather than a named depth level. Critical-path nodes require type-specific fields, directly supported mechanisms, contradiction checks, rival explanations, sensitivity drivers, and calibration anchors. Peripheral nodes may remain compact but still require the complete artifact schema.
 
-Human decision makers on critical paths require deep profiles.
+Human decision makers on critical paths require full public-role dossiers and separated research/roleplay tracks.

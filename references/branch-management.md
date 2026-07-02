@@ -68,3 +68,15 @@ Each branch should include:
 ## Sensitivity
 
 Report which assumptions would move probability mass between branches. Highlight brittle edges and actor decisions.
+
+## Prospective and hybrid branches
+
+When the simulation extends beyond the observation cutoff, every branch must include:
+
+- an end-state time,
+- observable leading indicators,
+- disconfirming conditions,
+- probability-update triggers in the report,
+- sensitivity to intervention magnitude, lag, thresholds, and actor decisions.
+
+Future branch nodes are simulation, never fact. Re-run the simulation when new observations cross an indicator or disconfirming threshold.

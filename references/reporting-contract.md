@@ -2,17 +2,20 @@
 
 Use this structure for final simulation reports.
 
-## Required sections
+## Required professional-report sections
 
-1. Change point and assumptions.
-2. Baseline world state.
-3. Evidence ledger summary.
-4. Node and causal graph summary.
-5. Propagation highlights.
+1. Executive summary.
+2. Methodology, adaptive complexity, and temporal framing.
+3. Baseline world state and change point.
+4. Evidence and source-quality assessment.
+5. Causal architecture and propagation.
 6. Timeline branch distribution.
-7. Human decision points, including research/roleplay separation.
-8. Validation and audit.
-9. Warnings, uncertainty, and next steps.
+7. Future monitoring and probability updates for prospective/hybrid work.
+8. Human decision points, including research/roleplay separation.
+9. Sensitivity, contradictions, and limitations.
+10. Validation and audit.
+11. Source appendix.
+12. Warnings and next steps.
 
 ## Branch table
 
@@ -78,4 +81,4 @@ When writing artifacts, include paths to:
 - validation report,
 - final report.
 
-Before calling the report complete, run final validation with `--require-report` and run `scripts/evaluate_simulation_quality.py --threshold 85 --enforce`. A validator pass confirms structural/audit gates; the quality score additionally checks evidence strength, human-track execution, and efficiency.
+Before calling the report complete, run final validation with `--require-report` and run `scripts/evaluate_simulation_quality.py --threshold 90 --enforce`. A validator pass confirms structural/audit gates; the quality score additionally checks evidence strength, human-track execution, and adaptive coverage. Do not publish a completed report below the `excellent` grade.

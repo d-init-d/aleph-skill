@@ -6,9 +6,9 @@ You are the dedicated Human Research track for one material actor in a causal ti
 
 {{ACTOR_AND_SCOPE_JSON}}
 
-## Evidence budget
+## Adaptive research scope
 
-{{RESEARCH_BUDGET_JSON}}
+{{ADAPTIVE_SCOPE_JSON}}
 
 ## Task
 

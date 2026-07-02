@@ -22,11 +22,10 @@ def evaluate(workspace: Path) -> dict[str, Any]:
 
     structural = max(0.0, 20.0 - 1.5 * len(validation.get("errors", [])))
     direct_ratio = float(metrics.get("direct_source_ratio", 0.0))
-    quality = execution.get("research_quality", "basic")
-    high_quality_target = {"basic": 1, "standard": 2, "deep": 4}.get(quality, 1)
+    high_quality_target = int(metrics.get("required_high_quality_sources", 1))
     high_quality = int(metrics.get("high_quality_direct_sources", 0))
     evidence = 10.0 * clamp(direct_ratio) + 10.0 * clamp(high_quality / high_quality_target)
-    causality = 20.0 if checks.get("graph") == "pass" and checks.get("trace") == "pass" else 5.0
+    causality = 20.0 if checks.get("graph") == "pass" and checks.get("trace") == "pass" and checks.get("temporal") == "pass" else 5.0
 
     if checks.get("human_tracks") != "pass":
         human = 0.0
@@ -39,10 +38,14 @@ def evaluate(workspace: Path) -> dict[str, Any]:
     report_path = workspace / str(manifest.get("artifact_paths", {}).get("final_report", "REPORT.md"))
     completion = 10.0 if report_path.exists() and validation.get("status") == "pass" else 3.0 if report_path.exists() else 0.0
 
-    budget = execution.get("research_budget", {})
-    within_sources = int(metrics.get("evidence_rows", 0)) <= int(budget.get("max_sources", 0) or 0)
-    within_repairs = int(execution.get("repair_loops_used", 0)) <= int(budget.get("max_repair_loops", 0) or 0)
-    efficiency = 5.0 if within_sources and within_repairs else 2.5 if within_sources or within_repairs else 0.0
+    adaptive = execution.get("adaptive_scope", {})
+    control = execution.get("research_control", {})
+    adaptive_ready = (
+        adaptive.get("assessed") is True
+        and control.get("saturation_reached") is True
+        and not control.get("unresolved_critical_gaps")
+    )
+    adaptive_coverage = 5.0 if adaptive_ready else 0.0
 
     sections = {
         "structural_integrity": round(structural, 2),
@@ -51,13 +54,15 @@ def evaluate(workspace: Path) -> dict[str, Any]:
         "human_track_separation": round(human, 2),
         "branch_uncertainty": round(branching, 2),
         "completion_reporting": round(completion, 2),
-        "execution_efficiency": round(efficiency, 2),
+        "adaptive_coverage": round(adaptive_coverage, 2),
     }
     score = round(min(100.0, sum(sections.values())), 2)
     quality_gates = {
         "validation_passed": validation.get("status") == "pass",
         "evidence_floor_passed": evidence >= 15.0,
-        "score_threshold_85_passed": score >= 85.0,
+        "score_threshold_90_passed": score >= 90.0,
+        "evidence_saturation_passed": control.get("saturation_reached") is True,
+        "temporal_integrity_passed": checks.get("temporal") == "pass",
     }
     all_gates = all(quality_gates.values())
     grade = (
@@ -70,7 +75,7 @@ def evaluate(workspace: Path) -> dict[str, Any]:
         else "fail"
     )
     return {
-        "schema_version": "1.1.0",
+        "schema_version": "1.2.0",
         "evaluated_at": utc_now(),
         "workspace": str(workspace),
         "score": score,
@@ -88,7 +93,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Score an Aleph simulation workspace on a 100-point quality rubric.")
     parser.add_argument("--workspace", required=True, help="Simulation workspace directory.")
     parser.add_argument("--out", help="Optional JSON output path.")
-    parser.add_argument("--threshold", type=float, default=85.0, help="Required score when --enforce is used.")
+    parser.add_argument("--threshold", type=float, default=90.0, help="Required score when --enforce is used.")
     parser.add_argument("--enforce", action="store_true", help="Exit non-zero below threshold or on validation failure.")
     args = parser.parse_args()
     workspace = Path(args.workspace).resolve()

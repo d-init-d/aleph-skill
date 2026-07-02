@@ -14,6 +14,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from _lib import load_json, write_json  # noqa: E402
 from evaluate_simulation_quality import evaluate  # noqa: E402
+from init_simulation_workspace import infer_timeline_mode, parse_date  # noqa: E402
+from render_simulation_report import render  # noqa: E402
 from validate_simulation_artifacts import validate_workspace  # noqa: E402
 
 
@@ -30,15 +32,27 @@ class ValidationTests(unittest.TestCase):
         for name in ["evidence-map.csv", "propagation-trace.jsonl", "human-track-ledger.jsonl"]:
             shutil.copyfile(templates / name, self.workspace / name)
         (self.workspace / "REPORT.md").write_text(
-            "# Report\n\nChange point, evidence, propagation, branch, human, validation, warning.\n",
+            "# Report\n\n"
+            "## Executive summary\n\n"
+            "## Methodology and scope\n\n"
+            "## Baseline and change point\n\n"
+            "## Evidence and source quality\n\n"
+            "## Causal architecture and propagation\n\n"
+            "## Scenario branches\n\n"
+            "## Future monitoring and probability updates\n\n"
+            "## Human decision tracks\n\n"
+            "## Sensitivity, contradictions, and limitations\n\n"
+            "## Validation and audit\n\n"
+            "## Source appendix\n\n"
+            "## Warnings and next steps\n",
             encoding="utf-8",
         )
 
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def validate(self) -> dict[str, object]:
-        return validate_workspace(self.workspace, mode="final", require_report=True)
+    def validate(self, mode: str = "final", require_report: bool = True) -> dict[str, object]:
+        return validate_workspace(self.workspace, mode=mode, require_report=require_report)
 
     def test_valid_fixture_passes(self) -> None:
         self.assertEqual(self.validate()["status"], "pass")
@@ -47,6 +61,19 @@ class ValidationTests(unittest.TestCase):
         result = evaluate(self.workspace)
         self.assertEqual(result["grade"], "excellent")
         self.assertGreaterEqual(result["score"], 90)
+
+    def test_renderer_never_presents_stale_validation_as_final(self) -> None:
+        manifest = load_json(self.workspace / "simulation-manifest.json")
+        manifest["status"] = "draft"
+        manifest["execution"]["research_control"]["saturation_reached"] = False
+        write_json(self.workspace / "simulation-manifest.json", manifest)
+        write_json(
+            self.workspace / "validation-report.json",
+            {"mode": "final", "status": "pass", "warnings": [], "errors": []},
+        )
+        report = render(self.workspace)
+        self.assertIn("draft-not-ready", report)
+        self.assertIn("## Future monitoring and probability updates", report)
 
     def test_unknown_edge_reference_fails(self) -> None:
         edges = load_json(self.workspace / "edges.json")
@@ -125,13 +152,97 @@ class ValidationTests(unittest.TestCase):
         result = self.validate()
         self.assertTrue(any("BRANCH_CAP" in error for error in result["errors"]))
 
-    def test_profile_budget_cannot_be_expanded(self) -> None:
+    def test_adaptive_complexity_must_match_dimensions(self) -> None:
         manifest = load_json(self.workspace / "simulation-manifest.json")
-        manifest["execution"]["profile"] = "quick"
-        manifest["execution"]["research_budget"]["max_sources"] = 25
+        manifest["execution"]["adaptive_scope"]["overall_complexity"] = 0.90
         write_json(self.workspace / "simulation-manifest.json", manifest)
         result = self.validate()
-        self.assertTrue(any("PROFILE_BUDGET" in error for error in result["errors"]))
+        self.assertTrue(any("ADAPTIVE_SCOPE" in error for error in result["errors"]))
+
+    def test_legacy_execution_profiles_are_rejected(self) -> None:
+        manifest = load_json(self.workspace / "simulation-manifest.json")
+        manifest["execution"]["profile"] = "deep"
+        manifest["execution"]["research_budget"] = {"max_sources": 100}
+        manifest["execution"]["research_control"]["time_limit"] = "P1D"
+        write_json(self.workspace / "simulation-manifest.json", manifest)
+        result = self.validate()
+        self.assertTrue(any("LEGACY_EXECUTION_CONTROL" in error for error in result["errors"]))
+
+    def test_research_quality_aliases_are_rejected(self) -> None:
+        manifest = load_json(self.workspace / "simulation-manifest.json")
+        manifest["execution"]["research_quality"] = "standard"
+        write_json(self.workspace / "simulation-manifest.json", manifest)
+        result = self.validate()
+        self.assertTrue(any("RESEARCH_QUALITY" in error or "ENUM" in error for error in result["errors"]))
+
+    def test_high_complexity_rejects_shallow_execution(self) -> None:
+        manifest = load_json(self.workspace / "simulation-manifest.json")
+        adaptive = manifest["execution"]["adaptive_scope"]
+        adaptive["overall_complexity"] = 1.0
+        adaptive["dimensions"] = {key: 1.0 for key in adaptive["dimensions"]}
+        write_json(self.workspace / "simulation-manifest.json", manifest)
+        result = self.validate()
+        self.assertTrue(any("ADAPTIVE_DEPTH" in error for error in result["errors"]))
+        self.assertTrue(any("SOURCE_QUALITY" in error for error in result["errors"]))
+        self.assertTrue(any("BRANCH_COUNT" in error for error in result["errors"]))
+        self.assertTrue(any("FUTURE_MONITORING" in error for error in result["errors"]))
+
+    def test_completed_run_requires_evidence_saturation(self) -> None:
+        manifest = load_json(self.workspace / "simulation-manifest.json")
+        manifest["execution"]["research_control"]["saturation_reached"] = False
+        write_json(self.workspace / "simulation-manifest.json", manifest)
+        result = self.validate()
+        self.assertTrue(any("EVIDENCE_SATURATION" in error for error in result["errors"]))
+
+    def test_draft_allows_research_to_be_in_progress(self) -> None:
+        manifest = load_json(self.workspace / "simulation-manifest.json")
+        manifest["status"] = "draft"
+        manifest["execution"]["research_control"]["sources_examined"] = 0
+        manifest["execution"]["research_control"]["saturation_reached"] = False
+        manifest["execution"]["research_control"]["stop_reason"] = ""
+        manifest["temporal_frame"]["monitoring_indicators"] = []
+        write_json(self.workspace / "simulation-manifest.json", manifest)
+        result = self.validate(mode="draft", require_report=False)
+        self.assertEqual(result["status"], "pass")
+        self.assertTrue(any("RESEARCH_CONTROL" in warning for warning in result["warnings"]))
+
+    def test_future_nodes_cannot_be_facts(self) -> None:
+        nodes = load_json(self.workspace / "nodes.json")
+        nodes[0]["time"] = "2027-01-01"
+        nodes[0]["status"] = "fact"
+        nodes[0]["timeline"] = "simulated_branch"
+        write_json(self.workspace / "nodes.json", nodes)
+        result = self.validate()
+        self.assertTrue(any("FUTURE_FACT" in error for error in result["errors"]))
+
+    def test_future_branches_require_monitoring_conditions(self) -> None:
+        ledger = load_json(self.workspace / "branch-ledger.json")
+        ledger["branches"][0]["leading_indicators"] = []
+        ledger["branches"][0]["disconfirming_conditions"] = []
+        write_json(self.workspace / "branch-ledger.json", ledger)
+        result = self.validate()
+        self.assertTrue(any("FUTURE_MONITORING" in error for error in result["errors"]))
+
+    def test_timeline_mode_must_match_dates(self) -> None:
+        manifest = load_json(self.workspace / "simulation-manifest.json")
+        manifest["temporal_frame"]["mode"] = "retrospective_counterfactual"
+        write_json(self.workspace / "simulation-manifest.json", manifest)
+        result = self.validate()
+        self.assertTrue(any("TIMELINE_MODE" in error for error in result["errors"]))
+
+    def test_timeline_mode_inference_covers_all_directions(self) -> None:
+        self.assertEqual(
+            infer_timeline_mode(parse_date("2000-01-01"), parse_date("2026-01-01"), parse_date("2010-01-01")),
+            "retrospective_counterfactual",
+        )
+        self.assertEqual(
+            infer_timeline_mode(parse_date("2026-01-01"), parse_date("2026-01-01"), parse_date("2028-01-01")),
+            "prospective_intervention",
+        )
+        self.assertEqual(
+            infer_timeline_mode(parse_date("2000-01-01"), parse_date("2026-01-01"), parse_date("2030-01-01")),
+            "hybrid_projection",
+        )
 
 
 if __name__ == "__main__":

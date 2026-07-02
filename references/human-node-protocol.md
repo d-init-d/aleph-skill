@@ -20,9 +20,9 @@ If no subagent tool exists, run two isolated main-context passes with distinct `
 
 Record each execution in `human-track-ledger.jsonl` with actor ID, track, execution mode, distinct agent reference, start/completion timestamps, input artifacts, output artifact, and status. The validator cross-checks this ledger against `actors.json`.
 
-## When deep research is required
+## When research must expand
 
-Use deep research when a person:
+Expand public-role research until saturation when a person:
 
 - is a key decision maker,
 - appears in three or more causal edges,

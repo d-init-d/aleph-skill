@@ -1,6 +1,6 @@
 # D Research integration
 
-D Research is the recommended companion skill for evidence collection. Aleph Skill can run without it, but simulations produced without D Research must mark `research_quality: basic` or `limited` and use more conservative confidence.
+D Research is the recommended companion skill for evidence collection. Aleph Skill can run without it, but simulations produced without D Research must mark `research_quality: limited` and use more conservative confidence.
 
 ## Discovery order
 
@@ -44,7 +44,7 @@ Map D Research ledger rows into simulation artifacts:
 | confidence | node/claim confidence input |
 | contradiction_status | warning or contested claim |
 
-## Source-quality gate
+## Adaptive source-quality gate
 
 Every evidence row must declare:
 
@@ -52,11 +52,9 @@ Every evidence row must declare:
 - `retrieval_status`: `opened`, `downloaded`, `api`, `local-file`, `user-provided`, `search-snippet`, or `blocked`;
 - a concrete excerpt/value, retrieval time, confidence, and contradiction status.
 
-For `standard` runs, directly access at least two primary/authoritative sources. For `deep` runs, directly access at least four. A blocked source cannot support a claim. A search snippet is only provisional and its confidence cannot exceed `0.45`; tertiary evidence cannot exceed `0.60`. Do not leave `contradiction_status: unchecked` in `standard` or `deep` output.
+The number of required directly accessed primary/authoritative sources and the direct-access ratio rise with adaptive complexity. A blocked source cannot support a claim. A search snippet is only provisional and its confidence cannot exceed `0.45`; tertiary evidence cannot exceed `0.60`. `best-available` output cannot leave contradiction status unchecked.
 
-At least 50% of `basic`/quick evidence, 60% of `standard` evidence, and 70% of `deep` evidence must be directly opened, downloaded, obtained through a public API, supplied by the user, or read from a local file. Discovery snippets cannot be allowed to dominate the final ledger.
-
-Source count is not source quality. Stop when the profile budget is reached and the critical claims are covered; report remaining gaps rather than padding the ledger with weak duplicates.
+Source count is not source quality. Continue research while new sources change critical claims, mechanisms, actors, thresholds, or branch probabilities. Stop at evidence saturation, not at a predefined count, and do not pad the ledger with weak duplicates after saturation.
 
 ## Prompt pattern
 
@@ -95,4 +93,4 @@ When D Research is unavailable:
 - keep evidence ledgers manually in `templates/evidence-map.csv`,
 - reduce confidence on edges and actor predictions,
 - flag missing contradiction checks,
-- report `research_quality: basic`.
+- report `research_quality: limited`.
