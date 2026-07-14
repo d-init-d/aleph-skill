@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import copy
-import json
 import shutil
 import uuid
 from pathlib import Path
 from typing import Any
 
 from . import LEGACY_SCHEMA_VERSION, SCHEMA_VERSION
-from .io import canonical_hash, sha256_file, write_json_atomic
+from .io import canonical_hash, load_json_secure, sha256_file, write_json_atomic
 
 
 def _inside(path: Path, parent: Path) -> bool:
@@ -33,7 +32,11 @@ def _workspace_digest(root: Path) -> tuple[str, list[dict[str, Any]]]:
 
 
 def _load_json(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
+    data, problems = load_json_secure(path)
+    if problems:
+        details = "; ".join(problem.legacy_string() for problem in problems)
+        raise ValueError(f"invalid JSON artifact {path}: {details}")
+    return data
 
 
 def plan_migration(source: Path) -> dict[str, Any]:
@@ -43,10 +46,16 @@ def plan_migration(source: Path) -> dict[str, Any]:
         return {"ok": False, "error": "missing simulation-manifest.json"}
     try:
         manifest = _load_json(manifest_path)
-    except (OSError, json.JSONDecodeError) as exc:
+    except ValueError as exc:
         return {"ok": False, "error": f"invalid simulation-manifest.json: {exc}"}
     version = manifest.get("schema_version") if isinstance(manifest, dict) else None
-    if version not in {LEGACY_SCHEMA_VERSION, "1.0.0", "1.1.0", "1.2.0", SCHEMA_VERSION}:
+    if not isinstance(version, str) or version not in {
+        LEGACY_SCHEMA_VERSION,
+        "1.0.0",
+        "1.1.0",
+        "1.2.0",
+        SCHEMA_VERSION,
+    }:
         return {"ok": False, "error": f"unsupported source schema {version}"}
     try:
         source_digest, source_files = _workspace_digest(source)
@@ -74,6 +83,7 @@ def plan_migration(source: Path) -> dict[str, Any]:
         "map base_strength to draft effect_parameter.reference_value",
         "invalidate legacy validation and quality receipts",
         "downgrade branch probability to relative_weight",
+        "clear uncalibrated node probability",
         "mark migrated execution claims for re-execution",
     ]
     unresolved: list[dict[str, Any]] = []
@@ -84,7 +94,7 @@ def plan_migration(source: Path) -> dict[str, Any]:
     if edges_path.is_file():
         try:
             edges = _load_json(edges_path)
-        except (OSError, json.JSONDecodeError) as exc:
+        except ValueError as exc:
             return {"ok": False, "error": f"invalid edges.json: {exc}"}
         for edge in edges if isinstance(edges, list) else []:
             if isinstance(edge, dict) and "base_strength" in edge and "effect_parameter" not in edge:
@@ -97,15 +107,25 @@ def plan_migration(source: Path) -> dict[str, Any]:
         try:
             actors = _load_json(actors_path)
             nodes = _load_json(nodes_path)
-        except (OSError, json.JSONDecodeError) as exc:
+        except ValueError as exc:
             return {"ok": False, "error": f"invalid actor/node artifact: {exc}"}
-        node_types = {value.get("id"): value.get("type") for value in nodes if isinstance(value, dict)} if isinstance(nodes, list) else {}
+        node_types = (
+            {
+                value["id"]: value.get("type")
+                for value in nodes
+                if isinstance(value, dict) and isinstance(value.get("id"), str)
+            }
+            if isinstance(nodes, list)
+            else {}
+        )
         for actor in actors if isinstance(actors, list) else []:
             if not isinstance(actor, dict):
                 continue
-            if actor.get("person_node") and node_types.get(actor.get("person_node")) != "entity":
+            person_node = actor.get("person_node")
+            if not isinstance(person_node, str) or node_types.get(person_node) != "entity":
                 unresolved.append({"item": actor.get("id"), "field": "person_node", "note": "must reference entity"})
-            if actor.get("materiality") not in {"material", "non_material"}:
+            materiality = actor.get("materiality")
+            if not isinstance(materiality, str) or materiality not in {"material", "non_material"}:
                 unresolved.append({"item": actor.get("id"), "field": "materiality", "note": "requires classification"})
     return {
         "ok": True,
@@ -128,6 +148,12 @@ def _transform_edge(edge: dict[str, Any]) -> dict[str, Any]:
             "reference_value": result["base_strength"],
             "note": "migrated from base_strength; review required",
         }
+    return result
+
+
+def _transform_node(node: dict[str, Any]) -> dict[str, Any]:
+    result = copy.deepcopy(node)
+    result.pop("probability", None)
     return result
 
 
@@ -235,6 +261,14 @@ def _apply_transforms(destination: Path, plan: dict[str, Any], source: Path, fin
         edges = _load_json(edges_path)
         if isinstance(edges, list):
             write_json_atomic(edges_path, [_transform_edge(value) if isinstance(value, dict) else value for value in edges])
+    nodes_path = destination / "nodes.json"
+    if nodes_path.is_file():
+        nodes = _load_json(nodes_path)
+        if isinstance(nodes, list):
+            write_json_atomic(
+                nodes_path,
+                [_transform_node(value) if isinstance(value, dict) else value for value in nodes],
+            )
     branch_path = destination / "branch-ledger.json"
     if branch_path.is_file():
         ledger = _load_json(branch_path)

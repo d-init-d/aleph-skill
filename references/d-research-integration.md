@@ -1,6 +1,6 @@
 # D Research 3.x integration
 
-Aleph uses D Research for lawful public evidence collection. Integration is optional, but verified research requires exact D Research identity and a compatible major.
+Aleph prefers D Research for lawful public evidence collection. Integration is optional, but verified research requires exact D Research identity and a compatible major. Absence is not permission to fabricate a ledger or import receipt.
 
 ## Discovery
 
@@ -12,6 +12,26 @@ Check in this order:
 4. conventional user skill locations for Codex, Agent Skills, Claude Code, OpenCode, and Grok.
 
 Accept only a directory whose `SKILL.md` frontmatter name is exactly `d-research`, whose package identity is recognized, whose major is `3`, and which contains `scripts/evidence_ledger.py`. An explicit incompatible candidate is a hard preflight failure. Do not silently select another installation or hardcode a developer path.
+
+Record discovery/import state as a closed contract:
+
+| `execution.d_research.status` | Required coupling |
+|---|---|
+| `unknown` | Draft only; `invoked: false` and research quality `unknown` or `limited`. |
+| `unavailable` | `invoked: false`, no import receipt, and `research_quality: limited`. |
+| `incompatible` | `invoked: false`; hard failure rather than silent fallback or final output. |
+| `available` | Discovered package `path`, `package_major: 3`, and the truthful invocation flag. |
+| `imported` / `verified` | `invoked: true`, compatible package path/major, `ledger_ref`, and `artifact_paths.research_import_receipt`. |
+
+Never infer one state from another or retain a research import receipt for `unknown`, `unavailable`, `incompatible`, or merely `available` status.
+
+## Limited host-native fallback
+
+When discovery returns `unavailable`, ask once whether the user wants to install D Research. If installation is declined or unavailable, continue only when the host exposes lawful research tools such as a browser, search, a source connector, or user-provided documents. Otherwise publish a partial blocker instead of inventing evidence. Record `execution.d_research.status` as unavailable, `invoked` as false, `execution.research_quality` as `limited`, and preserve the detected host capabilities and fallback reason in the capability snapshot or research notes. A discovered but incompatible explicit candidate is a failure, not a fallback trigger.
+
+Execute the same decomposed questions, source fanout, contradiction searches, and saturation checks with those host-native tools. For every material atomic claim, write the standard `evidence-map.csv` fields: stable evidence ID, claim, opened URL or workspace-relative source path, source type/tier, publication and retrieval dates, access method/status, quote or measured value, evidence confidence, contradiction status, and provenance notes. Preserve allowed raw captures or structured research notes under the simulation workspace and hash them when the artifact contract requires it. Search snippets remain discovery aids and never become strong evidence by themselves.
+
+The fallback does not emit a D Research CSV, HMAC sidecar, preserved D Research ledger, or research import receipt, and it must not populate `artifact_paths.research_import_receipt`. It can support an honest `limited` result only; it cannot support `verified` or `calibrated` assurance. Public-role research still runs in a dedicated research execution, and neither its tools nor its evidence are exposed to the sealed roleplay execution.
 
 ## Ledger contract
 
@@ -43,4 +63,4 @@ Every successful import emits a separate import-receipt JSON artifact that binds
 | `contradiction` | contradiction_status |
 | `confidence` | preserved label plus explicit evidence-confidence mapping; never event probability |
 
-Blocked/process rows never support causal claims. Search snippets remain provisional. D Research only feeds the Human Research track; the Roleplay track has no browser or ledger access.
+Blocked/process rows never support causal claims. Search snippets remain provisional. D Research only feeds the Human Research track; the Roleplay track has no browser or ledger access. The same seal applies to host-native fallback research.

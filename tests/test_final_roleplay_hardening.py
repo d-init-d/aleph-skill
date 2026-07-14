@@ -24,6 +24,9 @@ from aleph.import_ledger import (  # noqa: E402
 from aleph.packets import (  # noqa: E402
     build_knowledge_packet,
     build_receipt,
+    dossier_contract_hash,
+    scenario_contract_hash,
+    validate_actor_protocol,
     validate_knowledge_packet,
     validate_roleplay_output,
 )
@@ -34,21 +37,21 @@ H1 = "1" * 64
 H2 = "2" * 64
 
 
-def _packet() -> dict[str, object]:
+def _packet(*, dossier_hash: str = H1, scenario_hash: str = H2) -> dict[str, object]:
     result = build_knowledge_packet(
         actor_id="actor:test",
         decision_id="decision:test",
         decision_time="2026-01-02T00:00:00Z",
         knowledge_cutoff="2026-01-01T00:00:00Z",
-        dossier_hash=H1,
-        scenario_hash=H2,
+        dossier_hash=dossier_hash,
+        scenario_hash=scenario_hash,
         claims=[
             {
                 "id": "claim:one",
                 "text": "The public institution adopted a formal rule.",
                 "available_at": "2026-01-01T00:00:00Z",
                 "actor_access": "public_role",
-                "access_basis": "published official record",
+                "access_basis": "public_role",
             }
         ],
         institutional_constraints=["law"],
@@ -59,6 +62,215 @@ def _packet() -> dict[str, object]:
     packet = result["packet"]
     assert isinstance(packet, dict)
     return packet
+
+
+def _roleplay_output(packet: dict[str, object]) -> dict[str, object]:
+    return {
+        "packet_hash": packet["packet_hash"],
+        "actor_id": packet["actor_id"],
+        "decision_id": packet["decision_id"],
+        "execution_id": "execution:roleplay",
+        "status": "completed",
+        "network_used": False,
+        "tools_used": [],
+        "browsed": False,
+        "hypotheses": [
+            {
+                "id": "hypothesis:approve",
+                "action": "approve",
+                "reasoning": "The institutional process permits approval.",
+                "constraints_applied": ["law"],
+                "known_unknowns": ["timing"],
+                "status": "simulation",
+                "evidence_ids": [],
+            },
+            {
+                "id": "hypothesis:delay",
+                "action": "delay",
+                "reasoning": "The institutional process also permits delay.",
+                "constraints_applied": ["law"],
+                "known_unknowns": ["timing"],
+                "status": "simulation",
+                "evidence_ids": [],
+            },
+        ],
+    }
+
+
+def _write_receipted_roleplay_workspace(
+    workspace: Path,
+    *,
+    stored_packet: object | None = None,
+    duplicate_packet_key: bool = False,
+    extra_roleplay_input: bool = False,
+    key: bytes = b"receipt-secret",
+) -> tuple[dict[str, object], list[dict[str, object]], dict[str, bytes]]:
+    manifest: dict[str, object] = {
+        "schema_version": "2.0.0",
+        "simulation_id": "sim:roleplay-test",
+        "change_point": {"type": "decision", "target": "actor:test"},
+        "temporal_frame": {
+            "mode": "prospective_intervention",
+            "observation_cutoff": "2026-01-01T00:00:00Z",
+        },
+        "scope": {"horizon": "P1D", "domains": ["policy"], "geographies": ["test"]},
+        "assumptions": [{"id": "assumption:test", "statement": "Test assumption"}],
+        "active_contexts": ["context:test"],
+        "artifact_paths": {
+            "actors": "actors.json",
+            "human_track_ledger": "human-track-ledger.jsonl",
+        },
+    }
+    actor: dict[str, object] = {
+        "id": "actor:test",
+        "person_node": "entity:test",
+        "public_role": "Public official",
+        "scope_note": "Public-role decisions only",
+        "materiality": "material",
+        "subject_class": "public_role_person",
+        "living_status": "living",
+        "evidence_ids": ["evidence:test"],
+        "decision_graph": {"allowed_actions": ["approve", "delay"]},
+        "institutional_constraints": ["law"],
+        "uncertainty_factors": ["timing"],
+        "research_track": {
+            "status": "completed",
+            "agent_ref": "agent:research",
+            "execution_id": "execution:research",
+            "started_at": "2026-01-01T00:00:00Z",
+            "completed_at": "2026-01-01T01:00:00Z",
+            "artifact": "packet.json",
+            "claims": [
+                {
+                    "id": "claim:one",
+                    "claim": "The public institution adopted a formal rule.",
+                    "evidence_ids": ["evidence:test"],
+                    "confidence": 0.9,
+                    "available_at": "2026-01-01T00:00:00Z",
+                    "access_basis": "public_role",
+                }
+            ],
+        },
+    }
+    packet = _packet(
+        dossier_hash=dossier_contract_hash(actor),
+        scenario_hash=scenario_contract_hash(manifest),
+    )
+    output = _roleplay_output(packet)
+    packet_text = json.dumps(packet if stored_packet is None else stored_packet)
+    if duplicate_packet_key:
+        packet_text = '{"allowed_actions":["foreign-action"],' + packet_text[1:]
+    packet_bytes = (packet_text + "\n").encode()
+    output_bytes = (json.dumps(output) + "\n").encode()
+    artifacts = {
+        "research-input.json": b'{"question":"test"}\n',
+        "packet.json": packet_bytes,
+        "roleplay.json": output_bytes,
+    }
+    if extra_roleplay_input:
+        artifacts["raw-evidence.json"] = b'{"forbidden":"roleplay input"}\n'
+    digests: dict[str, str] = {}
+    for relative, content in artifacts.items():
+        (workspace / relative).write_bytes(content)
+        digests[relative] = hashlib.sha256(content).hexdigest()
+
+    hypotheses = output["hypotheses"]
+    assert isinstance(hypotheses, list)
+    actor["roleplay_track"] = {
+        "status": "completed",
+        "agent_ref": "agent:roleplay",
+        "execution_id": "execution:roleplay",
+        "started_at": "2026-01-01T01:01:00Z",
+        "completed_at": "2026-01-01T02:00:00Z",
+        "artifact": "roleplay.json",
+        "knowledge_cutoff": packet["knowledge_cutoff"],
+        "packet_hash": packet["packet_hash"],
+        "hypotheses": hypotheses,
+    }
+    actors = [actor]
+    (workspace / "actors.json").write_text(json.dumps(actors), encoding="utf-8")
+
+    research = build_receipt(
+        runtime_id="runtime:test",
+        adapter_id="adapter:test",
+        execution_id="execution:research",
+        parent_execution_id=None,
+        start="2026-01-01T00:00:00Z",
+        end="2026-01-01T01:00:00Z",
+        inputs=[{"path": "research-input.json", "sha256": digests["research-input.json"]}],
+        outputs=[{"path": "packet.json", "sha256": digests["packet.json"]}],
+        network_policy="allow",
+        tool_policy="allow",
+        observed_tools=["browser"],
+        capability_snapshot_hash=H1,
+        previous_receipt_hash=None,
+        hmac_key=key,
+    )
+    roleplay_inputs = [{"path": "packet.json", "sha256": digests["packet.json"]}]
+    if extra_roleplay_input:
+        roleplay_inputs.append(
+            {"path": "raw-evidence.json", "sha256": digests["raw-evidence.json"]}
+        )
+    roleplay = build_receipt(
+        runtime_id="runtime:test",
+        adapter_id="adapter:test",
+        execution_id="execution:roleplay",
+        parent_execution_id="execution:research",
+        start="2026-01-01T01:01:00Z",
+        end="2026-01-01T02:00:00Z",
+        inputs=roleplay_inputs,
+        outputs=[{"path": "roleplay.json", "sha256": digests["roleplay.json"]}],
+        network_policy="deny",
+        tool_policy="deny",
+        observed_tools=[],
+        capability_snapshot_hash=H1,
+        previous_receipt_hash=research["receipt_hash"],
+        hmac_key=key,
+    )
+    (workspace / "receipts.json").write_text(
+        json.dumps([research, roleplay]), encoding="utf-8"
+    )
+    rows: list[dict[str, object]] = [
+        {
+            "actor_id": "actor:test",
+            "track": "research",
+            "agent_ref": "agent:research",
+            "execution_id": "execution:research",
+            "started_at": "2026-01-01T00:00:00Z",
+            "completed_at": "2026-01-01T01:00:00Z",
+            "input_artifact": "research-input.json",
+            "input_hash": digests["research-input.json"],
+            "output_artifact": "packet.json",
+            "output_hash": digests["packet.json"],
+            "receipt_id": research["id"],
+            "receipt_hash": research["receipt_hash"],
+            "receipt_ref": "receipts.json",
+            "receipt_attestation": "host",
+            "status": "completed",
+        },
+        {
+            "actor_id": "actor:test",
+            "track": "roleplay",
+            "agent_ref": "agent:roleplay",
+            "execution_id": "execution:roleplay",
+            "started_at": "2026-01-01T01:01:00Z",
+            "completed_at": "2026-01-01T02:00:00Z",
+            "input_artifact": "packet.json",
+            "input_hash": digests["packet.json"],
+            "output_artifact": "roleplay.json",
+            "output_hash": digests["roleplay.json"],
+            "receipt_id": roleplay["id"],
+            "receipt_hash": roleplay["receipt_hash"],
+            "previous_receipt_hash": research["receipt_hash"],
+            "receipt_ref": "receipts.json",
+            "receipt_attestation": "host",
+            "status": "completed",
+        },
+    ]
+    (workspace / "human-track-ledger.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+    )
+    return manifest, rows, artifacts
 
 
 class PrivacyPacketHardeningTests(unittest.TestCase):
@@ -219,98 +431,140 @@ class ReceiptAndResearchHardeningTests(unittest.TestCase):
         key = b"receipt-secret"
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
-            artifacts = {
-                "research-input.json": b'{"question":"test"}\n',
-                "packet.json": b'{"packet":"frozen"}\n',
-                "roleplay.json": b'{"hypotheses":[]}\n',
-            }
-            digests: dict[str, str] = {}
-            for relative, content in artifacts.items():
-                (workspace / relative).write_bytes(content)
-                digests[relative] = hashlib.sha256(content).hexdigest()
-            research = build_receipt(
-                runtime_id="runtime:test",
-                adapter_id="adapter:test",
-                execution_id="execution:research",
-                parent_execution_id=None,
-                start="2026-01-01T00:00:00Z",
-                end="2026-01-01T01:00:00Z",
-                inputs=[{"path": "research-input.json", "sha256": digests["research-input.json"]}],
-                outputs=[{"path": "packet.json", "sha256": digests["packet.json"]}],
-                network_policy="allow",
-                tool_policy="allow",
-                observed_tools=["browser"],
-                capability_snapshot_hash=H1,
-                previous_receipt_hash=None,
-                hmac_key=key,
-            )
-            roleplay = build_receipt(
-                runtime_id="runtime:test",
-                adapter_id="adapter:test",
-                execution_id="execution:roleplay",
-                parent_execution_id="execution:research",
-                start="2026-01-01T01:01:00Z",
-                end="2026-01-01T02:00:00Z",
-                inputs=[{"path": "packet.json", "sha256": digests["packet.json"]}],
-                outputs=[{"path": "roleplay.json", "sha256": digests["roleplay.json"]}],
-                network_policy="deny",
-                tool_policy="deny",
-                observed_tools=[],
-                capability_snapshot_hash=H1,
-                previous_receipt_hash=research["receipt_hash"],
-                hmac_key=key,
-            )
-            (workspace / "receipts.json").write_text(
-                json.dumps([research, roleplay]), encoding="utf-8"
-            )
-            rows = [
-                {
-                    "actor_id": "actor:test",
-                    "track": "research",
-                    "execution_id": "execution:research",
-                    "input_artifact": "research-input.json",
-                    "input_hash": digests["research-input.json"],
-                    "output_artifact": "packet.json",
-                    "output_hash": digests["packet.json"],
-                    "receipt_id": research["id"],
-                    "receipt_hash": research["receipt_hash"],
-                    "receipt_ref": "receipts.json",
-                },
-                {
-                    "actor_id": "actor:test",
-                    "track": "roleplay",
-                    "execution_id": "execution:roleplay",
-                    "input_artifact": "packet.json",
-                    "input_hash": digests["packet.json"],
-                    "output_artifact": "roleplay.json",
-                    "output_hash": digests["roleplay.json"],
-                    "receipt_id": roleplay["id"],
-                    "receipt_hash": roleplay["receipt_hash"],
-                    "receipt_ref": "receipts.json",
-                },
-            ]
-            (workspace / "human-track-ledger.jsonl").write_text(
-                "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
-            )
-            manifest = {"artifact_paths": {"human_track_ledger": "human-track-ledger.jsonl"}}
+            manifest, rows, artifacts = _write_receipted_roleplay_workspace(workspace, key=key)
             self.assertEqual(_roleplay_tier(workspace, manifest, 1, hmac_key=key), "A")
             self.assertEqual(_roleplay_tier(workspace, manifest, 1), "B")
             (workspace / "roleplay.json").unlink()
             self.assertEqual(_roleplay_tier(workspace, manifest, 1, hmac_key=key), "C")
             (workspace / "roleplay.json").write_bytes(artifacts["roleplay.json"])
-            rows[1]["output_hash"] = digests["packet.json"]
+            rows[1]["output_hash"] = hashlib.sha256(artifacts["packet.json"]).hexdigest()
             (workspace / "human-track-ledger.jsonl").write_text(
                 "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
             )
             self.assertEqual(_roleplay_tier(workspace, manifest, 1, hmac_key=key), "C")
-            rows[1]["output_hash"] = digests["roleplay.json"]
+            rows[1]["output_hash"] = hashlib.sha256(artifacts["roleplay.json"]).hexdigest()
             for row in rows:
                 row.pop("receipt_ref")
-                row["receipt_attestation"] = "host"
+                row["receipt_attestation"] = "self"
             (workspace / "human-track-ledger.jsonl").write_text(
                 "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
             )
             self.assertEqual(_roleplay_tier(workspace, manifest, 1, hmac_key=key), "C")
+
+    def test_hmac_valid_arbitrary_packet_cannot_reach_tier_a_or_b(self) -> None:
+        key = b"receipt-secret"
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            manifest, rows, _ = _write_receipted_roleplay_workspace(
+                workspace,
+                stored_packet={"packet": "frozen"},
+                key=key,
+            )
+            self.assertEqual(_roleplay_tier(workspace, manifest, 1, hmac_key=key), "C")
+            self.assertEqual(_roleplay_tier(workspace, manifest, 1), "C")
+            actors = json.loads((workspace / "actors.json").read_text(encoding="utf-8"))
+            issues = validate_actor_protocol(actors, rows, manifest=manifest, workspace=workspace)
+            self.assertTrue(any(item.severity == "error" for item in issues))
+            self.assertTrue({"SCHEMA", "MISSING_FIELD"} & {item.code for item in issues})
+
+    def test_hmac_receipt_with_extra_roleplay_input_cannot_reach_tier_a_or_b(self) -> None:
+        key = b"receipt-secret"
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            manifest, rows, _ = _write_receipted_roleplay_workspace(
+                workspace,
+                extra_roleplay_input=True,
+                key=key,
+            )
+            self.assertEqual(_roleplay_tier(workspace, manifest, 1, hmac_key=key), "C")
+            self.assertEqual(_roleplay_tier(workspace, manifest, 1), "C")
+            actors = json.loads((workspace / "actors.json").read_text(encoding="utf-8"))
+            issues = validate_actor_protocol(actors, rows, manifest=manifest, workspace=workspace)
+            self.assertIn("RECEIPT_CHAIN", {item.code for item in issues})
+
+    def test_hmac_valid_packet_with_duplicate_json_key_is_refused(self) -> None:
+        key = b"receipt-secret"
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            manifest, rows, _ = _write_receipted_roleplay_workspace(
+                workspace,
+                duplicate_packet_key=True,
+                key=key,
+            )
+            self.assertEqual(_roleplay_tier(workspace, manifest, 1, hmac_key=key), "C")
+            actors = json.loads((workspace / "actors.json").read_text(encoding="utf-8"))
+            issues = validate_actor_protocol(actors, rows, manifest=manifest, workspace=workspace)
+            self.assertIn("INVALID_ARTIFACT", {item.code for item in issues})
+
+    def test_hmac_valid_packet_cannot_be_replayed_into_another_scenario(self) -> None:
+        key = b"receipt-secret"
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            manifest, rows, _ = _write_receipted_roleplay_workspace(workspace, key=key)
+            manifest["simulation_id"] = "sim:other-scenario"
+            self.assertEqual(_roleplay_tier(workspace, manifest, 1, hmac_key=key), "C")
+            actors = json.loads((workspace / "actors.json").read_text(encoding="utf-8"))
+            issues = validate_actor_protocol(
+                actors,
+                rows,
+                manifest=manifest,
+                workspace=workspace,
+            )
+            self.assertIn("TRACK_MISMATCH", {item.code for item in issues})
+
+    def test_hmac_valid_packet_cannot_be_replayed_after_dossier_change(self) -> None:
+        key = b"receipt-secret"
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            manifest, rows, _ = _write_receipted_roleplay_workspace(workspace, key=key)
+            actors = json.loads((workspace / "actors.json").read_text(encoding="utf-8"))
+            actors[0]["public_role"] = "Different public office"
+            (workspace / "actors.json").write_text(json.dumps(actors), encoding="utf-8")
+            self.assertEqual(_roleplay_tier(workspace, manifest, 1, hmac_key=key), "C")
+            issues = validate_actor_protocol(
+                actors,
+                rows,
+                manifest=manifest,
+                workspace=workspace,
+            )
+            self.assertIn("TRACK_MISMATCH", {item.code for item in issues})
+
+    def test_packet_and_output_must_match_the_persisted_actor_track(self) -> None:
+        key = b"receipt-secret"
+        for mutation in (
+            "allowed_actions",
+            "knowledge_cutoff",
+            "packet_hash",
+            "research_execution_id",
+            "execution_id",
+            "hypotheses",
+        ):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                workspace = Path(temporary)
+                manifest, rows, _ = _write_receipted_roleplay_workspace(workspace, key=key)
+                actors = json.loads((workspace / "actors.json").read_text(encoding="utf-8"))
+                actor = actors[0]
+                if mutation == "allowed_actions":
+                    actor["decision_graph"]["allowed_actions"] = ["delay", "approve"]
+                elif mutation == "knowledge_cutoff":
+                    actor["roleplay_track"]["knowledge_cutoff"] = "2025-12-31T00:00:00Z"
+                elif mutation == "packet_hash":
+                    actor["roleplay_track"]["packet_hash"] = H2
+                elif mutation == "research_execution_id":
+                    actor["research_track"]["execution_id"] = "execution:roleplay"
+                elif mutation == "execution_id":
+                    actor["roleplay_track"]["execution_id"] = "execution:other"
+                else:
+                    actor["roleplay_track"]["hypotheses"][0]["reasoning"] = "Changed output"
+                (workspace / "actors.json").write_text(json.dumps(actors), encoding="utf-8")
+                self.assertEqual(_roleplay_tier(workspace, manifest, 1, hmac_key=key), "C")
+                issues = validate_actor_protocol(
+                    actors,
+                    rows,
+                    manifest=manifest,
+                    workspace=workspace,
+                )
+                self.assertIn("TRACK_MISMATCH", {item.code for item in issues})
 
     def test_d_research_requires_signed_import_receipt_bound_to_outputs(self) -> None:
         key = b"d-research-secret"

@@ -9,8 +9,12 @@ from pathlib import Path
 
 from _lib import load_json
 from aleph import EXIT_OK, EXIT_SECURITY, EXIT_SEMANTIC, EXIT_USAGE
-from aleph.io import canonical_hash, write_json_atomic
-from aleph.packets import build_knowledge_packet, freeze_dossier
+from aleph.io import write_json_atomic
+from aleph.packets import (
+    build_knowledge_packet,
+    dossier_contract_hash,
+    scenario_contract_hash,
+)
 from aleph.paths import output_alias_issues, resolve_in_workspace, validate_relative_artifact_path
 from aleph.privacy import privacy_intake
 
@@ -77,7 +81,7 @@ def main() -> None:
         print(json.dumps(intake, indent=2))
         raise SystemExit(EXIT_SECURITY)
 
-    frozen = freeze_dossier(actor)
+    dossier_hash = dossier_contract_hash(actor)
     claims = []
     for claim in (actor.get("research_track") or {}).get("claims") or []:
         if isinstance(claim, dict):
@@ -95,8 +99,8 @@ def main() -> None:
         decision_id=args.decision_id,
         decision_time=args.decision_time,
         knowledge_cutoff=args.cutoff,
-        dossier_hash=frozen["dossier_hash"],
-        scenario_hash=canonical_hash(manifest),
+        dossier_hash=dossier_hash,
+        scenario_hash=scenario_contract_hash(manifest),
         claims=claims,
         institutional_constraints=list(actor.get("institutional_constraints") or []),
         allowed_actions=_allowed_actions(actor),
@@ -122,16 +126,18 @@ def main() -> None:
     if path_issues or output_path is None:
         print(json.dumps({"ok": False, "issues": [item.to_dict() for item in path_issues]}, indent=2))
         raise SystemExit(EXIT_SECURITY)
+    packet = packet_result["packet"]
+    write_json_atomic(output_path, packet)
     out = {
         "schema_version": "2.0.0",
-        "dossier_hash": frozen["dossier_hash"],
-        "packet": packet_result["packet"],
+        "dossier_hash": dossier_hash,
+        "packet": packet,
+        "packet_hash": packet["packet_hash"],
         # Content-free exclusions remain with the adjudicator, outside the seal.
         "exclusion_ledger": packet_result["exclusion_ledger"],
         "privacy": intake,
+        "output_path": str(output_path.relative_to(ws)).replace("\\", "/"),
     }
-    write_json_atomic(output_path, out)
-    out["output_path"] = str(output_path.relative_to(ws)).replace("\\", "/")
     print(json.dumps(out, indent=2, ensure_ascii=False))
     raise SystemExit(EXIT_OK)
 

@@ -264,6 +264,9 @@ class IoAndPathSecurityTests(unittest.TestCase):
             nonfinite = root / "nonfinite.json"
             nonfinite.write_text('{"x": NaN}', encoding="utf-8")
             self.assertEqual(load_json_secure(nonfinite)[1][0].code, "INVALID_ARTIFACT")
+            duplicate = root / "duplicate.json"
+            duplicate.write_text('{"x": 1, "x": 2}', encoding="utf-8")
+            self.assertEqual(load_json_secure(duplicate)[1][0].code, "INVALID_ARTIFACT")
             deep = root / "deep.json"
             deep.write_text(json.dumps({"a": {"b": 1}}), encoding="utf-8")
             self.assertEqual(load_json_secure(deep, max_depth=1)[1][0].code, "RESOURCE_LIMIT")

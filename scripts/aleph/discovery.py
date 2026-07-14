@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 from pathlib import Path
 from typing import Any
 
+from .io import DEFAULT_MAX_FILE_BYTES, load_json_secure
 from .issues import issue
 
 SUPPORTED_MAJORS = frozenset({3})
@@ -44,9 +44,15 @@ def _candidate_report(source: str, path: Path) -> dict[str, Any]:
         entry.update({"ok": False, "compatible": False, "reason": "missing identity/ledger contract files"})
         return entry
     try:
+        if skill_md.stat().st_size > DEFAULT_MAX_FILE_BYTES:
+            raise ValueError("SKILL.md exceeds the file-size limit")
         skill_name = _parse_frontmatter_name(skill_md.read_text(encoding="utf-8"))
-        package = json.loads(package_json.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        package, package_issues = load_json_secure(package_json)
+        if package_issues:
+            raise ValueError("; ".join(value.legacy_string() for value in package_issues))
+        if not isinstance(package, dict):
+            raise ValueError("package.json must be an object")
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
         entry.update({"ok": False, "compatible": False, "reason": str(exc)})
         return entry
     package_name = package.get("name")
@@ -97,11 +103,13 @@ def discover_d_research(
         candidates.append(("env:D_RESEARCH_SKILL", Path(env).expanduser(), True))
     if capability_file is not None and capability_file.is_file():
         try:
-            data = json.loads(capability_file.read_text(encoding="utf-8"))
+            data, capability_issues = load_json_secure(capability_file)
+            if capability_issues or not isinstance(data, dict):
+                raise ValueError("invalid capability file")
             configured = data.get("d_research_skill") or (data.get("d_research") or {}).get("path")
             if configured:
                 candidates.append(("capability_file", Path(configured).expanduser(), True))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+        except (OSError, UnicodeDecodeError, ValueError, AttributeError):
             candidates.append(("capability_file", Path("__invalid_capability_file__"), True))
     roots = conventional_roots or [
         Path.home() / ".codex" / "skills" / "d-research",

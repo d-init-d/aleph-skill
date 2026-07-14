@@ -30,10 +30,12 @@ from .io import (
 )
 from .issues import CheckResult, Issue, issue
 from .paths import resolve_in_workspace, validate_relative_artifact_path
+from .privacy import privacy_intake
 from .schema import (
     ACTOR_FIELDS,
     ADAPTIVE_SCOPE_FIELDS,
     ADJUDICATION_FIELDS,
+    ADJUDICATION_RESULT_FIELDS,
     ARTIFACT_INDEX_FIELDS,
     ARTIFACT_PATH_FIELDS,
     ASSUMPTION_FIELDS,
@@ -139,14 +141,42 @@ def validate_paths(manifest: dict[str, Any], workspace: Path) -> CheckResult:
             issues.extend(res_issues)
     execution = manifest.get("execution")
     d_research = execution.get("d_research") if isinstance(execution, dict) else None
-    if isinstance(d_research, dict) and d_research.get("status") == "verified":
+    research_status = d_research.get("status") if isinstance(d_research, dict) else None
+    if (
+        isinstance(d_research, dict)
+        and isinstance(research_status, str)
+        and research_status in {"imported", "verified"}
+    ):
+        ledger_relative = d_research.get("ledger_ref")
+        if not nonempty_str(ledger_relative):
+            issues.append(
+                issue(
+                    "MISSING_FIELD",
+                    pointer="execution.d_research.ledger_ref",
+                    message=f"{research_status} D Research requires a preserved ledger",
+                )
+            )
+        else:
+            ledger_path_issues = validate_relative_artifact_path(
+                str(ledger_relative),
+                artifact="execution.d_research.ledger_ref",
+            )
+            issues.extend(ledger_path_issues)
+            if not ledger_path_issues:
+                _, ledger_issues = resolve_in_workspace(
+                    workspace,
+                    str(ledger_relative),
+                    must_exist=True,
+                    require_file=True,
+                )
+                issues.extend(ledger_issues)
         receipt_relative = artifact_paths.get("research_import_receipt")
         if not nonempty_str(receipt_relative):
             issues.append(
                 issue(
                     "MISSING_FIELD",
                     pointer="artifact_paths.research_import_receipt",
-                    message="verified D Research requires an import receipt",
+                    message=f"{research_status} D Research requires an import receipt",
                 )
             )
         else:
@@ -272,10 +302,13 @@ def _validate_v2_manifest_contract(manifest: dict[str, Any], issues: list[Issue]
     simulation_id = manifest.get("simulation_id")
     if not isinstance(simulation_id, str) or re.match(r"^sim[-:]", simulation_id) is None:
         issues.append(issue("SCHEMA", pointer="simulation_id", expected="^sim[-:]", actual=simulation_id))
-    if manifest.get("status") not in {"draft", "complete", "completed"}:
+    status = manifest.get("status")
+    if not isinstance(status, str) or status not in {"draft", "complete", "completed"}:
         issues.append(issue("ENUM", pointer="status", actual=manifest.get("status")))
     assurance = manifest.get("assurance_tier")
-    if assurance is not None and assurance not in ASSURANCE_TIER:
+    if assurance is not None and (
+        not isinstance(assurance, str) or assurance not in ASSURANCE_TIER
+    ):
         issues.append(issue("ENUM", pointer="assurance_tier", actual=assurance))
 
     artifact_paths = manifest.get("artifact_paths")
@@ -397,6 +430,12 @@ def _validate_v2_manifest_contract(manifest: dict[str, Any], issues: list[Issue]
                 "execution.research_control.unresolved_critical_gaps",
                 issues,
             )
+            if "next_wave_queue" in control:
+                _validate_string_array(
+                    control.get("next_wave_queue"),
+                    "execution.research_control.next_wave_queue",
+                    issues,
+                )
             if "consecutive_no_new_material_claims" in control:
                 count = control.get("consecutive_no_new_material_claims")
                 if not isinstance(count, int) or isinstance(count, bool) or count < 0:
@@ -413,8 +452,23 @@ def _validate_v2_manifest_contract(manifest: dict[str, Any], issues: list[Issue]
         d_research = execution.get("d_research")
         if isinstance(d_research, dict):
             _require_fields(d_research, ("status", "invoked"), "execution.d_research", issues)
-            if not nonempty_str(d_research.get("status")):
-                issues.append(issue("TYPE", pointer="execution.d_research.status", message="must be string"))
+            d_research_status = d_research.get("status")
+            if not isinstance(d_research_status, str) or d_research_status not in {
+                "unknown",
+                "unavailable",
+                "incompatible",
+                "available",
+                "imported",
+                "verified",
+            }:
+                issues.append(
+                    issue(
+                        "ENUM",
+                        pointer="execution.d_research.status",
+                        message="invalid D Research status",
+                        actual=d_research.get("status"),
+                    )
+                )
             if not is_bool(d_research.get("invoked")):
                 issues.append(issue("TYPE", pointer="execution.d_research.invoked", message="must be boolean"))
             if "package_major" in d_research:
@@ -495,7 +549,8 @@ def _validate_v2_manifest_contract(manifest: dict[str, Any], issues: list[Issue]
                 digest = entry.get("sha256")
                 if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
                     issues.append(issue("SCHEMA", pointer=f"{pointer}/sha256", message="must be SHA-256"))
-                if entry.get("hash_scope") not in {"full_file", "manifest_input_contract"}:
+                hash_scope = entry.get("hash_scope")
+                if not isinstance(hash_scope, str) or hash_scope not in {"full_file", "manifest_input_contract"}:
                     issues.append(issue("ENUM", pointer=f"{pointer}/hash_scope", actual=entry.get("hash_scope")))
 
     for field in ("validation_receipt", "quality_receipt"):
@@ -530,7 +585,7 @@ def validate_manifest_core(manifest: dict[str, Any], mode: str) -> CheckResult:
     reject_unknown_fields(manifest, KNOWN_MANIFEST_FIELDS, "manifest", issues)
     _reject_nested_manifest(manifest, issues)
     version = manifest.get("schema_version")
-    if version not in {SCHEMA_VERSION, "1.2.0", "1.1.0"}:
+    if not isinstance(version, str) or version not in {SCHEMA_VERSION, "1.2.0", "1.1.0"}:
         issues.append(issue("SCHEMA", pointer="schema_version", message=f"unsupported {version}", expected=SCHEMA_VERSION))
     if version == SCHEMA_VERSION:
         _validate_v2_manifest_contract(manifest, issues)
@@ -545,7 +600,11 @@ def validate_manifest_core(manifest: dict[str, Any], mode: str) -> CheckResult:
     for field in ("change_point", "temporal_frame", "scope", "execution", "artifact_paths"):
         if field in manifest and not isinstance(manifest.get(field), dict):
             issues.append(issue("TYPE", pointer=field, message="must be object"))
-    if mode == "final" and manifest.get("status") not in {"complete", "completed"}:
+    manifest_status = manifest.get("status")
+    if mode == "final" and (
+        not isinstance(manifest_status, str)
+        or manifest_status not in {"complete", "completed"}
+    ):
         issues.append(issue("INCOMPLETE", pointer="status", message="final requires complete/completed"))
 
     if version == SCHEMA_VERSION:
@@ -586,7 +645,10 @@ def validate_manifest_core(manifest: dict[str, Any], mode: str) -> CheckResult:
             if legacy in execution:
                 issues.append(issue("LEGACY_EXECUTION_CONTROL", pointer=f"execution.{legacy}", message="forbidden"))
         quality = execution.get("research_quality")
-        if quality not in {"best-available", "limited"} and not (
+        if (
+            not isinstance(quality, str)
+            or quality not in {"best-available", "limited"}
+        ) and not (
             mode == "draft" and quality == "unknown"
         ):
             issues.append(issue("RESEARCH_QUALITY", pointer="execution.research_quality", message="invalid", actual=quality))
@@ -602,8 +664,142 @@ def validate_manifest_core(manifest: dict[str, Any], mode: str) -> CheckResult:
             gaps = control.get("unresolved_critical_gaps")
             if mode == "final" and gaps != []:
                 issues.append(issue("EVIDENCE_SATURATION", pointer="execution.research_control.unresolved_critical_gaps", message="final requires no unresolved critical gaps", actual=gaps))
+            queue = control.get("next_wave_queue")
+            if control.get("saturation_reached") is True and queue not in (None, []):
+                issues.append(
+                    issue(
+                        "EVIDENCE_SATURATION",
+                        pointer="execution.research_control.next_wave_queue",
+                        message="saturated research cannot retain a next-wave queue",
+                        actual=queue,
+                    )
+                )
+            stop_reason = control.get("stop_reason")
+            if isinstance(stop_reason, str) and stop_reason.startswith("host_limit:"):
+                if control.get("saturation_reached") is not False:
+                    issues.append(
+                        issue(
+                            "EVIDENCE_SATURATION",
+                            pointer="execution.research_control.saturation_reached",
+                            message="host-limit handoff must remain unsaturated",
+                        )
+                    )
+                if not isinstance(queue, list) or not queue or not all(
+                    nonempty_str(item) for item in queue
+                ):
+                    issues.append(
+                        issue(
+                            "EVIDENCE_SATURATION",
+                            pointer="execution.research_control.next_wave_queue",
+                            message="host-limit handoff requires a non-empty resumable queue",
+                        )
+                    )
+                if not isinstance(gaps, list) or not gaps:
+                    issues.append(
+                        issue(
+                            "EVIDENCE_SATURATION",
+                            pointer="execution.research_control.unresolved_critical_gaps",
+                            message="host-limit handoff requires explicit unresolved critical gaps",
+                        )
+                    )
         elif "research_control" in execution:
             issues.append(issue("TYPE", pointer="execution.research_control", message="must be object"))
+        d_research = execution.get("d_research")
+        artifact_paths = manifest.get("artifact_paths")
+        paths = artifact_paths if isinstance(artifact_paths, dict) else {}
+        receipt_declared = nonempty_str(paths.get("research_import_receipt"))
+        if isinstance(d_research, dict):
+            research_status = d_research.get("status")
+            invoked = d_research.get("invoked")
+            if mode == "final" and isinstance(research_status, str) and research_status in {"unknown", "incompatible"}:
+                issues.append(
+                    issue(
+                        "D_RESEARCH",
+                        pointer="execution.d_research.status",
+                        message="final output requires a resolved compatible or unavailable status",
+                        actual=research_status,
+                    )
+                )
+            if isinstance(research_status, str) and research_status in {"unknown", "unavailable", "incompatible"} and invoked is not False:
+                issues.append(
+                    issue(
+                        "D_RESEARCH",
+                        pointer="execution.d_research.invoked",
+                        message=f"status {research_status!r} requires invoked=false",
+                    )
+                )
+            if invoked is False and (
+                not isinstance(quality, str) or quality not in {"limited", "unknown"}
+            ):
+                issues.append(
+                    issue(
+                        "RESEARCH_QUALITY",
+                        pointer="execution.research_quality",
+                        message="research without compatible D Research is limited",
+                        actual=quality,
+                    )
+                )
+            if research_status == "unavailable" and quality != "limited":
+                issues.append(
+                    issue(
+                        "RESEARCH_QUALITY",
+                        pointer="execution.research_quality",
+                        message="host-native fallback must declare limited research quality",
+                        actual=quality,
+                    )
+                )
+            if isinstance(research_status, str) and research_status in {"imported", "verified"}:
+                if invoked is not True:
+                    issues.append(
+                        issue(
+                            "D_RESEARCH",
+                            pointer="execution.d_research.invoked",
+                            message=f"status {research_status!r} requires invoked=true",
+                        )
+                    )
+                for field in ("path", "ledger_ref"):
+                    if not nonempty_str(d_research.get(field)):
+                        issues.append(
+                            issue(
+                                "D_RESEARCH",
+                                pointer=f"execution.d_research.{field}",
+                                message=f"status {research_status!r} requires {field}",
+                            )
+                        )
+                if not receipt_declared:
+                    issues.append(
+                        issue(
+                            "MISSING_FIELD",
+                            pointer="artifact_paths.research_import_receipt",
+                            message=f"status {research_status!r} requires an import receipt",
+                        )
+                    )
+            elif receipt_declared:
+                issues.append(
+                    issue(
+                        "D_RESEARCH",
+                        pointer="artifact_paths.research_import_receipt",
+                        message="import receipt requires imported or verified D Research status",
+                        actual=research_status,
+                    )
+                )
+            if research_status == "available" and not nonempty_str(d_research.get("path")):
+                issues.append(
+                    issue(
+                        "D_RESEARCH",
+                        pointer="execution.d_research.path",
+                        message="available D Research status requires the discovered package path",
+                    )
+                )
+            if isinstance(research_status, str) and research_status in {"available", "imported", "verified"} and d_research.get("package_major") != 3:
+                issues.append(
+                    issue(
+                        "LEDGER_MAJOR",
+                        pointer="execution.d_research.package_major",
+                        expected=3,
+                        actual=d_research.get("package_major"),
+                    )
+                )
         adaptive = execution.get("adaptive_scope") or {}
         if isinstance(adaptive, dict):
             if mode == "final" and adaptive.get("assessed") is not True:
@@ -631,7 +827,8 @@ def validate_manifest_core(manifest: dict[str, Any], mode: str) -> CheckResult:
 
     frame = manifest.get("temporal_frame") or {}
     if isinstance(frame, dict):
-        if frame.get("mode") not in TIMELINE_MODES:
+        frame_mode = frame.get("mode")
+        if not isinstance(frame_mode, str) or frame_mode not in TIMELINE_MODES:
             issues.append(issue("TIMELINE_MODE", pointer="temporal_frame.mode", message="invalid mode", actual=frame.get("mode")))
         for name in ("observation_cutoff", "simulation_start", "simulation_end"):
             if parse_time(frame.get(name)) is None:
@@ -654,14 +851,14 @@ def validate_manifest_core(manifest: dict[str, Any], mode: str) -> CheckResult:
             if not isinstance(value, list) or not value or not all(nonempty_str(item) for item in value):
                 issues.append(issue("TYPE", pointer=f"scope.{field}", message="must be a non-empty string array"))
     likelihood = manifest.get("likelihood_mode")
-    if likelihood is None and version in {"1.2.0", "1.1.0"}:
+    if likelihood is None and isinstance(version, str) and version in {"1.2.0", "1.1.0"}:
         likelihood = "calibrated_probability"
-    if likelihood not in {"deterministic", "relative_weight", "calibrated_probability"}:
+    if not isinstance(likelihood, str) or likelihood not in {"deterministic", "relative_weight", "calibrated_probability"}:
         issues.append(issue("ENUM", pointer="likelihood_mode", message="invalid likelihood mode", actual=likelihood))
     simulation_mode = manifest.get("simulation_mode")
-    if simulation_mode is None and version in {"1.2.0", "1.1.0"}:
+    if simulation_mode is None and isinstance(version, str) and version in {"1.2.0", "1.1.0"}:
         simulation_mode = "qualitative"
-    if simulation_mode not in {"qualitative", "deterministic", "monte_carlo"}:
+    if not isinstance(simulation_mode, str) or simulation_mode not in {"qualitative", "deterministic", "monte_carlo"}:
         issues.append(issue("ENUM", pointer="simulation_mode", message="invalid simulation mode", actual=simulation_mode))
     return _check("manifest", issues)
 
@@ -709,9 +906,9 @@ def validate_evidence(rows: list[dict[str, str]], manifest: dict[str, Any], mode
                 issues.append(issue("MISSING_FIELD", pointer=f"{p}/{required_field}", message="required non-empty CSV value"))
         tier = row.get("source_tier", "")
         retrieval = row.get("retrieval_status", "")
-        if tier and tier not in SOURCE_TIERS:
+        if tier and (not isinstance(tier, str) or tier not in SOURCE_TIERS):
             issues.append(issue("ENUM", pointer=f"{p}/source_tier", actual=tier))
-        if retrieval and retrieval not in RETRIEVAL_STATUSES:
+        if retrieval and (not isinstance(retrieval, str) or retrieval not in RETRIEVAL_STATUSES):
             issues.append(issue("ENUM", pointer=f"{p}/retrieval_status", actual=retrieval))
         conf_raw = row.get("confidence", "")
         # CSV is stringly — parse carefully without silent inventing
@@ -725,9 +922,9 @@ def validate_evidence(rows: list[dict[str, str]], manifest: dict[str, Any], mode
                 issues.append(issue("SNIPPET_CONFIDENCE", pointer=f"{p}/confidence", message="cap 0.45", actual=conf))
         except (TypeError, ValueError):
             issues.append(issue("TYPE", pointer=f"{p}/confidence", message="must be numeric string", actual=conf_raw))
-        if retrieval in {"opened", "downloaded", "api", "local-file", "user-provided"}:
+        if isinstance(retrieval, str) and retrieval in {"opened", "downloaded", "api", "local-file", "user-provided"}:
             direct += 1
-            if tier in {"primary", "authoritative-secondary", "user-provided"}:
+            if isinstance(tier, str) and tier in {"primary", "authoritative-secondary", "user-provided"}:
                 high_q += 1
     metrics = {
         "evidence_rows": len(rows),
@@ -777,12 +974,18 @@ def validate_nodes(nodes: list[Any], evidence_ids: set[str], manifest: dict[str,
             ids.add(str(nid))
             if not has_id_prefix(nid, "node"):
                 issues.append(issue("SCHEMA", pointer=f"{p}/id", message="invalid node ID prefix", actual=nid))
-        if raw.get("type") not in NODE_TYPES:
+        node_type = raw.get("type")
+        if not isinstance(node_type, str) or node_type not in NODE_TYPES:
             issues.append(issue("ENUM", pointer=f"{p}/type", actual=raw.get("type")))
         status = raw.get("status")
-        if status not in LEGACY_STATUS and status not in EPISTEMIC_STATUS:
+        if not isinstance(status, str) or (
+            status not in LEGACY_STATUS and status not in EPISTEMIC_STATUS
+        ):
             issues.append(issue("ENUM", pointer=f"{p}/status", actual=status))
-        if raw.get("timeline") not in TIMELINE_LABELS and raw.get("timeline") is not None:
+        timeline = raw.get("timeline")
+        if timeline is not None and (
+            not isinstance(timeline, str) or timeline not in TIMELINE_LABELS
+        ):
             issues.append(issue("ENUM", pointer=f"{p}/timeline", actual=raw.get("timeline")))
         refs = [str(x) for x in ensure_list(raw.get("evidence_ids")) if nonempty_str(x)]
         for r in refs:
@@ -804,6 +1007,14 @@ def validate_nodes(nodes: list[Any], evidence_ids: set[str], manifest: dict[str,
         unit_interval(raw.get("confidence"), f"{p}/confidence", issues)
         if "probability" in raw and raw.get("probability") is not None:
             unit_interval(raw.get("probability"), f"{p}/probability", issues)
+            if manifest.get("likelihood_mode") != "calibrated_probability":
+                issues.append(
+                    issue(
+                        "PROBABILITY_UNCALIBRATED",
+                        pointer=f"{p}/probability",
+                        message="node probability requires calibrated_probability mode",
+                    )
+                )
         if parse_duration_seconds(raw.get("lag")) is None:
             issues.append(issue("LAG", pointer=f"{p}/lag", message="must be supported ISO duration", actual=raw.get("lag")))
         for field, allowed in (
@@ -882,15 +1093,15 @@ def validate_edges(
             if raw.get(ep) not in node_ids:
                 issues.append(issue("UNKNOWN_REF", pointer=f"{p}/{ep}", actual=raw.get(ep)))
         rel = raw.get("relation")
-        if rel not in RELATION_ALLOWED:
+        if not isinstance(rel, str) or rel not in RELATION_ALLOWED:
             issues.append(issue("RELATION", pointer=f"{p}/relation", message="invalid relation", actual=rel))
         sign = raw.get("sign")
         if sign not in (-1, 1):
             issues.append(issue("SIGN", pointer=f"{p}/sign", message="must be -1 or 1", actual=sign))
         # relation/sign consistency
-        if rel in {"decreases", "inhibits", "prevents", "dampens"} and sign == 1:
+        if isinstance(rel, str) and rel in {"decreases", "inhibits", "prevents", "dampens"} and sign == 1:
             issues.append(issue("SIGN", pointer=f"{p}/sign", message="relation implies negative sign"))
-        if rel in {"increases", "enables", "causes", "amplifies", "triggers"} and sign == -1:
+        if isinstance(rel, str) and rel in {"increases", "enables", "causes", "amplifies", "triggers"} and sign == -1:
             issues.append(issue("SIGN", pointer=f"{p}/sign", message="relation implies positive sign"))
         refuse_string_number(raw.get("base_strength"), f"{p}/base_strength", issues)
         # confidence is evidence_confidence only — still validate if present
@@ -900,9 +1111,11 @@ def validate_edges(
             unit_interval(raw.get("evidence_confidence"), f"{p}/evidence_confidence", issues)
         if "existence_prob" in raw:
             unit_interval(raw.get("existence_prob"), f"{p}/existence_prob", issues)
-        if raw.get("status") not in EDGE_STATUS:
+        edge_status = raw.get("status")
+        if not isinstance(edge_status, str) or edge_status not in EDGE_STATUS:
             issues.append(issue("ENUM", pointer=f"{p}/status", message="invalid edge status", actual=raw.get("status")))
-        if raw.get("transform") not in TRANSFORMS:
+        transform = raw.get("transform")
+        if not isinstance(transform, str) or transform not in TRANSFORMS:
             issues.append(issue("SCHEMA", pointer=f"{p}/transform", message="unsupported transform", actual=raw.get("transform")))
         if not nonempty_str(raw.get("mechanism")) or len(str(raw.get("mechanism", "")).split()) < 10:
             issues.append(issue("MECHANISM", pointer=f"{p}/mechanism", message="mechanism required"))
@@ -912,7 +1125,7 @@ def validate_edges(
         else:
             reject_unknown_fields(lag, LAG_FIELDS, f"{p}/lag_distribution", issues)
             ltype = lag.get("type")
-            if ltype not in LAG_TYPES:
+            if not isinstance(ltype, str) or ltype not in LAG_TYPES:
                 issues.append(issue("LAG", pointer=f"{p}/lag_distribution/type", message="invalid lag type", actual=ltype))
             required_by_type = {
                 "fixed": ("fixed",),
@@ -960,7 +1173,7 @@ def validate_edges(
                 if not nonempty_str(mod.get("rationale")):
                     issues.append(issue("MULTIPLIER", pointer=f"{p}/context_modifiers/{mi}/rationale", message="required"))
         if raw.get("from") == raw.get("to"):
-            if rel not in {"feedback", "autoregressive"} and raw.get("feedback_policy") is None:
+            if (not isinstance(rel, str) or rel not in {"feedback", "autoregressive"}) and raw.get("feedback_policy") is None:
                 issues.append(issue("SELF_EDGE", pointer=p, message="self-edge requires feedback/autoregressive policy"))
         ev = ensure_list(raw.get("evidence"))
         if not ev and not nonempty_str(raw.get("assumption_ref")):
@@ -1093,10 +1306,19 @@ def validate_trace(
     return _check("trace", issues, {"trace_rows": len(rows), "formula_version": FORMULA_VERSION})
 
 
-def validate_actors(actors: list[Any], node_ids: set[str], evidence_ids: set[str], nodes: list[Any]) -> tuple[CheckResult, set[str]]:
+def validate_actors(
+    actors: list[Any],
+    node_ids: set[str],
+    evidence_ids: set[str],
+    nodes: list[Any],
+    manifest: dict[str, Any],
+) -> tuple[CheckResult, set[str]]:
     issues: list[Issue] = []
     ids: set[str] = set()
     node_types = {str(n.get("id")): n.get("type") for n in nodes if isinstance(n, dict)}
+    likelihood = manifest.get("likelihood_mode")
+    raw_artifact_paths = manifest.get("artifact_paths")
+    artifact_paths = raw_artifact_paths if isinstance(raw_artifact_paths, dict) else {}
     for idx, raw in enumerate(actors):
         p = f"/actors/{idx}"
         if not isinstance(raw, dict):
@@ -1116,18 +1338,20 @@ def validate_actors(actors: list[Any], node_ids: set[str], evidence_ids: set[str
             if required not in raw:
                 issues.append(issue("MISSING_FIELD", pointer=f"{p}/{required}", message="required"))
         person = raw.get("person_node")
-        if person not in node_ids:
+        if not nonempty_str(person):
+            issues.append(issue("TYPE", pointer=f"{p}/person_node", message="must be a node ID"))
+        elif person not in node_ids:
             issues.append(issue("UNKNOWN_REF", pointer=f"{p}/person_node", actual=person))
         elif node_types.get(str(person)) != "entity":
             issues.append(issue("PERSON_NODE", pointer=f"{p}/person_node", message="must reference entity node", actual=person))
         mat = raw.get("materiality")
-        if mat not in MATERIALITY:
+        if not isinstance(mat, str) or mat not in MATERIALITY:
             # typo or invalid — hard fail
             issues.append(issue("MATERIALITY", pointer=f"{p}/materiality", message="must be material|non_material", actual=mat))
         sc = raw.get("subject_class")
-        if sc is not None and sc not in SUBJECT_CLASS:
+        if sc is not None and (not isinstance(sc, str) or sc not in SUBJECT_CLASS):
             issues.append(issue("SUBJECT_CLASS", pointer=f"{p}/subject_class", actual=sc))
-        if sc in {"private_person", "minor", "unknown"}:
+        if isinstance(sc, str) and sc in {"private_person", "minor", "unknown"}:
             issues.append(issue("PRIVACY_REFUSAL", pointer=f"{p}/subject_class", message="cannot roleplay private/minor/unknown", actual=sc))
         # Forbidden dossier fields
         for banned in ("address", "phone", "email", "family", "diagnosis", "whereabouts", "ssn"):
@@ -1138,8 +1362,28 @@ def validate_actors(actors: list[Any], node_ids: set[str], evidence_ids: set[str
             issues.append(issue("MISSING_FIELD", pointer=f"{p}/evidence_ids", message="actor dossier requires evidence"))
         else:
             for ref in actor_evidence:
-                if ref not in evidence_ids:
+                if not nonempty_str(ref):
+                    issues.append(issue("TYPE", pointer=f"{p}/evidence_ids", actual=ref))
+                elif ref not in evidence_ids:
                     issues.append(issue("UNKNOWN_REF", pointer=f"{p}/evidence_ids", actual=ref))
+        privacy = privacy_intake(
+            subject_class=str(sc) if isinstance(sc, str) else "unknown",
+            living_status=str(raw.get("living_status") or "unknown"),
+            public_role_anchor=str(raw.get("public_role") or ""),
+            evidence_ids=[str(value) for value in actor_evidence] if isinstance(actor_evidence, list) else [],
+            payload=raw,
+        )
+        for raw_issue in privacy.get("issues") or []:
+            if isinstance(raw_issue, dict):
+                issues.append(
+                    issue(
+                        str(raw_issue.get("code") or "PRIVACY_REFUSAL"),
+                        severity=str(raw_issue.get("severity") or "error"),
+                        pointer=f"{p}/{raw_issue.get('pointer')}" if raw_issue.get("pointer") else p,
+                        message=str(raw_issue.get("message") or "actor privacy intake failed"),
+                        actual=raw_issue.get("actual"),
+                    )
+                )
 
         # Nested tracks — every object forbids unknown fields (AC2)
         research = raw.get("research_track")
@@ -1154,13 +1398,33 @@ def validate_actors(actors: list[Any], node_ids: set[str], evidence_ids: set[str
                     unit_interval(claim.get("confidence"), f"{p}/research_track/claims/{ci}/confidence", issues)
                     if parse_time(claim.get("available_at")) is None:
                         issues.append(issue("TEMPORAL_KNOWLEDGE", pointer=f"{p}/research_track/claims/{ci}/available_at", message="must be valid ISO date/time"))
-                    for ref in ensure_list(claim.get("evidence_ids")):
-                        if ref not in evidence_ids:
-                            issues.append(issue("UNKNOWN_REF", pointer=f"{p}/research_track/claims/{ci}/evidence_ids", actual=ref))
+                    claim_evidence = claim.get("evidence_ids")
+                    if not isinstance(claim_evidence, list):
+                        issues.append(
+                            issue(
+                                "TYPE",
+                                pointer=f"{p}/research_track/claims/{ci}/evidence_ids",
+                                message="must be a string array",
+                            )
+                        )
+                    else:
+                        for ref in claim_evidence:
+                            if not nonempty_str(ref):
+                                issues.append(
+                                    issue(
+                                        "TYPE",
+                                        pointer=f"{p}/research_track/claims/{ci}/evidence_ids",
+                                        actual=ref,
+                                    )
+                                )
+                            elif ref not in evidence_ids:
+                                issues.append(issue("UNKNOWN_REF", pointer=f"{p}/research_track/claims/{ci}/evidence_ids", actual=ref))
         elif mat == "material":
             issues.append(issue("HUMAN_TRACK", pointer=f"{p}/research_track", message="material actor requires research track"))
 
         roleplay = raw.get("roleplay_track")
+        hypothesis_actions: dict[str, str] = {}
+        hypothesis_ids: set[str] = set()
         if isinstance(roleplay, dict):
             reject_unknown_fields(roleplay, ROLEPLAY_TRACK_FIELDS, f"{p}/roleplay_track", issues)
             for hi, hyp in enumerate(ensure_list(roleplay.get("hypotheses"))):
@@ -1170,10 +1434,39 @@ def validate_actors(actors: list[Any], node_ids: set[str], evidence_ids: set[str
                 for required in ("id", "action", "reasoning", "status", "evidence_ids"):
                     if required not in hyp:
                         issues.append(issue("MISSING_FIELD", pointer=f"{p}/roleplay_track/hypotheses/{hi}/{required}", message="required"))
+                hypothesis_id = hyp.get("id")
+                action = hyp.get("action")
+                if not has_id_prefix(hypothesis_id, "hypothesis"):
+                    issues.append(
+                        issue(
+                            "SCHEMA",
+                            pointer=f"{p}/roleplay_track/hypotheses/{hi}/id",
+                            message="must use hypothesis: prefix",
+                            actual=hypothesis_id,
+                        )
+                    )
+                elif str(hypothesis_id) in hypothesis_ids:
+                    issues.append(
+                        issue(
+                            "DUPLICATE_ID",
+                            pointer=f"{p}/roleplay_track/hypotheses/{hi}/id",
+                            actual=hypothesis_id,
+                        )
+                    )
+                else:
+                    hypothesis_ids.add(str(hypothesis_id))
+                    if nonempty_str(action):
+                        hypothesis_actions[str(hypothesis_id)] = str(action)
                 if ensure_list(hyp.get("evidence_ids")):
                     issues.append(issue("ROLEPLAY_EVIDENCE", pointer=f"{p}/roleplay_track", message="roleplay is not evidence"))
-                if "probability" in hyp or "confidence" in hyp:
-                    issues.append(issue("ROLEPLAY_PROBABILITY", pointer=f"{p}/roleplay_track/hypotheses/{hi}", message="roleplay cannot emit probability or confidence"))
+                if any(field in hyp for field in ("probability", "confidence", "relative_weight")):
+                    issues.append(
+                        issue(
+                            "ROLEPLAY_PROBABILITY",
+                            pointer=f"{p}/roleplay_track/hypotheses/{hi}",
+                            message="roleplay cannot emit probability, confidence, or relative weight",
+                        )
+                    )
                 if hyp.get("status") != "simulation":
                     issues.append(issue("ENUM", pointer=f"{p}/roleplay_track/hypotheses/{hi}/status", message="roleplay hypothesis must be simulation"))
             cutoff = parse_time(roleplay.get("knowledge_cutoff"))
@@ -1184,25 +1477,450 @@ def validate_actors(actors: list[Any], node_ids: set[str], evidence_ids: set[str
         elif mat == "material":
             issues.append(issue("HUMAN_TRACK", pointer=f"{p}/roleplay_track", message="material actor requires sealed roleplay track"))
 
+        decision_graph = raw.get("decision_graph")
+        actor_actions: set[str] = set()
+        if isinstance(decision_graph, dict):
+            reject_unknown_fields(
+                decision_graph,
+                frozenset({"allowed_actions", "actions"}),
+                f"{p}/decision_graph",
+                issues,
+            )
+            if not any(field in decision_graph for field in ("allowed_actions", "actions")):
+                issues.append(
+                    issue(
+                        "MISSING_FIELD",
+                        pointer=f"{p}/decision_graph",
+                        message="requires allowed_actions or actions",
+                    )
+                )
+            for action_field in ("allowed_actions", "actions"):
+                if action_field not in decision_graph:
+                    continue
+                raw_actions = decision_graph.get(action_field)
+                if not isinstance(raw_actions, list) or not raw_actions:
+                    issues.append(
+                        issue(
+                            "TYPE",
+                            pointer=f"{p}/decision_graph/{action_field}",
+                            message="must be a non-empty array",
+                        )
+                    )
+                    continue
+                for action_index, value in enumerate(raw_actions):
+                    action_pointer = f"{p}/decision_graph/{action_field}/{action_index}"
+                    if action_field == "allowed_actions":
+                        action_value = value if nonempty_str(value) else None
+                    elif isinstance(value, dict):
+                        reject_unknown_fields(
+                            value,
+                            frozenset({"action"}),
+                            action_pointer,
+                            issues,
+                        )
+                        action_value = value.get("action") if nonempty_str(value.get("action")) else None
+                    else:
+                        action_value = value if nonempty_str(value) else None
+                    if action_value is None:
+                        issues.append(
+                            issue(
+                                "TYPE",
+                                pointer=action_pointer,
+                                message="action must be a non-empty string or action object",
+                            )
+                        )
+                        continue
+                    normalized_action = str(action_value)
+                    if normalized_action in actor_actions:
+                        issues.append(
+                            issue(
+                                "DUPLICATE_ID",
+                                pointer=action_pointer,
+                                actual=normalized_action,
+                            )
+                        )
+                    else:
+                        actor_actions.add(normalized_action)
+        elif decision_graph is not None:
+            issues.append(issue("TYPE", pointer=f"{p}/decision_graph", message="must be object"))
+
         adj = raw.get("adjudication")
+        adjudicated_by_action: dict[str, float] = {}
+        adjudicated_actions: set[str] = set()
         if isinstance(adj, dict):
-            reject_unknown_fields(adj, ADJUDICATION_FIELDS, f"{p}/adjudication", issues)
-            if adj.get("calibrated") is False:
-                for result_idx, result in enumerate(ensure_list(adj.get("results"))):
-                    if isinstance(result, dict) and result.get("probability") is not None:
-                        issues.append(issue("PROBABILITY_UNCALIBRATED", pointer=f"{p}/adjudication/results/{result_idx}/probability", message="uncalibrated adjudication cannot emit probability"))
+            adj_pointer = f"{p}/adjudication"
+            reject_unknown_fields(adj, ADJUDICATION_FIELDS, adj_pointer, issues)
+            for required in ("method", "calibrated", "results"):
+                if required not in adj:
+                    issues.append(issue("MISSING_FIELD", pointer=f"{adj_pointer}/{required}", message="required"))
+            if not nonempty_str(adj.get("method")):
+                issues.append(issue("TYPE", pointer=f"{adj_pointer}/method", message="must be a non-empty string"))
+            if "confidence_cap" in adj:
+                unit_interval(adj.get("confidence_cap"), f"{adj_pointer}/confidence_cap", issues)
+            if "sample_count" in adj:
+                sample_count = adj.get("sample_count")
+                if not isinstance(sample_count, int) or isinstance(sample_count, bool) or sample_count < 1:
+                    issues.append(issue("TYPE", pointer=f"{adj_pointer}/sample_count", message="must be a positive integer"))
+            if "interval" in adj:
+                interval = adj.get("interval")
+                if (
+                    not isinstance(interval, list)
+                    or len(interval) != 2
+                    or not all(is_number(value) for value in interval)
+                    or not 0.0
+                    <= float(cast(int | float, interval[0]))
+                    <= float(cast(int | float, interval[1]))
+                    <= 1.0
+                ):
+                    issues.append(
+                        issue(
+                            "TYPE",
+                            pointer=f"{adj_pointer}/interval",
+                            message="must be an ordered two-number interval within [0, 1]",
+                        )
+                    )
+            if "calibration_policy_ref" in adj and not nonempty_str(adj.get("calibration_policy_ref")):
+                issues.append(issue("TYPE", pointer=f"{adj_pointer}/calibration_policy_ref", message="must be a non-empty string"))
+            for list_field in (
+                "accepted_hypotheses",
+                "rejected_hypotheses",
+                "evidence_refs",
+                "base_rate_refs",
+            ):
+                if list_field in adj and (
+                    not isinstance(adj.get(list_field), list)
+                    or not all(nonempty_str(value) for value in cast(list[Any], adj.get(list_field)))
+                ):
+                    issues.append(issue("TYPE", pointer=f"{adj_pointer}/{list_field}", message="must be a string array"))
+            hypothesis_ref_sets: dict[str, set[str]] = {}
+            for list_field in ("accepted_hypotheses", "rejected_hypotheses"):
+                raw_refs = adj.get(list_field)
+                if raw_refs is None or not isinstance(raw_refs, list):
+                    continue
+                refs = [str(value) for value in raw_refs if nonempty_str(value)]
+                ref_set = set(refs)
+                hypothesis_ref_sets[list_field] = ref_set
+                if len(refs) != len(ref_set):
+                    issues.append(
+                        issue(
+                            "DUPLICATE_ID",
+                            pointer=f"{adj_pointer}/{list_field}",
+                            message="hypothesis references must be unique",
+                        )
+                    )
+                for referenced_hypothesis in sorted(ref_set - hypothesis_ids):
+                    issues.append(
+                        issue(
+                            "UNKNOWN_REF",
+                            pointer=f"{adj_pointer}/{list_field}",
+                            actual=referenced_hypothesis,
+                        )
+                    )
+            overlap = hypothesis_ref_sets.get("accepted_hypotheses", set()) & hypothesis_ref_sets.get(
+                "rejected_hypotheses", set()
+            )
+            for overlapping_hypothesis in sorted(overlap):
+                issues.append(
+                    issue(
+                        "TRACK_MISMATCH",
+                        pointer=adj_pointer,
+                        message="a hypothesis cannot be both accepted and rejected",
+                        actual=overlapping_hypothesis,
+                    )
+                )
+            expected_calibrated = likelihood == "calibrated_probability"
+            if not is_bool(adj.get("calibrated")):
+                issues.append(issue("TYPE", pointer=f"{adj_pointer}/calibrated", message="must be boolean"))
+            elif adj.get("calibrated") is not expected_calibrated:
+                issues.append(
+                    issue(
+                        "TRACK_MISMATCH",
+                        pointer=f"{adj_pointer}/calibrated",
+                        expected=expected_calibrated,
+                        actual=adj.get("calibrated"),
+                        message="actor adjudication cannot self-authorize a likelihood mode",
+                    )
+                )
+            if expected_calibrated and not nonempty_str(artifact_paths.get("calibration_report")):
+                issues.append(
+                    issue(
+                        "MISSING_ARTIFACT",
+                        pointer="manifest.artifact_paths.calibration_report",
+                        message="calibrated actor adjudication requires the workspace calibration report",
+                    )
+                )
+
+            raw_results = adj.get("results")
+            if not isinstance(raw_results, list) or not raw_results:
+                issues.append(issue("MISSING_FIELD", pointer=f"{adj_pointer}/results", message="requires results"))
+                results: list[Any] = []
+            else:
+                results = raw_results
+            total_result_weight = 0.0
+            total_result_probability = 0.0
+            seen_result_targets: set[str] = set()
+            for result_idx, result in enumerate(results):
+                result_pointer = f"{adj_pointer}/results/{result_idx}"
+                if not isinstance(result, dict):
+                    issues.append(issue("TYPE", pointer=result_pointer, message="must be object"))
+                    continue
+                reject_unknown_fields(result, ADJUDICATION_RESULT_FIELDS, result_pointer, issues)
+                for text_field in ("method", "calibration_policy_ref"):
+                    if text_field in result and not nonempty_str(result.get(text_field)):
+                        issues.append(issue("TYPE", pointer=f"{result_pointer}/{text_field}", message="must be a non-empty string"))
+                for list_field in ("evidence_refs", "base_rate_refs"):
+                    if list_field in result and (
+                        not isinstance(result.get(list_field), list)
+                        or not all(nonempty_str(value) for value in cast(list[Any], result.get(list_field)))
+                    ):
+                        issues.append(issue("TYPE", pointer=f"{result_pointer}/{list_field}", message="must be a string array"))
+                if "sample_count" in result:
+                    sample_count = result.get("sample_count")
+                    if not isinstance(sample_count, int) or isinstance(sample_count, bool) or sample_count < 1:
+                        issues.append(issue("TYPE", pointer=f"{result_pointer}/sample_count", message="must be a positive integer"))
+                if "interval" in result:
+                    interval = result.get("interval")
+                    if (
+                        not isinstance(interval, list)
+                        or len(interval) != 2
+                        or not all(is_number(value) for value in interval)
+                        or not 0.0
+                        <= float(cast(int | float, interval[0]))
+                        <= float(cast(int | float, interval[1]))
+                        <= 1.0
+                    ):
+                        issues.append(
+                            issue(
+                                "TYPE",
+                                pointer=f"{result_pointer}/interval",
+                                message="must be an ordered two-number interval within [0, 1]",
+                            )
+                        )
+                hypothesis_ref = result.get("hypothesis_ref")
+                action = result.get("action")
+                if nonempty_str(hypothesis_ref):
+                    if str(hypothesis_ref) not in hypothesis_actions:
+                        issues.append(issue("UNKNOWN_REF", pointer=f"{result_pointer}/hypothesis_ref", actual=hypothesis_ref))
+                    resolved_action = hypothesis_actions.get(str(hypothesis_ref))
+                    if nonempty_str(action) and resolved_action is not None and action != resolved_action:
+                        issues.append(
+                            issue(
+                                "TRACK_MISMATCH",
+                                pointer=f"{result_pointer}/action",
+                                expected=resolved_action,
+                                actual=action,
+                            )
+                        )
+                elif not nonempty_str(action):
+                    issues.append(
+                        issue(
+                            "MISSING_FIELD",
+                            pointer=result_pointer,
+                            message="result requires hypothesis_ref or action",
+                        )
+                    )
+                    resolved_action = None
+                else:
+                    resolved_action = str(action)
+                if resolved_action is not None and actor_actions and resolved_action not in actor_actions:
+                    issues.append(issue("ENUM", pointer=f"{result_pointer}/action", actual=resolved_action))
+                if resolved_action is not None:
+                    if resolved_action in adjudicated_actions:
+                        issues.append(
+                            issue(
+                                "DUPLICATE_ID",
+                                pointer=f"{result_pointer}/action",
+                                message="each action may have only one adjudication result",
+                                actual=resolved_action,
+                            )
+                        )
+                    else:
+                        adjudicated_actions.add(resolved_action)
+                target = str(hypothesis_ref) if nonempty_str(hypothesis_ref) else f"action:{resolved_action}"
+                if target in seen_result_targets:
+                    issues.append(issue("DUPLICATE_ID", pointer=result_pointer, actual=target))
+                else:
+                    seen_result_targets.add(target)
+                if "likelihood_mode" in result and result.get("likelihood_mode") != likelihood:
+                    issues.append(
+                        issue(
+                            "TRACK_MISMATCH",
+                            pointer=f"{result_pointer}/likelihood_mode",
+                            expected=likelihood,
+                            actual=result.get("likelihood_mode"),
+                        )
+                    )
+
+                if likelihood == "relative_weight":
+                    if result.get("probability") is not None:
+                        issues.append(
+                            issue(
+                                "PROBABILITY_UNCALIBRATED",
+                                pointer=f"{result_pointer}/probability",
+                                message="relative_weight adjudication cannot emit probability",
+                            )
+                        )
+                    if "relative_weight" not in result:
+                        issues.append(issue("MISSING_FIELD", pointer=f"{result_pointer}/relative_weight"))
+                    else:
+                        value = refuse_string_number(result.get("relative_weight"), f"{result_pointer}/relative_weight", issues)
+                        if value is not None:
+                            if value <= 0.0:
+                                issues.append(issue("RANGE", pointer=f"{result_pointer}/relative_weight", actual=value))
+                            else:
+                                total_result_weight += value
+                                if resolved_action is not None:
+                                    adjudicated_by_action[resolved_action] = value
+                elif likelihood == "calibrated_probability":
+                    if "relative_weight" in result:
+                        issues.append(
+                            issue(
+                                "RELATIVE_WEIGHT_ONLY",
+                                pointer=f"{result_pointer}/relative_weight",
+                                message="calibrated adjudication cannot mix relative weights",
+                            )
+                        )
+                    if "probability" not in result or result.get("probability") is None:
+                        issues.append(issue("MISSING_FIELD", pointer=f"{result_pointer}/probability"))
+                    else:
+                        value = refuse_string_number(result.get("probability"), f"{result_pointer}/probability", issues)
+                        if value is not None:
+                            if not 0.0 <= value <= 1.0:
+                                issues.append(issue("RANGE", pointer=f"{result_pointer}/probability", actual=value))
+                            else:
+                                total_result_probability += value
+                                if resolved_action is not None:
+                                    adjudicated_by_action[resolved_action] = value
+                    for metadata_field in ("method", "sample_count", "interval", "calibration_policy_ref"):
+                        if metadata_field not in result and metadata_field not in adj:
+                            issues.append(
+                                issue(
+                                    "MISSING_FIELD",
+                                    pointer=f"{result_pointer}/{metadata_field}",
+                                    message="calibrated adjudication requires metadata",
+                                )
+                            )
+                elif likelihood == "deterministic":
+                    for forbidden in ("probability", "relative_weight"):
+                        if forbidden in result:
+                            issues.append(
+                                issue(
+                                    "TRACK_MISMATCH",
+                                    pointer=f"{result_pointer}/{forbidden}",
+                                    message="deterministic adjudication cannot emit likelihood values",
+                                )
+                            )
+
+            if likelihood == "relative_weight" and not math.isclose(
+                total_result_weight, 1.0, rel_tol=0.0, abs_tol=1e-9
+            ):
+                issues.append(
+                    issue(
+                        "RELATIVE_WEIGHT_ONLY",
+                        pointer=f"{adj_pointer}/results",
+                        expected=1.0,
+                        actual=total_result_weight,
+                        message="adjudication relative weights must sum to 1",
+                    )
+                )
+            if likelihood == "calibrated_probability" and not math.isclose(
+                total_result_probability, 1.0, rel_tol=0.0, abs_tol=1e-9
+            ):
+                issues.append(
+                    issue(
+                        "PROBABILITY_SUM",
+                        pointer=f"{adj_pointer}/results",
+                        expected=1.0,
+                        actual=total_result_probability,
+                    )
+                )
         elif mat == "material":
             issues.append(issue("HUMAN_TRACK", pointer=f"{p}/adjudication", message="material actor requires adjudication"))
 
-        for ri, resp in enumerate(ensure_list(raw.get("predicted_responses"))):
-            if isinstance(resp, dict):
-                reject_unknown_fields(resp, PREDICTED_RESPONSE_FIELDS, f"{p}/predicted_responses/{ri}", issues)
-                if "confidence" in resp:
-                    unit_interval(resp.get("confidence"), f"{p}/predicted_responses/{ri}/confidence", issues)
-                if "probability" in resp and resp.get("probability") is not None:
-                    calibrated = isinstance(adj, dict) and adj.get("calibrated") is True
-                    if not calibrated:
-                        issues.append(issue("PROBABILITY_UNCALIBRATED", pointer=f"{p}/predicted_responses/{ri}/probability", message="requires calibrated adjudication"))
+        responses = raw.get("predicted_responses")
+        total_response_weight = 0.0
+        total_response_probability = 0.0
+        seen_response_actions: set[str] = set()
+        for ri, resp in enumerate(ensure_list(responses)):
+            response_pointer = f"{p}/predicted_responses/{ri}"
+            if not isinstance(resp, dict):
+                issues.append(issue("TYPE", pointer=response_pointer, message="must be object"))
+                continue
+            reject_unknown_fields(resp, PREDICTED_RESPONSE_FIELDS, response_pointer, issues)
+            action = resp.get("action")
+            if not nonempty_str(action):
+                issues.append(issue("MISSING_FIELD", pointer=f"{response_pointer}/action"))
+            elif actor_actions and str(action) not in actor_actions:
+                issues.append(issue("ENUM", pointer=f"{response_pointer}/action", actual=action))
+            elif str(action) in seen_response_actions:
+                issues.append(issue("DUPLICATE_ID", pointer=f"{response_pointer}/action", actual=action))
+            else:
+                seen_response_actions.add(str(action))
+            if resp.get("status") != "simulation":
+                issues.append(issue("ENUM", pointer=f"{response_pointer}/status", expected="simulation", actual=resp.get("status")))
+            if "confidence" in resp:
+                unit_interval(resp.get("confidence"), f"{response_pointer}/confidence", issues)
+            likelihood_value: float | None = None
+            if likelihood == "relative_weight":
+                if resp.get("probability") is not None:
+                    issues.append(issue("PROBABILITY_UNCALIBRATED", pointer=f"{response_pointer}/probability"))
+                if "relative_weight" not in resp:
+                    issues.append(issue("MISSING_FIELD", pointer=f"{response_pointer}/relative_weight"))
+                else:
+                    likelihood_value = refuse_string_number(resp.get("relative_weight"), f"{response_pointer}/relative_weight", issues)
+                    if likelihood_value is not None:
+                        if likelihood_value <= 0.0:
+                            issues.append(issue("RANGE", pointer=f"{response_pointer}/relative_weight", actual=likelihood_value))
+                        else:
+                            total_response_weight += likelihood_value
+            elif likelihood == "calibrated_probability":
+                if "relative_weight" in resp:
+                    issues.append(issue("RELATIVE_WEIGHT_ONLY", pointer=f"{response_pointer}/relative_weight"))
+                if "probability" not in resp or resp.get("probability") is None:
+                    issues.append(issue("MISSING_FIELD", pointer=f"{response_pointer}/probability"))
+                else:
+                    likelihood_value = refuse_string_number(resp.get("probability"), f"{response_pointer}/probability", issues)
+                    if likelihood_value is not None:
+                        if not 0.0 <= likelihood_value <= 1.0:
+                            issues.append(issue("RANGE", pointer=f"{response_pointer}/probability", actual=likelihood_value))
+                        else:
+                            total_response_probability += likelihood_value
+            elif likelihood == "deterministic":
+                for forbidden in ("probability", "relative_weight"):
+                    if forbidden in resp:
+                        issues.append(issue("TRACK_MISMATCH", pointer=f"{response_pointer}/{forbidden}"))
+            expected_value = adjudicated_by_action.get(str(action))
+            if likelihood_value is not None and expected_value is not None and not math.isclose(
+                likelihood_value, expected_value, rel_tol=0.0, abs_tol=1e-9
+            ):
+                issues.append(
+                    issue(
+                        "TRACK_MISMATCH",
+                        pointer=response_pointer,
+                        expected=expected_value,
+                        actual=likelihood_value,
+                        message="predicted response must match adjudication",
+                    )
+                )
+        if isinstance(responses, list) and responses:
+            if likelihood == "relative_weight" and not math.isclose(
+                total_response_weight, 1.0, rel_tol=0.0, abs_tol=1e-9
+            ):
+                issues.append(issue("RELATIVE_WEIGHT_ONLY", pointer=f"{p}/predicted_responses", expected=1.0, actual=total_response_weight))
+            if likelihood == "calibrated_probability" and not math.isclose(
+                total_response_probability, 1.0, rel_tol=0.0, abs_tol=1e-9
+            ):
+                issues.append(issue("PROBABILITY_SUM", pointer=f"{p}/predicted_responses", expected=1.0, actual=total_response_probability))
+        if isinstance(responses, list) and seen_response_actions != adjudicated_actions:
+            issues.append(
+                issue(
+                    "TRACK_MISMATCH",
+                    pointer=f"{p}/predicted_responses",
+                    message="predicted responses must match the adjudicated action set exactly",
+                    expected=sorted(adjudicated_actions),
+                    actual=sorted(seen_response_actions),
+                )
+            )
     return _check("actors", issues, {"actors": len(ids)}), ids
 
 
@@ -1220,10 +1938,12 @@ def _branch_fingerprint(branch: dict[str, Any]) -> str:
 
 def _branch_similarity(left: dict[str, Any], right: dict[str, Any]) -> float:
     def tokens(branch: dict[str, Any]) -> set[str]:
+        raw_end_state = branch.get("end_state")
+        end_state = raw_end_state if isinstance(raw_end_state, dict) else {}
         text = " ".join(
             [
                 str(branch.get("summary", "")),
-                str((branch.get("end_state") or {}).get("summary", "")),
+                str(end_state.get("summary", "")),
                 " ".join(str(item) for item in ensure_list(branch.get("causal_trace"))),
             ]
         ).lower()
@@ -1264,7 +1984,8 @@ def validate_branches(
                 actual=data.get("schema_version"),
             )
         )
-    if data.get("likelihood_mode") not in {"deterministic", "relative_weight", "calibrated_probability"}:
+    raw_ledger_likelihood = data.get("likelihood_mode")
+    if not isinstance(raw_ledger_likelihood, str) or raw_ledger_likelihood not in {"deterministic", "relative_weight", "calibrated_probability"}:
         issues.append(issue("ENUM", pointer="branch_ledger.likelihood_mode", actual=data.get("likelihood_mode")))
     if not is_bool(data.get("calibrated")):
         issues.append(issue("TYPE", pointer="branch_ledger.calibrated", message="must be boolean"))
@@ -1297,9 +2018,71 @@ def validate_branches(
             issues.append(issue("TYPE", pointer="branch_ledger.calibration", message="must be object"))
         else:
             reject_unknown_fields(calibration, CALIBRATION_FIELDS, "branch_ledger.calibration", issues)
+            if not expected_calibrated:
+                issues.append(
+                    issue(
+                        "TRACK_MISMATCH",
+                        pointer="branch_ledger.calibration",
+                        message="calibration metadata is permitted only in calibrated_probability mode",
+                    )
+                )
     if expected_calibrated:
         if not isinstance(calibration, dict):
             issues.append(issue("MISSING_FIELD", pointer="branch_ledger.calibration", message="calibration metadata required"))
+        else:
+            for required in (
+                "method",
+                "sample_count",
+                "interval",
+                "calibration_policy_ref",
+                "model_version",
+                "model_hash",
+                "hindcast_report_ref",
+            ):
+                if required not in calibration:
+                    issues.append(
+                        issue(
+                            "MISSING_FIELD",
+                            pointer=f"branch_ledger.calibration.{required}",
+                            message="calibrated_probability requires complete ledger-level calibration metadata",
+                        )
+                    )
+            for field in ("method", "calibration_policy_ref", "model_version", "hindcast_report_ref"):
+                if field in calibration and not nonempty_str(calibration.get(field)):
+                    issues.append(issue("TYPE", pointer=f"branch_ledger.calibration.{field}", message="must be a non-empty string"))
+            sample_count = calibration.get("sample_count")
+            if "sample_count" in calibration and (
+                not isinstance(sample_count, int) or isinstance(sample_count, bool) or sample_count < 1
+            ):
+                issues.append(
+                    issue(
+                        "TYPE",
+                        pointer="branch_ledger.calibration.sample_count",
+                        message="must be a positive integer",
+                    )
+                )
+            interval = calibration.get("interval")
+            if "interval" in calibration and (
+                not isinstance(interval, list)
+                or len(interval) != 2
+                or not all(is_number(value) for value in interval)
+                or not 0.0
+                <= float(cast(int | float, interval[0]))
+                <= float(cast(int | float, interval[1]))
+                <= 1.0
+            ):
+                issues.append(
+                    issue(
+                        "TYPE",
+                        pointer="branch_ledger.calibration.interval",
+                        message="must be an ordered two-number interval within [0, 1]",
+                    )
+                )
+            model_hash = calibration.get("model_hash")
+            if "model_hash" in calibration and (
+                not isinstance(model_hash, str) or re.fullmatch(r"[0-9a-f]{64}", model_hash) is None
+            ):
+                issues.append(issue("SCHEMA", pointer="branch_ledger.calibration.model_hash", message="must be SHA-256"))
         raw_paths = manifest.get("artifact_paths")
         artifact_paths = raw_paths if isinstance(raw_paths, dict) else {}
         if not nonempty_str(artifact_paths.get("calibration_report")):
@@ -1310,6 +2093,22 @@ def validate_branches(
                     message="calibrated probability requires a calibration report",
                 )
             )
+    unresolved_mass = 0.0
+    if "unresolved_mass" in data:
+        parsed_unresolved_mass = refuse_string_number(
+            data.get("unresolved_mass"), "branch_ledger.unresolved_mass", issues
+        )
+        if parsed_unresolved_mass is not None:
+            unresolved_mass = parsed_unresolved_mass
+            if not 0.0 <= unresolved_mass <= 1.0:
+                issues.append(
+                    issue(
+                        "RANGE",
+                        pointer="branch_ledger.unresolved_mass",
+                        message="must be within [0, 1]",
+                        actual=unresolved_mass,
+                    )
+                )
     raw_branches = data.get("branches")
     if not isinstance(raw_branches, list):
         issues.append(issue("TYPE", pointer="branch_ledger.branches", message="must be array"))
@@ -1321,15 +2120,26 @@ def validate_branches(
     fps: dict[str, tuple[str, dict[str, Any]]] = {}
     branch_ids: set[str] = set()
     likelihood = manifest.get("likelihood_mode") or data.get("likelihood_mode") or "relative_weight"
-    calibrated = likelihood == "calibrated_probability" or data.get("calibrated") is True
     total_prob = 0.0
     total_weight = 0.0
+    non_stress_count = 0
     for idx, branch in enumerate(branches):
         p = f"/branches/{idx}"
         if not isinstance(branch, dict):
             issues.append(issue("TYPE", pointer=p, message="must be object"))
             continue
         reject_unknown_fields(branch, BRANCH_FIELDS, p, issues)
+        if "likelihood_mode" in branch and branch.get("likelihood_mode") != likelihood:
+            issues.append(
+                issue(
+                    "TRACK_MISMATCH",
+                    pointer=f"{p}/likelihood_mode",
+                    expected=likelihood,
+                    actual=branch.get("likelihood_mode"),
+                )
+            )
+        if "stress" in branch and not is_bool(branch.get("stress")):
+            issues.append(issue("TYPE", pointer=f"{p}/stress", message="must be boolean"))
         for required in (
             "id",
             "name",
@@ -1359,11 +2169,27 @@ def validate_branches(
                     issue("BRANCH_NEAR_DUPLICATE", severity="warning", pointer=p, message=f"near-duplicate of {other_id}")
                 )
         fps[bid] = (fp, branch)
-        for r in ensure_list(branch.get("causal_trace")):
-            if r not in edge_ids:
+        raw_trace = branch.get("causal_trace")
+        if not isinstance(raw_trace, list):
+            issues.append(issue("TYPE", pointer=f"{p}/causal_trace", message="must be array"))
+            trace_refs: list[Any] = []
+        else:
+            trace_refs = raw_trace
+        for r in trace_refs:
+            if not nonempty_str(r):
+                issues.append(issue("TYPE", pointer=f"{p}/causal_trace", actual=r))
+            elif r not in edge_ids:
                 issues.append(issue("UNKNOWN_REF", pointer=f"{p}/causal_trace", actual=r))
-        for r in ensure_list(branch.get("key_decision_points")):
-            if r not in actor_ids:
+        raw_decisions = branch.get("key_decision_points")
+        if not isinstance(raw_decisions, list):
+            issues.append(issue("TYPE", pointer=f"{p}/key_decision_points", message="must be array"))
+            decision_refs: list[Any] = []
+        else:
+            decision_refs = raw_decisions
+        for r in decision_refs:
+            if not nonempty_str(r):
+                issues.append(issue("TYPE", pointer=f"{p}/key_decision_points", actual=r))
+            elif r not in actor_ids:
                 issues.append(issue("UNKNOWN_REF", pointer=f"{p}/key_decision_points", actual=r))
         end_state = branch.get("end_state")
         if not isinstance(end_state, dict):
@@ -1389,8 +2215,12 @@ def validate_branches(
                 for field in LEADING_INDICATOR_FIELDS:
                     if not nonempty_str(indicator.get(field)):
                         issues.append(issue("MISSING_FIELD", pointer=f"{ip}/{field}", message="required"))
-                if node_ids is not None and indicator.get("node") not in node_ids:
-                    issues.append(issue("UNKNOWN_REF", pointer=f"{ip}/node", actual=indicator.get("node")))
+                indicator_node = indicator.get("node")
+                if node_ids is not None:
+                    if not nonempty_str(indicator_node):
+                        issues.append(issue("TYPE", pointer=f"{ip}/node", actual=indicator_node))
+                    elif indicator_node not in node_ids:
+                        issues.append(issue("UNKNOWN_REF", pointer=f"{ip}/node", actual=indicator_node))
                 if parse_duration_seconds(indicator.get("window")) is None:
                     issues.append(issue("TEMPORAL_FRAME", pointer=f"{ip}/window", message="must be supported ISO duration"))
         disconfirming = branch.get("disconfirming_conditions")
@@ -1399,13 +2229,26 @@ def validate_branches(
             and (not disconfirming or not all(nonempty_str(item) for item in disconfirming))
         ):
             issues.append(issue("MISSING_FIELD", pointer=f"{p}/disconfirming_conditions", message="future branch requires non-empty conditions"))
-        for ref in ensure_list(branch.get("evidence_ids")):
-            if ref not in evidence_ids:
+        raw_evidence_refs = branch.get("evidence_ids")
+        if not isinstance(raw_evidence_refs, list):
+            issues.append(issue("TYPE", pointer=f"{p}/evidence_ids", message="must be array"))
+            branch_evidence_refs: list[Any] = []
+        else:
+            branch_evidence_refs = raw_evidence_refs
+        for ref in branch_evidence_refs:
+            if not nonempty_str(ref):
+                issues.append(issue("TYPE", pointer=f"{p}/evidence_ids", actual=ref))
+            elif ref not in evidence_ids:
                 issues.append(issue("UNKNOWN_REF", pointer=f"{p}/evidence_ids", actual=ref))
         unit_interval(branch.get("confidence"), f"{p}/confidence", issues)
-        if manifest.get("schema_version") == SCHEMA_VERSION and manifest.get("simulation_mode") in {"deterministic", "monte_carlo"}:
+        manifest_simulation_mode = manifest.get("simulation_mode")
+        if (
+            manifest.get("schema_version") == SCHEMA_VERSION
+            and isinstance(manifest_simulation_mode, str)
+            and manifest_simulation_mode in {"deterministic", "monte_carlo"}
+        ):
             derivation = branch.get("derivation")
-            if derivation not in {"analyst_authored", "engine_derived"}:
+            if not isinstance(derivation, str) or derivation not in {"analyst_authored", "engine_derived"}:
                 issues.append(
                     issue(
                         "MISSING_FIELD",
@@ -1426,50 +2269,150 @@ def validate_branches(
             trace_hash = branch.get("trace_hash")
             if not isinstance(trace_hash, str) or re.fullmatch(r"[0-9a-f]{64}", trace_hash) is None:
                 issues.append(issue("MISSING_FIELD", pointer=f"{p}/trace_hash", message="numerical branch requires SHA-256 trace hash"))
-        # stress scenarios
-        if branch.get("stress") is True or branch.get("probability") is None and "relative_weight" in branch:
-            if branch.get("probability") is not None and branch.get("stress") is True:
-                issues.append(issue("TYPE", pointer=f"{p}/probability", message="stress probability must be null"))
-        if "probability" in branch and branch.get("probability") is not None:
-            if not calibrated and likelihood != "deterministic":
-                # v2: uncalibrated should use relative_weight
+        stress = branch.get("stress") is True
+        if not stress:
+            non_stress_count += 1
+        if "unresolved_mass" in branch:
+            branch_mass = refuse_string_number(branch.get("unresolved_mass"), f"{p}/unresolved_mass", issues)
+            if branch_mass is not None and (
+                not 0.0 <= branch_mass <= 1.0
+                or not math.isclose(branch_mass, unresolved_mass, rel_tol=0.0, abs_tol=1e-9)
+            ):
+                issues.append(
+                    issue(
+                        "TRACK_MISMATCH",
+                        pointer=f"{p}/unresolved_mass",
+                        expected=unresolved_mass,
+                        actual=branch_mass,
+                        message="branch unresolved_mass must match the ledger-level value",
+                    )
+                )
+        if likelihood == "relative_weight":
+            if "probability" in branch and (not stress or branch.get("probability") is not None):
                 issues.append(
                     issue(
                         "PROBABILITY_UNCALIBRATED",
                         pointer=f"{p}/probability",
-                        message="uncalibrated branches must use relative_weight, not probability",
+                        message="relative_weight mode forbids branch probability; only stress branches may carry an explicit null",
                         actual=branch.get("probability"),
                     )
                 )
+            if "relative_weight" not in branch:
+                issues.append(
+                    issue(
+                        "MISSING_FIELD",
+                        pointer=f"{p}/relative_weight",
+                        message="every relative_weight branch requires a positive weight",
+                    )
+                )
             else:
-                val = refuse_string_number(branch.get("probability"), f"{p}/probability", issues)
-                if val is not None:
-                    if not 0.0 <= val <= 1.0:
-                        issues.append(issue("RANGE", pointer=f"{p}/probability", message="must be within [0, 1]", actual=val))
-                    total_prob += val
-                    if calibrated:
-                        for req in ("method", "sample_count", "interval", "calibration_policy_ref"):
-                            if req not in branch and req not in (data.get("calibration") or {}):
-                                issues.append(
-                                    issue("MISSING_FIELD", pointer=f"{p}/{req}", message="calibrated probability requires metadata")
-                                )
-        if "relative_weight" in branch:
-            w = refuse_string_number(branch.get("relative_weight"), f"{p}/relative_weight", issues)
-            if w is not None:
-                if w <= 0:
-                    issues.append(issue("RANGE", pointer=f"{p}/relative_weight", message="must be positive", actual=w))
-                total_weight += w
-        # legacy 1.2 branch cap check only if using probability sum mode without calibration metadata
-        if calibrated and "probability" in branch:
-            val = branch.get("probability")
-            if is_number(val) and float(cast(int | float, val)) > 0.60:
-                # no longer hard cap — removed in 2.0; only warn
-                pass
-    non_stress_prob = [branch for branch in branches if isinstance(branch, dict) and branch.get("stress") is not True and branch.get("probability") is not None]
-    if calibrated and non_stress_prob and not math.isclose(total_prob, 1.0, abs_tol=0.01):
-        issues.append(issue("PROBABILITY_SUM", pointer="branch_ledger.branches", expected=1.0, actual=total_prob))
-    if likelihood == "relative_weight" and any(isinstance(branch, dict) and branch.get("probability") is not None for branch in branches):
-        issues.append(issue("PROBABILITY_UNCALIBRATED", pointer="branch_ledger.branches", message="relative-weight ledger cannot contain probabilities"))
+                weight = refuse_string_number(branch.get("relative_weight"), f"{p}/relative_weight", issues)
+                if weight is not None:
+                    if weight <= 0.0:
+                        issues.append(issue("RANGE", pointer=f"{p}/relative_weight", message="must be positive", actual=weight))
+                    else:
+                        total_weight += weight
+        elif likelihood == "calibrated_probability":
+            if "relative_weight" in branch:
+                issues.append(
+                    issue(
+                        "RELATIVE_WEIGHT_ONLY",
+                        pointer=f"{p}/relative_weight",
+                        message="calibrated_probability mode cannot mix relative weights with probabilities",
+                    )
+                )
+            if stress:
+                if branch.get("probability") is not None:
+                    issues.append(issue("TYPE", pointer=f"{p}/probability", message="stress probability must be null"))
+            elif "probability" not in branch or branch.get("probability") is None:
+                issues.append(
+                    issue(
+                        "MISSING_FIELD",
+                        pointer=f"{p}/probability",
+                        message="every non-stress calibrated branch requires probability",
+                    )
+                )
+            else:
+                probability = refuse_string_number(branch.get("probability"), f"{p}/probability", issues)
+                if probability is not None:
+                    if not 0.0 <= probability <= 1.0:
+                        issues.append(
+                            issue(
+                                "RANGE",
+                                pointer=f"{p}/probability",
+                                message="must be within [0, 1]",
+                                actual=probability,
+                            )
+                        )
+                    else:
+                        total_prob += probability
+        elif likelihood == "deterministic":
+            if "probability" in branch:
+                issues.append(
+                    issue(
+                        "PROBABILITY_UNCALIBRATED",
+                        pointer=f"{p}/probability",
+                        message="deterministic mode forbids probability fields",
+                    )
+                )
+            if "relative_weight" in branch:
+                weight = refuse_string_number(branch.get("relative_weight"), f"{p}/relative_weight", issues)
+                if weight is not None and not math.isclose(weight, 1.0, rel_tol=0.0, abs_tol=1e-9):
+                    issues.append(
+                        issue(
+                            "RELATIVE_WEIGHT_ONLY",
+                            pointer=f"{p}/relative_weight",
+                            expected=1.0,
+                            actual=weight,
+                            message="an optional deterministic branch weight must be exactly 1",
+                        )
+                    )
+    if likelihood == "relative_weight" and not math.isclose(
+        total_weight + unresolved_mass, 1.0, rel_tol=0.0, abs_tol=1e-9
+    ):
+        issues.append(
+            issue(
+                "RELATIVE_WEIGHT_ONLY",
+                pointer="branch_ledger.branches",
+                expected=1.0,
+                actual=total_weight + unresolved_mass,
+                message="relative weights plus unresolved_mass must sum to 1",
+            )
+        )
+    if likelihood == "calibrated_probability":
+        if non_stress_count == 0:
+            issues.append(issue("BRANCH_COUNT", pointer="branch_ledger.branches", message="requires a non-stress branch"))
+        if not math.isclose(total_prob + unresolved_mass, 1.0, rel_tol=0.0, abs_tol=1e-9):
+            issues.append(
+                issue(
+                    "PROBABILITY_SUM",
+                    pointer="branch_ledger.branches",
+                    expected=1.0,
+                    actual=total_prob + unresolved_mass,
+                    message="non-stress probabilities plus unresolved_mass must sum to 1",
+                )
+            )
+    if likelihood == "deterministic":
+        if len(branches) != 1 or non_stress_count != 1:
+            issues.append(
+                issue(
+                    "BRANCH_COUNT",
+                    pointer="branch_ledger.branches",
+                    expected=1,
+                    actual=len(branches),
+                    message="deterministic likelihood requires exactly one non-stress branch",
+                )
+            )
+        if not math.isclose(unresolved_mass, 0.0, rel_tol=0.0, abs_tol=1e-9):
+            issues.append(
+                issue(
+                    "UNRESOLVED_MASS",
+                    pointer="branch_ledger.unresolved_mass",
+                    expected=0.0,
+                    actual=unresolved_mass,
+                    message="deterministic likelihood cannot retain unresolved mass",
+                )
+            )
     metrics = {"branches": len(branches), "near_duplicates": sum(1 for i in issues if i.code == "BRANCH_NEAR_DUPLICATE")}
     return _check("branches", issues, metrics)
 
@@ -1484,7 +2427,7 @@ def validate_report(text: str, manifest: dict[str, Any], required: bool) -> Chec
     headings = [match.group(2).strip().lower() for match in heading_matches]
     expected = list(REPORT_SECTIONS)
     if _mapping(manifest.get("temporal_frame")).get("future_projection") is True:
-        expected.append("future monitoring and probability updates")
+        expected.append("future monitoring and likelihood updates")
     for term in expected:
         match_index = next((idx for idx, heading in enumerate(headings) if term == heading or term in heading), None)
         if match_index is None:
@@ -1726,7 +2669,11 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
     issues: list[Issue] = []
     raw_paths = manifest.get("artifact_paths")
     paths: dict[str, Any] = raw_paths if isinstance(raw_paths, dict) else {}
-    numerical_required = manifest.get("simulation_mode") in {"deterministic", "monte_carlo"}
+    manifest_simulation_mode = manifest.get("simulation_mode")
+    numerical_required = isinstance(manifest_simulation_mode, str) and manifest_simulation_mode in {
+        "deterministic",
+        "monte_carlo",
+    }
     core_artifacts = ("computational_model", "run_ledger", "replay_report")
     declared_core = {key for key in core_artifacts if nonempty_str(paths.get(key))}
     if numerical_required or declared_core:
@@ -1842,7 +2789,8 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
             )
         if run.get("run_contract_version") != "aleph-run-2.0":
             issues.append(issue("SCHEMA", artifact="run_ledger", pointer="run_contract_version", actual=run.get("run_contract_version")))
-        if run.get("mode") not in {"deterministic", "monte_carlo"}:
+        run_mode = run.get("mode")
+        if not isinstance(run_mode, str) or run_mode not in {"deterministic", "monte_carlo"}:
             issues.append(issue("ENUM", artifact="run_ledger", pointer="mode", actual=run.get("mode")))
         if run.get("mode") != manifest.get("simulation_mode"):
             issues.append(
@@ -2487,7 +3435,7 @@ def validate_workspace(
         actors: list[Any] = []
     else:
         actors = actors_raw
-    c_act, actor_ids = validate_actors(actors, node_ids, evidence_ids, nodes)
+    c_act, actor_ids = validate_actors(actors, node_ids, evidence_ids, nodes, manifest)
     checks["actors"] = c_act.to_dict()
     checks["human_tracks"] = c_act.to_dict()
     all_issues.extend(c_act.issues)
@@ -2625,7 +3573,12 @@ def _utc() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _fail_result(mode: str, issues: list[Issue], checks: dict, msg: str) -> dict[str, Any]:
+def _fail_result(
+    mode: str,
+    issues: list[Issue],
+    checks: dict[str, Any],
+    msg: str,
+) -> dict[str, Any]:
     if not any(i.message == msg for i in issues):
         issues.append(issue("MISSING_ARTIFACT", message=msg))
     errors = [i for i in issues if i.severity == "error"]

@@ -1,5 +1,41 @@
 # Changelog
 
+## v2.0.1 - 2026-07-14
+
+### Compatibility and protocol correctness
+
+- Updated host discovery to use current native Agent Skills locations for supported CLIs and IDEs; generated rule fallbacks are opt-in and never apply globally.
+- Corrected GitHub Copilot and JetBrains project paths and removed stale generated adapters that could activate Aleph for unrelated tasks.
+- Documented an explicit installed skill root for every script invocation, removing the process-working-directory assumption across CLI and IDE hosts.
+- Reconciled all workflow, evaluation, and forward-test language with the likelihood contract: uncalibrated output uses `relative_weight`; probability requires calibrated assurance and hindcast evidence.
+- Enforced mode-exact likelihood fields and normalization across branch ledgers, actor adjudication, and predicted responses, including exact action-set and hypothesis-reference binding.
+- Added a host-native research fallback with source-level provenance, an explicit lack of signed D Research import receipts, and an assurance ceiling of `limited`.
+- Bound `imported` and `verified` D Research states to existing preserved-ledger and import-receipt artifacts instead of trusting manifest strings.
+- Added resumable adaptive-research checkpoints and an unsaturated partial handoff for host execution boundaries without introducing fixed source or elapsed-time caps.
+- Hardened sealed roleplay artifacts against cross-scenario/dossier replay, duplicate JSON keys, extra receipt inputs, execution mismatches, and hash-valid but semantically invalid packet/output bytes.
+- Extended nested privacy refusal to medical/diagnostic fields and content, including deeply nested dossier values.
+- Clarified that external CLI profiles are adapter contracts rather than turnkey orchestration claims.
+
+### Quality and release integrity
+
+- Fixed strict mypy violations in schema and validator paths and made strict checking an explicit project contract.
+- Integrated initializer draft validation plus the complete compile-to-finalize lifecycle acceptance scenario into the release gate.
+- Added regression coverage for portable host paths, non-global adapter activation, protocol wording, release packaging, and quality-gate behavior.
+- Added mutation sweeps that require manifest, actor, branch, packet, and roleplay validators to return structured failures rather than throw on malformed scalar/container substitutions.
+- Hardened all shared JSON/JSONL/CSV readers against duplicate fields, non-finite values, lone Unicode surrogates, resource bombs, and parser differentials; Windows alternate data streams are refused portably.
+- Added a deterministic, manifest-exact release builder. The official ZIP contains only attested files and can pass both copy and symlink installer preflight after extraction.
+- Kept development release checks non-mutating by disabling Ruff's project cache and routing mypy and coverage state to disposable external paths, so a self-tested ZIP remains eligible for symlink installation.
+- Made installer machine status internally consistent: every refused or failed symlink transaction now returns `ok: false`, including operating-system privilege failures, while preserving rollback and receipt details.
+- Added a tag-gated GitHub Release workflow with locked dependencies, commit-pinned actions, a second reproducibility build, SHA-256 assets, and GitHub build-provenance attestations; repository-level immutable releases protect the published tag and assets.
+- Forward-checked the reproducible ZIP with Grok Build, the requested GLM/Kimi/MiniMax models through OpenCode, and every Cline Pass model exposed by Cline 3.0.40; all passed both the semantic safety-contract audit and packaged fixture, while host/model-specific strict-output-format variability remains explicitly documented.
+
+### Versioning
+
+- Package and validator versions advance to `2.0.1`.
+- Schema and numerical formula identifiers remain `2.0.0`; there is no schema-number migration, but previously accepted 2.0.0 workspaces must be revalidated and may require packet/report/numerical artifact regeneration under the stricter v2.0.1 contracts.
+- Existing finalization receipts require regeneration whenever validator-version binding or repaired source artifacts make them stale.
+- All bundled domain packs remain honestly labeled `experimental`; this release does not enable probability claims for them.
+
 ## v2.0.0 - 2026-07-14
 
 ### Breaking
@@ -69,7 +105,7 @@
 - Python 3.10-3.13 and Linux/macOS/Windows CI matrix declared.
 - Adversarial validator tests derive their tampered workspace from committed fixtures and do not depend on developer-local output directories.
 - Distribution fixtures use repository-enforced LF bytes so manifest hashes remain identical across Git checkouts on Windows, macOS, and Linux.
-- 100+ regression tests, Ruff, strict mypy, package validation, adapter drift, deterministic replay, adversarial rejection, and end-to-end acceptance are release gates.
+- The v2.0.0 gate ran 100+ regression tests, Ruff, project-configured mypy, package validation, adapter drift, deterministic replay, and adversarial rejection; lifecycle acceptance was verified separately. v2.0.1 promotes actual `mypy --strict` and lifecycle acceptance into the gate.
 - Domain packs remain `experimental`; probability output stays disabled until real calibration and hindcast evidence satisfy the calibrated gate.
 
 ## v1.2.0 - 2026-07-02

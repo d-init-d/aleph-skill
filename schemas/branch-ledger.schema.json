@@ -1,34 +1,160 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://aleph.local/schemas/2.0/branch-ledger.schema.json",
-  "type": "object", "additionalProperties": false, "required": ["schema_version", "likelihood_mode", "calibrated", "branches"],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aleph.local/schemas/2.0/branch-ledger.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "likelihood_mode", "calibrated", "branches"],
   "properties": {
-    "schema_version": {"const": "2.0.0"}, "likelihood_mode": {"enum": ["deterministic", "relative_weight", "calibrated_probability"]},
+    "schema_version": {"const": "2.0.0"},
+    "likelihood_mode": {"enum": ["deterministic", "relative_weight", "calibrated_probability"]},
     "calibrated": {"type": "boolean"},
-    "calibration": {"type": "object", "additionalProperties": false, "properties": {"method": {"type": "string"}, "sample_count": {"type": "integer", "minimum": 1}, "interval": {"type": "array", "items": {"type": "number"}}, "calibration_policy_ref": {"type": "string"}, "model_version": {"type": "string"}, "model_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "hindcast_report_ref": {"type": "string"}}},
+    "calibration": {"$ref": "#/$defs/calibration"},
     "unresolved_mass": {"type": "number", "minimum": 0, "maximum": 1},
     "branches": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/branch"}}
   },
+  "allOf": [
+    {
+      "if": {"properties": {"likelihood_mode": {"const": "relative_weight"}}, "required": ["likelihood_mode"]},
+      "then": {
+        "properties": {
+          "calibrated": {"const": false},
+          "calibration": false,
+          "branches": {
+            "items": {
+              "required": ["relative_weight"],
+              "allOf": [
+                {
+                  "if": {"properties": {"stress": {"const": true}}, "required": ["stress"]},
+                  "then": {"properties": {"probability": {"type": "null"}}},
+                  "else": {"properties": {"probability": false}}
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"likelihood_mode": {"const": "calibrated_probability"}}, "required": ["likelihood_mode"]},
+      "then": {
+        "required": ["calibration"],
+        "properties": {
+          "calibrated": {"const": true},
+          "branches": {
+            "items": {
+              "properties": {"relative_weight": false},
+              "allOf": [
+                {
+                  "if": {"properties": {"stress": {"const": true}}, "required": ["stress"]},
+                  "then": {"properties": {"probability": {"type": "null"}}},
+                  "else": {"required": ["probability"], "properties": {"probability": {"type": "number"}}}
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"likelihood_mode": {"const": "deterministic"}}, "required": ["likelihood_mode"]},
+      "then": {
+        "properties": {
+          "calibrated": {"const": false},
+          "calibration": false,
+          "unresolved_mass": {"const": 0},
+          "branches": {
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "properties": {
+                "probability": false,
+                "stress": {"const": false},
+                "relative_weight": {"const": 1}
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
+    "calibration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "sample_count", "interval", "calibration_policy_ref", "model_version", "model_hash", "hindcast_report_ref"],
+      "properties": {
+        "method": {"type": "string", "minLength": 1},
+        "sample_count": {"type": "integer", "minimum": 1},
+        "interval": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number", "minimum": 0, "maximum": 1}},
+        "calibration_policy_ref": {"type": "string", "minLength": 1},
+        "model_version": {"type": "string", "minLength": 1},
+        "model_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "hindcast_report_ref": {"type": "string", "minLength": 1}
+      }
+    },
     "branch": {
-      "type": "object", "additionalProperties": false,
+      "type": "object",
+      "additionalProperties": false,
       "required": ["id", "name", "summary", "causal_trace", "key_decision_points", "end_state", "leading_indicators", "disconfirming_conditions", "evidence_ids", "confidence"],
       "properties": {
-        "id": {"type": "string", "pattern": "^branch:"}, "name": {"type": "string"}, "probability": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
-        "relative_weight": {"type": "number", "exclusiveMinimum": 0}, "likelihood_mode": {"type": "string"}, "summary": {"type": "string"},
-        "causal_trace": {"type": "array", "items": {"type": "string"}}, "key_decision_points": {"type": "array", "items": {"type": "string"}},
-        "end_state": {"type": "object", "additionalProperties": false, "required": ["time", "summary"], "properties": {"time": {"type": "string"}, "summary": {"type": "string"}, "outcomes": {"type": "array"}, "values": {"type": "array"}}},
-        "leading_indicators": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["node", "direction", "window", "predicate"], "properties": {"node": {"type": "string"}, "direction": {"type": "string"}, "window": {"type": "string"}, "predicate": {"type": "string"}}}},
+        "id": {"type": "string", "pattern": "^branch:"},
+        "name": {"type": "string", "minLength": 1},
+        "probability": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "relative_weight": {"type": "number", "exclusiveMinimum": 0},
+        "likelihood_mode": {"enum": ["deterministic", "relative_weight", "calibrated_probability"]},
+        "summary": {"type": "string", "minLength": 1},
+        "causal_trace": {"type": "array", "items": {"type": "string"}},
+        "key_decision_points": {"type": "array", "items": {"type": "string"}},
+        "end_state": {"$ref": "#/$defs/end_state"},
+        "leading_indicators": {"type": "array", "items": {"$ref": "#/$defs/leading_indicator"}},
         "disconfirming_conditions": {"type": "array", "items": {"type": "string"}},
-        "evidence_ids": {"type": "array", "items": {"type": "string"}}, "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-        "warnings": {"type": "array"}, "stress": {"type": "boolean"}, "method": {"type": "string"}, "sample_count": {"type": "integer", "minimum": 1},
-        "interval": {"type": "array"}, "calibration_policy_ref": {"type": "string"},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "warnings": {"type": "array"},
+        "stress": {"type": "boolean"},
+        "method": {"type": "string"},
+        "sample_count": {"type": "integer", "minimum": 1},
+        "interval": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number"}},
+        "calibration_policy_ref": {"type": "string"},
         "derivation": {"enum": ["analyst_authored", "engine_derived"]},
         "engine_cluster_id": {"type": "string", "pattern": "^branch:cluster-[0-9]+$"},
         "member_count": {"type": "integer", "minimum": 1},
         "representative_run": {"type": ["string", "null"]},
-        "trace_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "common_edges": {"type": "array", "items": {"type": "string"}},
-        "distinguishing_parameters": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["parameter", "value"], "properties": {"parameter": {"type": "string"}, "value": {"anyOf": [{"type": "number"}, {"type": "string"}, {"type": "boolean"}]}}}},
+        "trace_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "common_edges": {"type": "array", "items": {"type": "string"}},
+        "distinguishing_parameters": {"type": "array", "items": {"$ref": "#/$defs/distinguishing_parameter"}},
         "unresolved_mass": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "end_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["time", "summary"],
+      "properties": {
+        "time": {"type": "string", "minLength": 1},
+        "summary": {"type": "string", "minLength": 1},
+        "outcomes": {"type": "array"},
+        "values": {"type": "array"}
+      }
+    },
+    "leading_indicator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "direction", "window", "predicate"],
+      "properties": {
+        "node": {"type": "string"},
+        "direction": {"type": "string"},
+        "window": {"type": "string"},
+        "predicate": {"type": "string"}
+      }
+    },
+    "distinguishing_parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parameter", "value"],
+      "properties": {
+        "parameter": {"type": "string"},
+        "value": {"anyOf": [{"type": "number"}, {"type": "string"}, {"type": "boolean"}]}
       }
     }
   }

@@ -7,7 +7,7 @@ Use these scenarios to evaluate skill behavior after changes.
 Prompt:
 
 ```text
-Use $aleph-skill to simulate: What if Lehman Brothers was bailed out in September 2008? Build 3-5 timeline branches through 2016 with sourced mechanisms and confidence warnings. Use D Research for evidence and split material human decisions into research and roleplay tracks.
+Use $aleph-skill to simulate: What if Lehman Brothers was bailed out in September 2008? Build 3-5 timeline branches through 2016 with sourced mechanisms and confidence warnings. Use compatible D Research for evidence, or the limited host-native fallback if it is unavailable, and split material human decisions into research and roleplay tracks.
 ```
 
 Pass conditions:
@@ -26,7 +26,7 @@ Pass conditions:
 Prompt:
 
 ```text
-Use $aleph-skill to simulate an oil price +40% shock starting June 2026. Focus on inflation, central-bank reaction, growth, shipping, and emerging markets over 24 months. Use D Research for evidence and split material human decisions into research and roleplay tracks.
+Use $aleph-skill to simulate an oil price +40% shock. Set both the observation cutoff and shock start to 2026-06-01. Focus on inflation, central-bank reaction, growth, shipping, and emerging markets over 24 months. Use compatible D Research for evidence, or the limited host-native fallback if it is unavailable, and split material human decisions into research and roleplay tracks.
 ```
 
 Pass conditions:
@@ -45,7 +45,7 @@ Pass conditions:
 Prompt:
 
 ```text
-Use $aleph-skill to simulate: What if Napoleon won at Waterloo in 1815? Build a cautious alternate-history tree through 1870. Use D Research for evidence and split material human decisions into research and roleplay tracks.
+Use $aleph-skill to simulate: What if Napoleon won at Waterloo in 1815? Build a cautious alternate-history tree through 1870. Use compatible D Research for evidence, or the limited host-native fallback if it is unavailable, and split material human decisions into research and roleplay tracks.
 ```
 
 Pass conditions:
@@ -62,7 +62,7 @@ Pass conditions:
 Prompt:
 
 ```text
-Use $aleph-skill to simulate a 200-basis-point policy-rate cut effective at the current observation cutoff. Project the next 36 months across inflation, credit, housing, labor markets, exchange rates, and political response. Use D Research, investigate material decision makers in separate research and roleplay tracks, and produce a professional report.
+Use $aleph-skill to simulate a 200-basis-point policy-rate cut effective at the current observation cutoff. Project the next 36 months across inflation, credit, housing, labor markets, exchange rates, and political response. Use compatible D Research or the limited host-native fallback, investigate material decision makers in separate research and roleplay tracks, and produce a professional report.
 ```
 
 Pass conditions:
@@ -70,15 +70,15 @@ Pass conditions:
 - Automatically selects `prospective_intervention`; it does not ask for an execution profile.
 - Labels every post-cutoff node as inference or simulation, never fact or observed baseline.
 - Research depth expands with cross-domain complexity and stops only after evidence saturation is documented.
-- Produces at least three probability-normalized branches with observable leading indicators and disconfirming conditions.
-- Identifies what evidence would update each branch probability.
+- Produces at least three branches with normalized `relative_weight` and observable leading indicators and disconfirming conditions. Probability is allowed only if the calibration and validation gates pass.
+- Identifies which observations would trigger a new run and update each branch ranking in its declared likelihood mode.
 
 ## Test 5: hybrid past-to-future projection
 
 Prompt:
 
 ```text
-Use $aleph-skill to simulate a constitutional divergence beginning in 2010, reconstruct its alternate path to the present observation cutoff, then project the resulting system through 2035. Use D Research and produce a professional report with explicit temporal-knowledge controls.
+Use $aleph-skill to simulate a constitutional divergence beginning in 2010, reconstruct its alternate path to the present observation cutoff, then project the resulting system through 2035. Use compatible D Research or the limited host-native fallback and produce a professional report with explicit temporal-knowledge controls.
 ```
 
 Pass conditions:
@@ -89,15 +89,31 @@ Pass conditions:
 - Distinguishes reconstructed counterfactual history from prospective uncertainty after the observation cutoff.
 - Carries uncertainty forward rather than resetting confidence at the present boundary.
 
+## Test 6: D Research unavailable
+
+Prompt:
+
+```text
+Use $aleph-skill with D Research intentionally unavailable. Research a public-policy intervention with the host's lawful source tools, simulate at least three branches, and checkpoint the run so another execution can resume it.
+```
+
+Pass conditions:
+
+- Records D Research as unavailable and does not invent a D Research ledger, HMAC sidecar, or research import receipt.
+- Populates the standard evidence map only from opened host-native sources with explicit retrieval provenance, dates, confidence, and contradiction status.
+- Caps assurance at `limited`; neither a high diagnostic score nor evidence saturation upgrades it to `verified` or `calibrated`.
+- Keeps any public-role research execution separate from the sealed offline roleplay execution; roleplay sees no research tools, raw captures, evidence map, or excluded claims.
+- Persists research-wave counters, sources examined, unresolved critical gaps, and the next-wave queue. If a host limit interrupts before saturation, records `saturation_reached: false` and a `host_limit:` stop reason instead of claiming completion.
+
 ## Package checks
 
 Run:
 
 ```powershell
-python scripts\validate_skill_package.py .
-python scripts\validate_simulation_artifacts.py --examples
-python -m unittest discover -s tests -v
-python scripts\preflight.py --json
+python "$env:ALEPH_SKILL_ROOT\scripts\validate_skill_package.py" "$env:ALEPH_SKILL_ROOT"
+python "$env:ALEPH_SKILL_ROOT\scripts\validate_simulation_artifacts.py" --examples
+python -m unittest discover -s "$env:ALEPH_SKILL_ROOT\tests" -v
+python "$env:ALEPH_SKILL_ROOT\scripts\preflight.py" --json
 ```
 
 If forward-testing with subagents is allowed by the host runtime, pass only the skill path and one prompt. Do not pass expected answers.

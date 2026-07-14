@@ -9,7 +9,14 @@ from pathlib import Path
 from typing import Any
 
 from . import FORMULA_VERSION, SCHEMA_VERSION, VALIDATOR_VERSION
-from .io import canonical_hash, sha256_bytes, sha256_file, write_bytes_atomic, write_json_atomic
+from .io import (
+    canonical_hash,
+    load_json_secure,
+    sha256_bytes,
+    sha256_file,
+    write_bytes_atomic,
+    write_json_atomic,
+)
 from .quality import evaluate
 from .validator import artifact_integrity_hash, manifest_integrity_payload, validate_workspace
 
@@ -121,14 +128,21 @@ def finalize_workspace(workspace: Path, *, require_report: bool = True) -> dict[
         return {"ok": False, "exit_code": 1, "validation": validation, "finalized": False}
 
     manifest_path = workspace / "simulation-manifest.json"
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    manifest, manifest_issues = load_json_secure(manifest_path)
+    if manifest_issues or not isinstance(manifest, dict):
+        details = "; ".join(value.legacy_string() for value in manifest_issues)
         return {
             "ok": False,
             "exit_code": 1,
             "finalized": False,
-            "issues": [{"code": "INVALID_ARTIFACT", "severity": "error", "artifact": "simulation-manifest.json", "message": str(exc)}],
+            "issues": [
+                {
+                    "code": "INVALID_ARTIFACT",
+                    "severity": "error",
+                    "artifact": "simulation-manifest.json",
+                    "message": details or "manifest must be a JSON object",
+                }
+            ],
         }
 
     transaction_id = f"finalize:{uuid.uuid4()}"

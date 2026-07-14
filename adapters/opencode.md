@@ -27,14 +27,16 @@ OpenCode can hide, ask, or allow skills through `opencode.json`. Do not ship thi
 
 ## Install command
 
+Set `ALEPH_SKILL_ROOT` to the absolute source directory; the commands do not assume the process working directory.
+
 Dry-run first:
 
 ```powershell
-python scripts\install_adapters.py --target opencode --scope user --dry-run
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target opencode --scope user --dry-run
 ```
 
 Copy after review:
 
 ```powershell
-python scripts\install_adapters.py --target opencode --scope user --copy
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target opencode --scope user --copy
 ```

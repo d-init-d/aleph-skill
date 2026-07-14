@@ -254,6 +254,8 @@ class MigrationV2RegressionTests(unittest.TestCase):
             self.assertEqual(migrated["migration"]["target_schema_version"], "2.0.0")
             assumption_ref = migrated["change_point"]["assumption_ref"]
             self.assertIn(assumption_ref, {item["id"] for item in migrated["assumptions"]})
+            migrated_nodes = json.loads((source / "nodes.json").read_text(encoding="utf-8"))
+            self.assertTrue(all("probability" not in node for node in migrated_nodes))
             self.assertEqual(
                 {item["statement"] for item in migrated["assumptions"]},
                 {

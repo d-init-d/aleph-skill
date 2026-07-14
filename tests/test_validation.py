@@ -105,6 +105,7 @@ class InstallerSecurityTests(unittest.TestCase):
             (dest / "keep.txt").write_text("x", encoding="utf-8")
             result = install(src, dest, mode="symlink", force=True)
             self.assertEqual(result.get("status"), "refused")
+            self.assertFalse(result.get("ok"), result)
             self.assertTrue((dest / "keep.txt").exists())
 
 
@@ -191,6 +192,17 @@ class ValidFixtureTests(unittest.TestCase):
                 any(i.get("actual") == "totally_unknown_xyz" or "totally_unknown_xyz" in str(i.get("pointer", "")) for i in unknown_issues),
                 msg=unknown_issues,
             )
+
+    def test_uncalibrated_node_probability_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            shutil.copytree(FIXTURES / "schema-2.0-valid", ws, dirs_exist_ok=True)
+            nodes = json.loads((ws / "nodes.json").read_text(encoding="utf-8"))
+            nodes[0]["probability"] = 1.0
+            write_json_atomic(ws / "nodes.json", nodes)
+            result = validate_workspace(ws, mode="final", require_report=True)
+            self.assertEqual(result["status"], "fail")
+            self.assertIn("PROBABILITY_UNCALIBRATED", result["error_codes"])
 
     def test_unknown_manifest_field_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -461,6 +473,13 @@ class TimelineHelperTests(unittest.TestCase):
 
 
 class RendererPathTests(unittest.TestCase):
+    def test_uncalibrated_renderer_labels_weights_as_non_probability(self) -> None:
+        rendered = render(FIXTURES / "schema-2.0-valid")
+        self.assertIn("## Future monitoring and likelihood updates", rendered)
+        self.assertIn("comparative scenario rankings, not probabilities", rendered)
+        self.assertNotIn("Branch probabilities are", rendered)
+        self.assertNotIn("revising probability mass", rendered)
+
     def test_renderer_refuses_escape(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             ws = Path(tmp)

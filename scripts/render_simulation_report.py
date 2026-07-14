@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from _lib import load_csv_rows, load_json, utc_now, write_text
+from aleph.io import load_jsonl_secure
 from aleph.paths import resolve_in_workspace
 from aleph.validator import validate_workspace
 
@@ -15,7 +16,10 @@ from aleph.validator import validate_workspace
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows, issues = load_jsonl_secure(path)
+    if issues:
+        raise ValueError("; ".join(value.legacy_string() for value in issues))
+    return rows
 
 
 def cell(value: Any) -> str:
@@ -56,7 +60,11 @@ def render(workspace: Path) -> str:
             _, issues = resolve_in_workspace(workspace, rel, must_exist=False, require_file=False)
             if issues:
                 raise ValueError(f"artifact_paths.{key} escapes workspace: {[i.code for i in issues]}")
-    branches = _safe_load(workspace, str(artifacts.get("branch_ledger", "branch-ledger.json"))).get("branches", [])
+    branch_ledger = _safe_load(
+        workspace,
+        str(artifacts.get("branch_ledger", "branch-ledger.json")),
+    )
+    branches = branch_ledger.get("branches", [])
     nodes = _safe_load(workspace, str(artifacts.get("nodes", "nodes.json")))
     edges = _safe_load(workspace, str(artifacts.get("edges", "edges.json")))
     actors = _safe_load(workspace, str(artifacts.get("actors", "actors.json")))
@@ -72,6 +80,11 @@ def render(workspace: Path) -> str:
     execution = manifest.get("execution", {})
     adaptive = execution.get("adaptive_scope", {})
     control = execution.get("research_control", {})
+    likelihood_mode = (
+        manifest.get("likelihood_mode")
+        or branch_ledger.get("likelihood_mode")
+        or "relative_weight"
+    )
     direct_statuses = {"opened", "downloaded", "api", "local-file", "user-provided"}
     direct_count = sum(1 for row in evidence_rows if row.get("retrieval_status") in direct_statuses)
     high_quality = sum(
@@ -193,7 +206,9 @@ def render(workspace: Path) -> str:
             "",
             "## Scenario branches",
             "",
-            table_row(["Branch", "Likelihood value", "Confidence", "End time", "End state"]),
+            table_row(
+                ["Branch", "Likelihood-mode value", "Evidence confidence", "End time", "End state"]
+            ),
             table_row(["---", "---:", "---:", "---", "---"]),
         ]
     )
@@ -211,7 +226,7 @@ def render(workspace: Path) -> str:
         )
 
     if frame.get("future_projection"):
-        lines.extend(["", "## Future monitoring and probability updates", ""])
+        lines.extend(["", "## Future monitoring and likelihood updates", ""])
         for branch in ranked_branches:
             lines.append(f"### {branch.get('name', branch.get('id', 'Branch'))}")
             lines.append("")
@@ -288,14 +303,25 @@ def render(workspace: Path) -> str:
         source_cell = f"[{source}]({source})" if source.startswith(("http://", "https://")) else source
         lines.append(table_row([row.get("evidence_id"), row.get("source_tier"), row.get("confidence"), row.get("claim"), source_cell]))
 
+    lines.extend(["", "## Warnings and next steps", ""])
+    if likelihood_mode == "calibrated_probability":
+        lines.extend(
+            [
+                "- Calibrated branch probabilities are conditional estimates, not certainties.",
+                "- Re-run the calibrated model when monitoring indicators, evidence, or assumptions change; do not revise probability mass in prose.",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "- Branch `relative_weight` values are comparative scenario rankings, not probabilities.",
+                "- Re-run the simulation when monitoring indicators, evidence, or assumptions change; do not reinterpret weights as probability mass.",
+            ]
+        )
     lines.extend(
         [
-            "",
-            "## Warnings and next steps",
-            "",
-            "- Branch probabilities are conditional estimates and must be updated when monitoring indicators change.",
+            "- Compare observed indicators with each branch's disconfirming conditions before updating the declared likelihood mode.",
             "- Re-run research, contradiction checks, validation, and quality scoring after changing evidence or assumptions.",
-            "- For future projections, compare observed indicators with each branch's disconfirming conditions before revising probability mass.",
             "",
         ]
     )

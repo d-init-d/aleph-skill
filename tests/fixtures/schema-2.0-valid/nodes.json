@@ -23,7 +23,7 @@
     ],
     "status": "fact",
     "timeline": "observed_baseline",
-    "probability": 1.0,
+    "probability": null,
     "confidence": 0.9,
     "alternative_explanations": [
       "Fiscal dominance could constrain autonomy."
@@ -62,7 +62,7 @@
     ],
     "status": "simulation",
     "timeline": "simulated_branch",
-    "probability": 1.0,
+    "probability": null,
     "confidence": 0.7,
     "assumption_ref": "assumption:change-point",
     "alternative_explanations": [
@@ -102,7 +102,7 @@
     ],
     "status": "simulation",
     "timeline": "simulated_branch",
-    "probability": 0.7,
+    "probability": null,
     "confidence": 0.55,
     "assumption_ref": "assumption:change-point",
     "alternative_explanations": [
@@ -140,7 +140,7 @@
     ],
     "status": "fact",
     "timeline": "shared_baseline",
-    "probability": 1.0,
+    "probability": null,
     "confidence": 0.85,
     "alternative_explanations": [
       "Capital controls could close the channel."

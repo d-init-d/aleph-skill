@@ -11,6 +11,7 @@ from .import_ledger import import_d_research_ledger, render_evidence_csv
 from .io import canonical_hash, load_json_secure, load_jsonl_secure, sha256_file
 from .packets import (
     receipt_binds_ledger_artifacts,
+    validate_actor_protocol,
     verify_receipt_artifact_bytes,
     verify_receipt_chain,
 )
@@ -185,12 +186,43 @@ def _roleplay_tier(
     rows, row_issues = load_jsonl_secure(path)
     if row_issues or not rows:
         return "D"
+    actors_ref = paths.get("actors", "actors.json")
+    actors_path, actor_path_issues = resolve_in_workspace(
+        workspace,
+        str(actors_ref),
+        must_exist=True,
+        require_file=True,
+    )
+    if actors_path is None or actor_path_issues:
+        return "D"
+    actors_data, actor_load_issues = load_json_secure(actors_path)
+    if actor_load_issues or not isinstance(actors_data, list):
+        return "D"
+    material_actor_values = [
+        actor
+        for actor in actors_data
+        if isinstance(actor, dict) and actor.get("materiality") == "material"
+    ]
+    actor_by_id = {
+        str(actor.get("id")): actor
+        for actor in material_actor_values
+        if isinstance(actor.get("id"), str)
+    }
+    if len(material_actor_values) != material_actors or len(actor_by_id) != material_actors:
+        return "D"
     actor_ids = {str(row.get("actor_id")) for row in rows if row.get("track") == "roleplay"}
-    if len(actor_ids) != material_actors:
+    if len(actor_ids) != material_actors or actor_ids != set(actor_by_id):
         return "D"
     unsigned_valid = True
     hmac_valid = hmac_key is not None
     have_references = True
+    protocol_issues = validate_actor_protocol(
+        actors_data,
+        rows,
+        manifest=manifest,
+        workspace=workspace,
+    )
+    semantic_valid = not any(item.severity == "error" for item in protocol_issues)
     for actor_id in actor_ids:
         research_rows = [row for row in rows if row.get("actor_id") == actor_id and row.get("track") == "research"]
         roleplay_rows = [row for row in rows if row.get("actor_id") == actor_id and row.get("track") == "roleplay"]
@@ -258,9 +290,9 @@ def _roleplay_tier(
         )
         unsigned_valid = unsigned_valid and bool(unsigned.get("ok"))
         hmac_valid = hmac_valid and bool(signed.get("ok"))
-    if have_references and hmac_valid:
+    if semantic_valid and have_references and hmac_valid:
         return "A"
-    if have_references and unsigned_valid:
+    if semantic_valid and have_references and unsigned_valid:
         return "B"
     return "C"
 

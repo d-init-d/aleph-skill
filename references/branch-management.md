@@ -16,6 +16,14 @@ Never convert roleplay confidence or evidence confidence into branch probability
 
 Each branch records ID/name, likelihood mode, `relative_weight` or calibrated `probability`, summary, trace, decision points, end state, indicators, disconfirming conditions, evidence IDs, uncertainty/warnings, derivation, trace hash, and unresolved mass.
 
+Likelihood fields are mode-exact:
+
+- `deterministic` has exactly one non-stress branch, no probability, and zero unresolved mass; an optional weight is exactly `1`;
+- `relative_weight` gives every branch a positive weight, forbids non-null probability, and requires weights plus ledger `unresolved_mass` to sum to `1`;
+- `calibrated_probability` gives every non-stress branch a probability, forbids relative weights, requires complete ledger-level calibration metadata, and requires probabilities plus `unresolved_mass` to sum to `1`; a separately marked stress branch may keep probability null.
+
+Actor adjudication and predicted responses use the same manifest likelihood mode, normalize independently, and cannot self-authorize calibration or mix likelihood field types.
+
 Numerical branch ledgers use exactly one derivation contract:
 
 - `analyst_authored` means an adjudicator created the scenario interpretation. Every branch binds the actual propagation-trace digest and must leave `representative_run`, `engine_cluster_id`, and `member_count` absent or null. It must not imply that an engine emitted the narrative branch.

@@ -10,7 +10,7 @@
 
 Aleph Skill biến câu hỏi “nếu như?” thành mô hình có thể kiểm toán: chứng cứ tạo thành cấu trúc nhân quả có kiểu, trace có thể replay và nhiều timeline với chế độ likelihood được khai báo rõ.
 
-Core dùng chung hoạt động với Codex, OpenCode, Claude Code, Agent Skills, Gemini/Copilot CLI, Cursor, VS Code, Windsurf, Cline, Roo Code, Continue, JetBrains, Grok Build, Aider và CLI tùy biến.
+Aleph có một core dùng chung, trung lập với host. Codex, OpenCode, Claude Code, Agent Skills, Gemini/Copilot CLI, Cursor, VS Code, Windsurf, Cline, Roo Code và JetBrains có thể nạp thư mục skill native. Continue dùng project rule được sinh tự động. Grok Build, Aider và CLI tùy biến dùng profile adapter dạng hợp đồng để host hoặc wrapper triển khai.
 
 ## Tổng quan
 
@@ -44,7 +44,9 @@ Không dùng skill để tuyên bố một tương lai là chắc chắn, profil
 
 Agent đọc `SKILL.md` làm điểm vào, sau đó chỉ tải các reference và template cần cho kịch bản. Helper cục bộ đảm nhiệm khởi tạo/migrate workspace, import research đã ký, compile/run/replay mô hình, sensitivity, hindcast, validate domain pack/artifact, render báo cáo, finalize receipt và kiểm tra package phân phối.
 
-Để có lớp chứng cứ mạnh nhất, nên dùng cùng [D Research](https://github.com/d-init-d/d-research-skill), companion skill cho nghiên cứu bằng trình duyệt và evidence workflow có thể kiểm toán. Aleph Skill giữ vai trò mô phỏng nhân quả; D Research được khuyến nghị chứ không bundle kèm, để skill vẫn portable.
+Để có lớp chứng cứ mạnh nhất, nên dùng cùng [D Research](https://github.com/d-init-d/d-research-skill), companion skill cho nghiên cứu bằng trình duyệt và evidence workflow có thể kiểm toán. Aleph Skill giữ vai trò mô phỏng nhân quả; D Research được khuyến nghị chứ không bundle kèm, để skill vẫn portable. Nếu D Research không có, Aleph có thể tạo evidence map giàu provenance bằng công cụ nghiên cứu hợp pháp của host, nhưng fallback này bị giới hạn ở assurance `limited` và không được giả lập ledger có chữ ký hay import receipt của D Research.
+
+Profile cho CLI ngoài chỉ mô tả probe phiên bản, bootstrap, ranh giới capability, yêu cầu cô lập và receipt. Việc cài profile không tự tạo subagent, tool isolation hay orchestration; host hoặc wrapper phải triển khai và xác nhận các kiểm soát đó.
 
 ## Vòng đời workflow
 
@@ -94,68 +96,83 @@ aleph-skill/
 
 ```powershell
 git clone https://github.com/d-init-d/aleph-skill.git
-cd aleph-skill
+$env:ALEPH_SKILL_ROOT = (Resolve-Path ".\aleph-skill").Path
 ```
+
+Với POSIX shell, đặt cùng quy ước đường dẫn tuyệt đối bằng `export ALEPH_SKILL_ROOT="$(cd aleph-skill && pwd)"`. Host native lấy thư mục chứa `SKILL.md`; adapter project thường lấy `<project>/.aleph/core/aleph-skill`. Helper của Aleph không phụ thuộc current working directory.
 
 Dry-run cài adapter:
 
 ```powershell
-python scripts\install_adapters.py --target codex --scope user --dry-run
-python scripts\install_adapters.py --target claude-code --scope user --dry-run
-python scripts\install_adapters.py --target opencode --scope user --dry-run
-python scripts\install_adapters.py --target agents --scope user --dry-run
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target codex --scope user --dry-run
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target claude-code --scope user --dry-run
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target opencode --scope user --dry-run
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target agents --scope user --dry-run
 ```
 
 Gemini CLI dùng trực tiếp thư mục Agent Skills chuẩn:
 
 ```powershell
-python scripts\install_adapters.py --target gemini-cli --scope user --copy
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target gemini-cli --scope user --copy
 ```
 
-Adapter mỏng cho IDE và CLI ngoài chỉ cài ở scope project. Installer sẽ chép
-rule/profile cùng core đã xác minh vào `.aleph/core/aleph-skill`, sau đó ghi
-một receipt chung:
+Target skill native cài package đã xác minh vào thư mục skill đã khai báo. Continue và adapter CLI ngoài chỉ cài ở scope project: installer chép rule/profile cùng core đã xác minh vào `.aleph/core/aleph-skill`, sau đó ghi một receipt chung. Profile ngoài vẫn là hợp đồng adapter, không phải orchestration turnkey.
 
 ```powershell
-python scripts\install_adapters.py --target cursor --scope project --project-dir <project> --copy --receipt <project>\.aleph\install-receipt.json
-python scripts\install_adapters.py --target grok-build --scope project --project-dir <project> --copy --receipt <project>\.aleph\install-receipt.json
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target cursor --scope project --project-dir <project> --copy --receipt <project>\.aleph\install-receipt.json
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target grok-build --scope project --project-dir <project> --copy --receipt <project>\.aleph\install-receipt.json
 ```
 
-Đường dẫn skill phổ biến:
+Các vị trí cài đặt được hỗ trợ:
 
 | Runtime | User / global path | Project path |
 |---|---|---|
-| Codex | `~/.codex/skills/aleph-skill` | tùy runtime |
+| Codex | `~/.agents/skills/aleph-skill` | `.agents/skills/aleph-skill` |
 | Claude Code | `~/.claude/skills/aleph-skill` | `.claude/skills/aleph-skill` |
 | OpenCode | `~/.config/opencode/skills/aleph-skill` | `.opencode/skills/aleph-skill` |
 | Gemini CLI | `~/.gemini/skills/aleph-skill` | `.gemini/skills/aleph-skill` |
-| GitHub Copilot CLI | `~/.copilot/skills/aleph-skill` | `.copilot/skills/aleph-skill` |
+| GitHub Copilot CLI / VS Code | `~/.copilot/skills/aleph-skill` | `.github/skills/aleph-skill` |
+| Cline | `~/.cline/skills/aleph-skill` | `.cline/skills/aleph-skill` |
+| Roo Code | `~/.roo/skills/aleph-skill` | `.roo/skills/aleph-skill` |
+| Cursor | `~/.cursor/skills/aleph-skill` | `.cursor/skills/aleph-skill` |
+| Windsurf | `~/.codeium/windsurf/skills/aleph-skill` | `.windsurf/skills/aleph-skill` |
+| JetBrains AI Assistant | IDE quản lý theo sản phẩm/OS | `.agents/skills/aleph-skill` |
+| Continue | không có | `.continue/rules/aleph.md` và `.aleph/core/aleph-skill` |
 | Generic Agent Skills | `~/.agents/skills/aleph-skill` | `.agents/skills/aleph-skill` |
+| Grok Build / Aider / generic CLI | không có | `.aleph/profiles/<target>.json` và `.aleph/core/aleph-skill` |
 
 ## Kiểm tra
 
+Khi nâng một workspace 2.0.0 hiện có, hãy giữ nguyên một bản sao lưu và chạy validation ở chế độ draft trước. v2.0.1 vẫn dùng `schema_version: 2.0.0`, nhưng các contract chặt hơn về likelihood, D Research, privacy và sealed roleplay có thể yêu cầu tạo lại report, packet/receipt và numerical artifact trước khi final validation đạt. Không dùng migrator 1.x hoặc sửa hash bằng tay cho lượt repair này.
+
 ```powershell
-python scripts\validate_skill_package.py .
-python scripts\validate_simulation_artifacts.py --examples
-python scripts\preflight.py --json
-npm run self-test
+python "$env:ALEPH_SKILL_ROOT\scripts\validate_skill_package.py" "$env:ALEPH_SKILL_ROOT"
+python "$env:ALEPH_SKILL_ROOT\scripts\validate_simulation_artifacts.py" --examples
+python "$env:ALEPH_SKILL_ROOT\scripts\preflight.py" --json
+npm --prefix "$env:ALEPH_SKILL_ROOT" run self-test
+```
+
+Maintainer có thể tiếp tục tạo release asset deterministic, khớp chính xác distribution manifest:
+
+```powershell
+npm --prefix "$env:ALEPH_SKILL_ROOT" run release:build
 ```
 
 Với một workspace mô phỏng đã hoàn tất:
 
 ```powershell
-python scripts\validate_simulation_artifacts.py --workspace <run-dir> --mode draft --write-report
-python scripts\render_simulation_report.py --workspace <run-dir>
-python scripts\validate_simulation_artifacts.py --workspace <run-dir> --mode final --require-report --write-report
-python scripts\evaluate_simulation_quality.py --workspace <run-dir> --threshold 90 --enforce
+python "$env:ALEPH_SKILL_ROOT\scripts\validate_simulation_artifacts.py" --workspace <run-dir> --mode draft --write-report
+python "$env:ALEPH_SKILL_ROOT\scripts\render_simulation_report.py" --workspace <run-dir>
+python "$env:ALEPH_SKILL_ROOT\scripts\validate_simulation_artifacts.py" --workspace <run-dir> --mode final --require-report --write-report
+python "$env:ALEPH_SKILL_ROOT\scripts\evaluate_simulation_quality.py" --workspace <run-dir> --threshold 90 --enforce
 ```
 
 ## Prompt mẫu
 
 ```text
-Use $aleph-skill to simulate an oil price +40% shock starting June 2026.
+Use $aleph-skill to simulate an oil price +40% shock, with both the observation cutoff and shock start set to 2026-06-01.
 Focus on inflation, central-bank reaction, growth, shipping, and emerging markets over 24 months.
-Use D Research where available for the evidence layer, keep sourced actor dossiers separate from simulated decisions,
+Use compatible D Research where available, otherwise use the limited host-native evidence fallback; keep sourced actor dossiers separate from simulated decisions,
 and produce at least three branches with relative weights, indicators, contradictions, and uncertainty warnings.
 ```
 

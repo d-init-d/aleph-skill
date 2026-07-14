@@ -67,7 +67,8 @@
       "saturation_reached": true,
       "consecutive_no_new_material_claims": 2,
       "stop_reason": "Fixture claims covered.",
-      "unresolved_critical_gaps": []
+      "unresolved_critical_gaps": [],
+      "next_wave_queue": []
     },
     "d_research": {
       "status": "unavailable",

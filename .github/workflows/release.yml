@@ -1,0 +1,93 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/verify.yml
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify annotated tag and main commit
+        shell: bash
+        run: |
+          test "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" = "tag"
+          git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+          test "$(git rev-parse "refs/tags/$GITHUB_REF_NAME^{commit}")" = \
+            "$(git rev-parse refs/remotes/origin/main)"
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.11.18"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install locked dependencies
+        run: uv sync --locked --python 3.13
+      - name: Verify package version
+        shell: bash
+        run: |
+          uv run --no-sync python - <<'PY'
+          import os
+          from aleph import PACKAGE_VERSION
+
+          expected = f"v{PACKAGE_VERSION}"
+          actual = os.environ["GITHUB_REF_NAME"]
+          if actual != expected:
+              raise SystemExit(f"tag/version mismatch: expected {expected}, got {actual}")
+          PY
+      - name: Build manifest-exact assets twice
+        shell: bash
+        run: |
+          uv run --no-sync python scripts/build_release_assets.py --output-dir dist
+          uv run --no-sync python scripts/build_release_assets.py --output-dir dist-repro
+          cmp "dist/aleph-skill-$GITHUB_REF_NAME.zip" "dist-repro/aleph-skill-$GITHUB_REF_NAME.zip"
+          cmp dist/distribution-manifest.json dist-repro/distribution-manifest.json
+          cmp dist/SHA256SUMS.txt dist-repro/SHA256SUMS.txt
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: "dist/*"
+      - name: Publish the GitHub Release once
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=".github/release-notes/$GITHUB_REF_NAME.md"
+          test -f "$notes"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "::error::Release $GITHUB_REF_NAME already exists; refusing to modify it."
+            exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --verify-tag \
+            --title "Aleph Skill $GITHUB_REF_NAME" \
+            --notes-file "$notes" \
+            --latest

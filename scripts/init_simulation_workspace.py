@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import calendar
+import copy
 import csv
 import datetime as dt
 import io
@@ -115,6 +116,7 @@ def build_workspace(args: argparse.Namespace) -> Path:
         "consecutive_no_new_material_claims": 0,
         "stop_reason": "",
         "unresolved_critical_gaps": [],
+        "next_wave_queue": [],
     }
     manifest["execution"]["d_research"] = {"status": "unknown", "invoked": False}
     manifest["execution"]["subagents"] = {
@@ -137,7 +139,7 @@ def build_workspace(args: argparse.Namespace) -> Path:
 
     node = load_json(templates / "timeline-node.json")
     node["time"] = change_date.isoformat()
-    entity = json.loads(json.dumps(node))
+    entity = copy.deepcopy(node)
     entity.update(
         {
             "id": "entity:example",
@@ -145,10 +147,10 @@ def build_workspace(args: argparse.Namespace) -> Path:
             "name": "Example Public-Role Actor",
             "status": "fact",
             "timeline": "observed_baseline",
-            "probability": 1.0,
+            "probability": None,
             "confidence": 0.5,
             "time": cutoff_date.isoformat(),
-            "description": "A public-role entity placeholder linked coherently to the draft actor dossier.",
+            "description": "A public-role entity linked coherently to the initialized draft actor dossier.",
             "state_before": {"summary": "Public role exists at the observation cutoff."},
             "trigger": {"kind": "context", "description": "Institutional baseline."},
             "mechanism": "The entity participates only through its declared public institutional role.",
@@ -159,7 +161,7 @@ def build_workspace(args: argparse.Namespace) -> Path:
         }
     )
     entity.pop("assumption_ref", None)
-    target = json.loads(json.dumps(node))
+    target = copy.deepcopy(node)
     target.update(
         {
             "id": "factor:target",
@@ -172,7 +174,7 @@ def build_workspace(args: argparse.Namespace) -> Path:
             "baseline": 0.0,
         }
     )
-    context = json.loads(json.dumps(entity))
+    context = copy.deepcopy(entity)
     context.update(
         {
             "id": "context:baseline",
@@ -218,7 +220,7 @@ def build_workspace(args: argparse.Namespace) -> Path:
     (workspace / "evidence-map.csv").write_text(
         evidence_buffer.getvalue(), encoding="utf-8", newline="\n"
     )
-    trace = json.loads((templates / "propagation-trace.jsonl").read_text(encoding="utf-8").strip())
+    trace = load_json(templates / "propagation-trace.jsonl")
     trace["time"] = change_date.isoformat()
     trace.pop("hash_chain", None)
     trace["hash_chain"] = canonical_hash({"previous_hash": None, "row": trace})

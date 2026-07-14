@@ -16,7 +16,13 @@ import re
 from pathlib import Path
 from typing import Any, TypeGuard, cast
 
-from .io import canonical_hash, load_json_secure, sha256_file
+from .io import (
+    ResourceLimitError,
+    canonical_hash,
+    load_json_secure,
+    load_json_secure_with_digest,
+    sha256_file,
+)
 from .issues import Issue, issue
 from .privacy import DOXXING_PATTERNS, SENSITIVE_KEYS, SENSITIVE_VALUE_PATTERNS
 from .schema import parse_time
@@ -124,6 +130,16 @@ def _normalise_field_name(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "_", str(value).lower()).strip("_")
 
 
+def _unknown_keys(value: dict[Any, Any], allowed: frozenset[str]) -> list[Any]:
+    return sorted((key for key in value if not isinstance(key, str) or key not in allowed), key=str)
+
+
+def _nonempty_string_set(value: Any) -> set[str]:
+    if not isinstance(value, list):
+        return set()
+    return {item for item in value if isinstance(item, str) and item.strip()}
+
+
 def _scan_sealed_value(value: Any, pointer: str, issues: list[Issue], *, roleplay: bool) -> None:
     """Recursively reject hidden PII, private motives, likelihood, or evidence."""
     if isinstance(value, dict):
@@ -160,6 +176,41 @@ def freeze_dossier(dossier: dict[str, Any]) -> dict[str, Any]:
     frozen["dossier_hash_algorithm"] = "sha256-canonical-json-v1"
     dossier_hash = canonical_hash(frozen)
     return {"dossier": frozen, "dossier_hash": dossier_hash}
+
+
+def scenario_contract_payload(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Return the stable scenario identity used by sealed actor packets."""
+    fields = (
+        "schema_version",
+        "simulation_id",
+        "change_point",
+        "temporal_frame",
+        "scope",
+        "assumptions",
+        "active_contexts",
+    )
+    return {field: copy.deepcopy(manifest[field]) for field in fields if field in manifest}
+
+
+def scenario_contract_hash(manifest: dict[str, Any]) -> str:
+    """Hash scenario semantics while excluding mutable execution and receipt state."""
+    return canonical_hash(scenario_contract_payload(manifest))
+
+
+def dossier_contract_payload(actor: dict[str, Any]) -> dict[str, Any]:
+    """Return a public-role dossier projection stable across roleplay/finalization."""
+    payload = copy.deepcopy(actor)
+    for field in ("roleplay_track", "adjudication", "predicted_responses"):
+        payload.pop(field, None)
+    research = payload.get("research_track")
+    claims = research.get("claims") if isinstance(research, dict) else []
+    payload["research_track"] = {"claims": copy.deepcopy(claims if isinstance(claims, list) else [])}
+    return payload
+
+
+def dossier_contract_hash(actor: dict[str, Any]) -> str:
+    """Hash the stable public-role dossier and its research claims."""
+    return canonical_hash(dossier_contract_payload(actor))
 
 
 def build_knowledge_packet(
@@ -283,12 +334,12 @@ def build_knowledge_packet(
     }
 
 
-def validate_knowledge_packet(packet: dict[str, Any]) -> list[Issue]:
+def validate_knowledge_packet(packet: Any) -> list[Issue]:
     """Revalidate a serialized packet and its canonical hash."""
     problems: list[Issue] = []
     if not isinstance(packet, dict):
         return [issue("TYPE", pointer="packet", message="packet must be an object")]
-    for key in sorted(set(packet) - KNOWLEDGE_PACKET_FIELDS):
+    for key in _unknown_keys(packet, KNOWLEDGE_PACKET_FIELDS):
         problems.append(issue("UNKNOWN_FIELD", pointer=f"packet/{key}", message="packet field is not allowed"))
     for key in KNOWLEDGE_PACKET_FIELDS - {"packet_hash"}:
         if key not in packet:
@@ -308,7 +359,18 @@ def validate_knowledge_packet(packet: dict[str, Any]) -> list[Issue]:
         problems.append(issue("HARD_GATE", pointer="packet/frozen", message="knowledge packet is not frozen"))
     stored = packet.get("packet_hash")
     body = {key: value for key, value in packet.items() if key != "packet_hash"}
-    if not _valid_hash(stored) or stored != canonical_hash(body):
+    try:
+        expected_packet_hash = canonical_hash(body)
+    except (TypeError, ValueError, UnicodeEncodeError, RecursionError, OverflowError) as exc:
+        expected_packet_hash = None
+        problems.append(
+            issue(
+                "TYPE",
+                pointer="packet",
+                message=f"packet is not canonical-JSON serializable: {type(exc).__name__}",
+            )
+        )
+    if not _valid_hash(stored) or stored != expected_packet_hash:
         problems.append(issue("STALE_ARTIFACT", pointer="packet/packet_hash", message="knowledge packet hash mismatch"))
     cutoff = parse_time(packet.get("knowledge_cutoff"))
     decision = parse_time(packet.get("decision_time"))
@@ -325,17 +387,20 @@ def validate_knowledge_packet(packet: dict[str, Any]) -> list[Issue]:
         if not isinstance(claim, dict):
             problems.append(issue("TYPE", pointer=f"packet/claims/{index}"))
             continue
-        for key in sorted(set(claim) - KNOWLEDGE_CLAIM_FIELDS):
+        for key in _unknown_keys(claim, KNOWLEDGE_CLAIM_FIELDS):
             problems.append(issue("UNKNOWN_FIELD", pointer=f"packet/claims/{index}/{key}", message="claim field is not allowed"))
         claim_id = claim.get("id")
-        if not _valid_id(claim_id) or claim_id in seen_claims:
-            problems.append(issue("DUPLICATE_ID" if claim_id in seen_claims else "EMPTY_ID", pointer=f"packet/claims/{index}/id", actual=claim_id))
+        if not _valid_id(claim_id):
+            problems.append(issue("EMPTY_ID", pointer=f"packet/claims/{index}/id", actual=claim_id))
+        elif claim_id in seen_claims:
+            problems.append(issue("DUPLICATE_ID", pointer=f"packet/claims/{index}/id", actual=claim_id))
         else:
             seen_claims.add(claim_id)
         available = parse_time(claim.get("available_at"))
         if available is None or cutoff is None or available > cutoff:
             problems.append(issue("PACKET_CUTOFF", pointer=f"packet/claims/{index}"))
-        if claim.get("actor_access") not in ACTOR_ACCESS_ALLOWED:
+        actor_access = claim.get("actor_access")
+        if not isinstance(actor_access, str) or actor_access not in ACTOR_ACCESS_ALLOWED:
             problems.append(issue("TEMPORAL_KNOWLEDGE", pointer=f"packet/claims/{index}/actor_access"))
         if not isinstance(claim.get("text"), str) or not claim.get("text", "").strip():
             problems.append(issue("MISSING_FIELD", pointer=f"packet/claims/{index}/text"))
@@ -351,14 +416,19 @@ def validate_knowledge_packet(packet: dict[str, Any]) -> list[Issue]:
     return problems
 
 
-def validate_roleplay_output(output: dict[str, Any], packet: dict[str, Any]) -> dict[str, Any]:
-    """Validate a roleplay response as a sealed, evidence-free hypothesis set."""
-    issues = validate_knowledge_packet(packet)
+def _validate_roleplay_output_issues(
+    output: Any,
+    packet: Any,
+    *,
+    include_packet_issues: bool,
+) -> list[Issue]:
+    issues = validate_knowledge_packet(packet) if include_packet_issues else []
+    packet_data: dict[str, Any] = packet if isinstance(packet, dict) else {}
     if not isinstance(output, dict):
         issues.append(issue("TYPE", pointer="roleplay_output", message="output must be an object"))
-        return {"ok": False, "issues": [item.to_dict() for item in issues]}
+        return issues
     _scan_sealed_value(output, "roleplay_output", issues, roleplay=True)
-    for key in sorted(set(output) - ROLEPLAY_OUTPUT_FIELDS):
+    for key in _unknown_keys(output, ROLEPLAY_OUTPUT_FIELDS):
         issues.append(issue("UNKNOWN_FIELD", pointer=f"roleplay_output/{key}", message="roleplay field is not allowed"))
     for key in (
         "packet_hash",
@@ -376,9 +446,9 @@ def validate_roleplay_output(output: dict[str, Any], packet: dict[str, Any]) -> 
     for key in ("probability", "confidence", "relative_weight", "evidence", "facts", "sources", "private_motive"):
         if key in output:
             issues.append(issue("ROLEPLAY_PROBABILITY" if key in {"probability", "confidence", "relative_weight"} else "ROLEPLAY_EVIDENCE", pointer=f"roleplay_output/{key}", message="forbidden roleplay field"))
-    if output.get("packet_hash") != packet.get("packet_hash"):
+    if output.get("packet_hash") != packet_data.get("packet_hash"):
         issues.append(issue("STALE_ARTIFACT", pointer="roleplay_output/packet_hash", message="response is not bound to this packet"))
-    if output.get("actor_id") != packet.get("actor_id") or output.get("decision_id") != packet.get("decision_id"):
+    if output.get("actor_id") != packet_data.get("actor_id") or output.get("decision_id") != packet_data.get("decision_id"):
         issues.append(issue("TRACK_MISMATCH", pointer="roleplay_output", message="actor/decision mismatch"))
     if output.get("status") != "completed":
         issues.append(issue("INCOMPLETE", pointer="roleplay_output/status", expected="completed", actual=output.get("status")))
@@ -390,7 +460,9 @@ def validate_roleplay_output(output: dict[str, Any], packet: dict[str, Any]) -> 
     if tools_used != []:
         issues.append(issue("ROLEPLAY_NETWORK", message="roleplay cannot call tools"))
 
-    allowed = set(packet.get("allowed_actions") or [])
+    allowed = _nonempty_string_set(packet_data.get("allowed_actions"))
+    sealed_constraints = _nonempty_string_set(packet_data.get("institutional_constraints"))
+    sealed_unknowns = _nonempty_string_set(packet_data.get("explicit_unknowns"))
     hypotheses = output.get("hypotheses")
     if not isinstance(hypotheses, list) or len(hypotheses) < 2:
         issues.append(issue("MISSING_FIELD", pointer="roleplay_output/hypotheses", message="at least two hypotheses required"))
@@ -401,12 +473,14 @@ def validate_roleplay_output(output: dict[str, Any], packet: dict[str, Any]) -> 
         if not isinstance(hypothesis, dict):
             issues.append(issue("TYPE", pointer=pointer))
             continue
-        for key in sorted(set(hypothesis) - ROLEPLAY_HYPOTHESIS_FIELDS):
+        for key in _unknown_keys(hypothesis, ROLEPLAY_HYPOTHESIS_FIELDS):
             code = "ROLEPLAY_PROBABILITY" if key in {"probability", "confidence", "relative_weight"} else "UNKNOWN_FIELD"
             issues.append(issue(code, pointer=f"{pointer}/{key}", message="field is not allowed in a roleplay hypothesis"))
         hypothesis_id = hypothesis.get("id")
-        if not _valid_id(hypothesis_id) or hypothesis_id in seen_ids:
-            issues.append(issue("DUPLICATE_ID" if hypothesis_id in seen_ids else "EMPTY_ID", pointer=f"{pointer}/id", actual=hypothesis_id))
+        if not _valid_id(hypothesis_id):
+            issues.append(issue("EMPTY_ID", pointer=f"{pointer}/id", actual=hypothesis_id))
+        elif hypothesis_id in seen_ids:
+            issues.append(issue("DUPLICATE_ID", pointer=f"{pointer}/id", actual=hypothesis_id))
         else:
             seen_ids.add(hypothesis_id)
         action = hypothesis.get("action")
@@ -424,14 +498,18 @@ def validate_roleplay_output(output: dict[str, Any], packet: dict[str, Any]) -> 
         elif PRIVATE_MOTIVE_RE.search(reasoning):
             issues.append(issue("PRIVACY_REFUSAL", pointer=f"{pointer}/public_role_reasoning", message="private motive or sensitive inference refused"))
         constraints_applied = hypothesis.get("constraints_applied")
-        if not isinstance(constraints_applied, list):
-            issues.append(issue("MISSING_FIELD", pointer=f"{pointer}/constraints_applied"))
-        elif any(value not in set(packet.get("institutional_constraints") or []) for value in constraints_applied):
+        if not isinstance(constraints_applied, list) or not all(
+            isinstance(value, str) and value.strip() for value in constraints_applied
+        ):
+            issues.append(issue("TYPE", pointer=f"{pointer}/constraints_applied", message="must be a string array"))
+        elif any(value not in sealed_constraints for value in constraints_applied):
             issues.append(issue("ROLEPLAY_EVIDENCE", pointer=f"{pointer}/constraints_applied", message="constraint was not present in the sealed packet"))
         known_unknowns = hypothesis.get("known_unknowns")
-        if not isinstance(known_unknowns, list):
-            issues.append(issue("MISSING_FIELD", pointer=f"{pointer}/known_unknowns"))
-        elif any(value not in set(packet.get("explicit_unknowns") or []) for value in known_unknowns):
+        if not isinstance(known_unknowns, list) or not all(
+            isinstance(value, str) and value.strip() for value in known_unknowns
+        ):
+            issues.append(issue("TYPE", pointer=f"{pointer}/known_unknowns", message="must be a string array"))
+        elif any(value not in sealed_unknowns for value in known_unknowns):
             issues.append(issue("ROLEPLAY_EVIDENCE", pointer=f"{pointer}/known_unknowns", message="unknown was not present in the sealed packet"))
         triggers = hypothesis.get("triggers")
         if triggers is not None and (
@@ -440,7 +518,16 @@ def validate_roleplay_output(output: dict[str, Any], packet: dict[str, Any]) -> 
             or not all(isinstance(value, str) and value.strip() for value in triggers)
         ):
             issues.append(issue("TYPE", pointer=f"{pointer}/triggers", message="triggers must be a non-empty string array"))
-    return {"ok": not any(item.severity == "error" for item in issues), "issues": [item.to_dict() for item in issues]}
+    return issues
+
+
+def validate_roleplay_output(output: Any, packet: Any) -> dict[str, Any]:
+    """Validate a roleplay response as a sealed, evidence-free hypothesis set."""
+    issues = _validate_roleplay_output_issues(output, packet, include_packet_issues=True)
+    return {
+        "ok": not any(item.severity == "error" for item in issues),
+        "issues": [item.to_dict() for item in issues],
+    }
 
 
 def adjudicate(
@@ -640,17 +727,263 @@ def _decision_actions(actor: dict[str, Any]) -> list[str]:
         values = graph
     else:
         values = []
+    if not isinstance(values, list):
+        return []
     actions: list[str] = []
     for value in values:
-        if isinstance(value, str):
-            actions.append(value)
-        elif isinstance(value, dict) and isinstance(value.get("action"), str):
-            actions.append(value["action"])
+        if isinstance(value, str) and value.strip():
+            actions.append(value.strip())
+        elif isinstance(value, dict) and isinstance(value.get("action"), str) and value["action"].strip():
+            actions.append(value["action"].strip())
     return actions
 
 
+def _load_retained_json_artifact(
+    workspace: Path,
+    relative: Any,
+    expected_hash: Any,
+    *,
+    pointer: str,
+) -> tuple[dict[str, Any] | None, list[Issue]]:
+    """Load one whole-file JSON artifact and bind it to its ledger digest."""
+    from .paths import resolve_in_workspace
+
+    problems: list[Issue] = []
+    if not isinstance(relative, str) or not relative.strip() or "#" in relative:
+        problems.append(
+            issue(
+                "TRACK_LEDGER",
+                pointer=pointer,
+                message="sealed roleplay artifacts require a whole-file workspace-relative path",
+                actual=relative,
+            )
+        )
+        return None, problems
+    path, path_issues = resolve_in_workspace(
+        workspace,
+        relative,
+        must_exist=True,
+        require_file=True,
+    )
+    problems.extend(path_issues)
+    if path is None or path_issues:
+        return None, problems
+    data, actual_hash, load_issues = load_json_secure_with_digest(path)
+    problems.extend(load_issues)
+    if load_issues:
+        return None, problems
+    if expected_hash != actual_hash:
+        problems.append(
+            issue(
+                "STALE_ARTIFACT",
+                artifact=relative,
+                pointer=pointer,
+                message="ledger digest does not bind retained artifact bytes",
+                expected=expected_hash,
+                actual=actual_hash,
+            )
+        )
+    if not isinstance(data, dict):
+        problems.append(
+            issue(
+                "TYPE",
+                artifact=relative,
+                pointer=pointer,
+                message="sealed roleplay artifact must be a JSON object",
+            )
+        )
+        return None, problems
+    return data, problems
+
+
+def _normalise_roleplay_hypotheses(value: Any) -> Any:
+    """Canonicalise the two supported reasoning aliases for track binding."""
+    if not isinstance(value, list):
+        return value
+    normalised: list[Any] = []
+    for raw in value:
+        if not isinstance(raw, dict):
+            normalised.append(raw)
+            continue
+        hypothesis = copy.deepcopy(raw)
+        public_reasoning = hypothesis.pop("public_role_reasoning", None)
+        if "reasoning" not in hypothesis and public_reasoning is not None:
+            hypothesis["reasoning"] = public_reasoning
+        normalised.append(hypothesis)
+    return normalised
+
+
+def validate_retained_roleplay_artifacts(
+    workspace: Path,
+    actor: dict[str, Any],
+    research_row: dict[str, Any],
+    roleplay_row: dict[str, Any],
+    manifest: dict[str, Any],
+) -> list[Issue]:
+    """Verify that retained receipt artifacts implement the sealed actor protocol."""
+    problems: list[Issue] = []
+    actor_id = actor.get("id")
+    packet_ref = research_row.get("output_artifact")
+    roleplay_input_ref = roleplay_row.get("input_artifact")
+    if roleplay_input_ref != packet_ref:
+        problems.append(
+            issue(
+                "TRACK_MISMATCH",
+                pointer=f"{actor_id}/roleplay/input_artifact",
+                message="roleplay must consume the exact packet file emitted by research",
+                expected=packet_ref,
+                actual=roleplay_input_ref,
+            )
+        )
+    if roleplay_row.get("input_hash") != research_row.get("output_hash"):
+        problems.append(
+            issue(
+                "TRACK_MISMATCH",
+                pointer=f"{actor_id}/roleplay/input_hash",
+                message="roleplay input digest must equal the frozen research packet digest",
+                expected=research_row.get("output_hash"),
+                actual=roleplay_row.get("input_hash"),
+            )
+        )
+
+    packet, packet_load_issues = _load_retained_json_artifact(
+        workspace,
+        packet_ref,
+        research_row.get("output_hash"),
+        pointer=f"{actor_id}/research/output_artifact",
+    )
+    problems.extend(packet_load_issues)
+    output, output_load_issues = _load_retained_json_artifact(
+        workspace,
+        roleplay_row.get("output_artifact"),
+        roleplay_row.get("output_hash"),
+        pointer=f"{actor_id}/roleplay/output_artifact",
+    )
+    problems.extend(output_load_issues)
+    if packet is None or output is None:
+        return problems
+
+    problems.extend(validate_knowledge_packet(packet))
+    problems.extend(
+        _validate_roleplay_output_issues(output, packet, include_packet_issues=False)
+    )
+
+    raw_research_track = actor.get("research_track")
+    research_track = raw_research_track if isinstance(raw_research_track, dict) else {}
+    raw_roleplay_track = actor.get("roleplay_track")
+    roleplay_track = raw_roleplay_track if isinstance(raw_roleplay_track, dict) else {}
+    actions = _decision_actions(actor)
+    for field, expected, actual in (
+        ("actor_id", actor_id, packet.get("actor_id")),
+        ("allowed_actions", actions, packet.get("allowed_actions")),
+        ("knowledge_cutoff", roleplay_track.get("knowledge_cutoff"), packet.get("knowledge_cutoff")),
+        ("packet_hash", roleplay_track.get("packet_hash"), packet.get("packet_hash")),
+        ("dossier_hash", dossier_contract_hash(actor), packet.get("dossier_hash")),
+        ("scenario_hash", scenario_contract_hash(manifest), packet.get("scenario_hash")),
+    ):
+        if actual != expected:
+            problems.append(
+                issue(
+                    "TRACK_MISMATCH",
+                    pointer=f"{actor_id}/packet/{field}",
+                    message="retained packet does not match the actor dossier",
+                    expected=expected,
+                    actual=actual,
+                )
+            )
+
+    raw_actor_claims = research_track.get("claims")
+    actor_claims = raw_actor_claims if isinstance(raw_actor_claims, list) else []
+    actor_claims_by_id = {
+        claim.get("id"): claim
+        for claim in actor_claims
+        if isinstance(claim, dict) and isinstance(claim.get("id"), str)
+    }
+    for index, packet_claim in enumerate(packet.get("claims") or []):
+        if not isinstance(packet_claim, dict):
+            continue
+        source_claim = actor_claims_by_id.get(packet_claim.get("id"))
+        if not isinstance(source_claim, dict):
+            problems.append(
+                issue(
+                    "TRACK_MISMATCH",
+                    pointer=f"{actor_id}/packet/claims/{index}",
+                    message="packet claim does not resolve to the frozen research dossier",
+                    actual=packet_claim.get("id"),
+                )
+            )
+            continue
+        access_basis = str(source_claim.get("access_basis") or "").strip()
+        expected_claim = {
+            "id": source_claim.get("id"),
+            "text": str(source_claim.get("claim") or source_claim.get("text") or "").strip(),
+            "available_at": source_claim.get("available_at"),
+            "actor_access": source_claim.get("actor_access") or source_claim.get("access_basis"),
+            "access_basis": access_basis,
+        }
+        if packet_claim != expected_claim:
+            problems.append(
+                issue(
+                    "TRACK_MISMATCH",
+                    pointer=f"{actor_id}/packet/claims/{index}",
+                    message="packet claim differs from the frozen research dossier",
+                    expected=expected_claim,
+                    actual=packet_claim,
+                )
+            )
+
+    if research_track.get("artifact") != packet_ref:
+        problems.append(
+            issue(
+                "TRACK_MISMATCH",
+                pointer=f"{actor_id}/research_track/artifact",
+                message="research track must reference its retained sealed packet output",
+                expected=packet_ref,
+                actual=research_track.get("artifact"),
+            )
+        )
+    output_ref = roleplay_row.get("output_artifact")
+    if roleplay_track.get("artifact") != output_ref:
+        problems.append(
+            issue(
+                "TRACK_MISMATCH",
+                pointer=f"{actor_id}/roleplay_track/artifact",
+                message="roleplay track must reference its retained output artifact",
+                expected=output_ref,
+                actual=roleplay_track.get("artifact"),
+            )
+        )
+    expected_execution = roleplay_track.get("execution_id")
+    if output.get("execution_id") != expected_execution or roleplay_row.get("execution_id") != expected_execution:
+        problems.append(
+            issue(
+                "TRACK_MISMATCH",
+                pointer=f"{actor_id}/roleplay_output/execution_id",
+                message="retained output, actor track, and ledger execution IDs must match",
+                expected=expected_execution,
+                actual={
+                    "output": output.get("execution_id"),
+                    "ledger": roleplay_row.get("execution_id"),
+                },
+            )
+        )
+    expected_hypotheses = _normalise_roleplay_hypotheses(roleplay_track.get("hypotheses"))
+    actual_hypotheses = _normalise_roleplay_hypotheses(output.get("hypotheses"))
+    if canonical_hash(actual_hypotheses) != canonical_hash(expected_hypotheses):
+        problems.append(
+            issue(
+                "TRACK_MISMATCH",
+                pointer=f"{actor_id}/roleplay_output/hypotheses",
+                message="retained roleplay hypotheses do not match the actor track",
+                expected=expected_hypotheses,
+                actual=actual_hypotheses,
+            )
+        )
+    return problems
+
+
 def receipt_binds_ledger_artifacts(receipt: dict[str, Any], row: dict[str, Any]) -> bool:
-    """Return whether a receipt binds the exact ledger input and output digests."""
+    """Return whether a receipt binds exactly the ledger's one input and output."""
     for receipt_field, artifact_field, hash_field in (
         ("inputs", "input_artifact", "input_hash"),
         ("outputs", "output_artifact", "output_hash"),
@@ -658,11 +991,13 @@ def receipt_binds_ledger_artifacts(receipt: dict[str, Any], row: dict[str, Any])
         descriptors = receipt.get(receipt_field)
         artifact = row.get(artifact_field)
         digest = row.get(hash_field)
-        if not isinstance(descriptors, list) or not any(
-            isinstance(descriptor, dict)
-            and (descriptor.get("path") == artifact or descriptor.get("id") == artifact)
-            and descriptor.get("sha256") == digest
-            for descriptor in descriptors
+        if not isinstance(descriptors, list) or len(descriptors) != 1:
+            return False
+        descriptor = descriptors[0]
+        if (
+            not isinstance(descriptor, dict)
+            or descriptor.get("path") != artifact
+            or descriptor.get("sha256") != digest
         ):
             return False
     return True
@@ -704,7 +1039,7 @@ def verify_receipt_artifact_bytes(receipt: dict[str, Any], workspace: Path) -> l
                 continue
             try:
                 actual = sha256_file(path)
-            except OSError as exc:
+            except (OSError, ResourceLimitError) as exc:
                 problems.append(issue("INVALID_ARTIFACT", artifact=relative, message=str(exc)))
                 continue
             if descriptor.get("sha256") != actual:
@@ -856,7 +1191,7 @@ def validate_human_track_ledger(
             (research_row, "research", research_track),
             (roleplay_row, "roleplay", roleplay_track),
         ):
-            for field in ("agent_ref", "started_at", "completed_at", "status"):
+            for field in ("agent_ref", "execution_id", "started_at", "completed_at", "status"):
                 if track_data.get(field) != row.get(field):
                     issues.append(issue("TRACK_MISMATCH", pointer=f"{actor_id}/{track_name}/{field}", expected=track_data.get(field), actual=row.get(field)))
         packet_hash = roleplay_track.get("packet_hash")
@@ -875,7 +1210,7 @@ def validate_actor_protocol(
     workspace: Path | None = None,
 ) -> list[Issue]:
     """Public integration hook for validator/finalizer actor hard gates."""
-    del branches, manifest  # Reserved for branch/adjudication cross-checks.
+    del branches  # Reserved for branch/adjudication cross-checks.
     issues = validate_human_track_ledger(human_ledger_rows, actors, workspace)
     for actor in actors if isinstance(actors, list) else []:
         if not isinstance(actor, dict) or actor.get("materiality") != "material":
@@ -883,12 +1218,32 @@ def validate_actor_protocol(
         actions = _decision_actions(actor)
         raw_roleplay_track = actor.get("roleplay_track")
         roleplay_track: dict[str, Any] = raw_roleplay_track if isinstance(raw_roleplay_track, dict) else {}
-        packet = {
-            "packet_hash": roleplay_track.get("packet_hash"),
-            "actor_id": actor.get("id"),
-            "decision_id": roleplay_track.get("decision_id") or "decision:main",
-            "allowed_actions": actions,
-        }
+        actor_id = actor.get("id")
+        if workspace is not None:
+            research_rows = [
+                row
+                for row in human_ledger_rows
+                if isinstance(row, dict)
+                and row.get("actor_id") == actor_id
+                and row.get("track") == "research"
+            ]
+            roleplay_rows = [
+                row
+                for row in human_ledger_rows
+                if isinstance(row, dict)
+                and row.get("actor_id") == actor_id
+                and row.get("track") == "roleplay"
+            ]
+            if len(research_rows) == 1 and len(roleplay_rows) == 1:
+                issues.extend(
+                    validate_retained_roleplay_artifacts(
+                        workspace,
+                        actor,
+                        research_rows[0],
+                        roleplay_rows[0],
+                        manifest if isinstance(manifest, dict) else {},
+                    )
+                )
         for index, hypothesis in enumerate(roleplay_track.get("hypotheses") or []):
             pointer = f"{actor.get('id')}/roleplay_track/hypotheses/{index}"
             if not isinstance(hypothesis, dict):
@@ -910,7 +1265,4 @@ def validate_actor_protocol(
                     issues.append(issue("PRIVACY_REFUSAL", pointer=f"{pointer}/{reasoning_field}"))
         if len(roleplay_track.get("hypotheses") or []) < 2:
             issues.append(issue("HUMAN_TRACK", pointer=f"{actor.get('id')}/roleplay_track/hypotheses", message="at least two hypotheses required"))
-        # The synthetic packet above is only used for action binding; full packet
-        # integrity is checked when the packet artifact is loaded.
-        del packet
     return issues

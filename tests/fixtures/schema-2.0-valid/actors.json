@@ -16,6 +16,12 @@
         "hold"
       ]
     },
+    "institutional_constraints": [
+      "published committee mandate"
+    ],
+    "uncertainty_factors": [
+      "future committee vote timing"
+    ],
     "research_track": {
       "status": "completed",
       "execution_mode": "isolated-pass",
@@ -23,7 +29,7 @@
       "execution_id": "execution:research-governor",
       "started_at": "2026-07-01T10:00:00Z",
       "completed_at": "2026-07-01T11:00:00Z",
-      "artifact": "research-governor.md",
+      "artifact": "packet-governor.json",
       "notes": "Public role research only",
       "isolation_note": "no subagents",
       "claims": [
@@ -46,11 +52,11 @@
       "execution_id": "execution:roleplay-governor",
       "started_at": "2026-07-01T12:00:00Z",
       "completed_at": "2026-07-01T13:00:00Z",
-      "artifact": "roleplay-governor.md",
+      "artifact": "roleplay-governor.json",
       "notes": "Sealed packet roleplay",
       "isolation_note": "no subagents",
       "knowledge_cutoff": "2026-01-01",
-      "packet_hash": "7a8051a29b2e0bf7c8253e8990175dff3b256d63c3701d31a75f0562ff9967f4",
+      "packet_hash": "87f93e8c506045ad64a2e063117402b0bbfb8de0867d165ac4c86b89633d36b8",
       "dossier_evidence_ids": [
         "evidence:policy-statute"
       ],
@@ -58,14 +64,26 @@
         {
           "id": "hypothesis:hike",
           "action": "hike_25bp",
-          "reasoning": "Inflation above target with stable growth.",
+          "reasoning": "The published mandate and institutional process permit a 25bp hike.",
+          "constraints_applied": [
+            "published committee mandate"
+          ],
+          "known_unknowns": [
+            "future committee vote timing"
+          ],
           "status": "simulation",
           "evidence_ids": []
         },
         {
           "id": "hypothesis:hold",
           "action": "hold",
-          "reasoning": "Data-dependent pause after prior hikes.",
+          "reasoning": "The same institutional process permits holding while vote timing remains unknown.",
+          "constraints_applied": [
+            "published committee mandate"
+          ],
+          "known_unknowns": [
+            "future committee vote timing"
+          ],
           "status": "simulation",
           "evidence_ids": []
         }

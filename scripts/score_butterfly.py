@@ -9,7 +9,7 @@ from typing import Any, cast
 
 from _lib import write_json
 from aleph.formula import amplification_ratio
-from aleph.io import load_jsonl_secure
+from aleph.io import load_json_secure, load_jsonl_secure
 from aleph.paths import resolve_in_workspace
 from aleph.schema import is_number
 from aleph.validator import validate_workspace
@@ -94,7 +94,15 @@ def main() -> None:
         }
         print(json.dumps(result, indent=2, ensure_ascii=False))
         raise SystemExit(1)
-    manifest = json.loads((ws / "simulation-manifest.json").read_text(encoding="utf-8"))
+    manifest, manifest_issues = load_json_secure(ws / "simulation-manifest.json")
+    if manifest_issues or not isinstance(manifest, dict):
+        result = {
+            "status": "fail",
+            "code": "INVALID_ARTIFACT",
+            "issues": [value.to_dict() for value in manifest_issues],
+        }
+        print(json.dumps(result, indent=2))
+        raise SystemExit(1)
     declared = (manifest.get("artifact_paths") or {}).get("propagation_trace", "propagation-trace.jsonl")
     requested = args.trace or declared
     if requested != declared:

@@ -12,7 +12,7 @@ Vietnamese overview: [README.vi.md](README.vi.md)
 
 > Aleph Skill turns a “what if?” into an auditable scenario model: evidence becomes typed causal structure, executable traces, and alternative timelines with explicit uncertainty and calibrated likelihood only when justified.
 
-It has one host-neutral core for Codex, OpenCode, Claude Code, Agent Skills, Gemini CLI, Copilot CLI, Cursor, VS Code, Windsurf, Cline, Roo Code, Continue, JetBrains, Grok Build, Aider, and generic CLIs.
+It has one host-neutral core. Codex, OpenCode, Claude Code, Agent Skills, Gemini CLI, Copilot CLI, Cursor, VS Code, Windsurf, Cline, Roo Code, and JetBrains can load native skill directories. Continue uses a generated project rule. Grok Build, Aider, and generic CLIs use declarative adapter profiles implemented by their host or wrapper.
 
 ## At a glance
 
@@ -46,7 +46,9 @@ This repository is a portable Agent Skill package, not a hosted forecasting serv
 
 An agent reads `SKILL.md` as the entry point, then loads only the reference files and templates needed for the scenario. The local helpers initialize and migrate workspaces, import signed research, compile/run/replay models, execute sensitivity and hindcast checks, validate domain packs and artifacts, render reports, finalize receipts, and verify the distributable package. They support the workflow; they do not replace the agent’s reasoning.
 
-For the strongest evidence layer, pair Aleph Skill with [D Research](https://github.com/d-init-d/d-research-skill), a companion skill for browser-first research and auditable evidence workflows. Aleph remains the causal simulation layer; D Research is recommended rather than bundled, so the skill stays portable.
+For the strongest evidence layer, pair Aleph Skill with [D Research](https://github.com/d-init-d/d-research-skill), a companion skill for browser-first research and auditable evidence workflows. Aleph remains the causal simulation layer; D Research is recommended rather than bundled, so the skill stays portable. If D Research is unavailable, Aleph can build a provenance-rich evidence map with the host's lawful research tools, but that fallback is capped at `limited` assurance and never fabricates a signed D Research ledger or import receipt.
+
+External-CLI profiles describe version probes, bootstrap instructions, capability boundaries, isolation requirements, and receipt expectations. Installing one does not create subagents, tool isolation, or orchestration by itself; the selected host or wrapper must implement and attest those controls.
 
 ## Workflow lifecycle
 
@@ -98,70 +100,85 @@ Clone the repository:
 
 ```powershell
 git clone https://github.com/d-init-d/aleph-skill.git
-cd aleph-skill
+$env:ALEPH_SKILL_ROOT = (Resolve-Path ".\aleph-skill").Path
 ```
+
+For POSIX shells, set the same absolute convention with `export ALEPH_SKILL_ROOT="$(cd aleph-skill && pwd)"`. Native hosts resolve the directory containing `SKILL.md`; project adapters normally resolve `<project>/.aleph/core/aleph-skill`. Aleph helpers never depend on the process working directory.
 
 Dry-run adapter installation:
 
 ```powershell
-python scripts\install_adapters.py --target codex --scope user --dry-run
-python scripts\install_adapters.py --target claude-code --scope user --dry-run
-python scripts\install_adapters.py --target opencode --scope user --dry-run
-python scripts\install_adapters.py --target agents --scope user --dry-run
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target codex --scope user --dry-run
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target claude-code --scope user --dry-run
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target opencode --scope user --dry-run
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target agents --scope user --dry-run
 ```
 
 Gemini CLI uses its native Agent Skills directories:
 
 ```powershell
-python scripts\install_adapters.py --target gemini-cli --scope user --copy
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target gemini-cli --scope user --copy
 ```
 
-Thin IDE and external-CLI adapters are project-scoped. Their installer copies
-the selected rule/profile and the same verified core to
-`.aleph/core/aleph-skill`, then writes one combined receipt:
+Native skill targets install the verified package in their declared skill directory. Continue and external-CLI adapters are project-scoped: their installer copies the selected rule/profile and the same verified core to `.aleph/core/aleph-skill`, then writes one combined receipt. External profiles remain adapter contracts rather than turnkey orchestration.
 
 ```powershell
-python scripts\install_adapters.py --target cursor --scope project --project-dir <project> --copy --receipt <project>\.aleph\install-receipt.json
-python scripts\install_adapters.py --target grok-build --scope project --project-dir <project> --copy --receipt <project>\.aleph\install-receipt.json
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target cursor --scope project --project-dir <project> --copy --receipt <project>\.aleph\install-receipt.json
+python "$env:ALEPH_SKILL_ROOT\scripts\install_adapters.py" --target grok-build --scope project --project-dir <project> --copy --receipt <project>\.aleph\install-receipt.json
 ```
 
-Supported skill locations:
+Supported install locations:
 
 | Runtime | User / global path | Project path |
 |---|---|---|
-| Codex | `~/.codex/skills/aleph-skill` | runtime-dependent |
+| Codex | `~/.agents/skills/aleph-skill` | `.agents/skills/aleph-skill` |
 | Claude Code | `~/.claude/skills/aleph-skill` | `.claude/skills/aleph-skill` |
 | OpenCode | `~/.config/opencode/skills/aleph-skill` | `.opencode/skills/aleph-skill` |
 | Gemini CLI | `~/.gemini/skills/aleph-skill` | `.gemini/skills/aleph-skill` |
-| GitHub Copilot CLI | `~/.copilot/skills/aleph-skill` | `.copilot/skills/aleph-skill` |
+| GitHub Copilot CLI / VS Code | `~/.copilot/skills/aleph-skill` | `.github/skills/aleph-skill` |
+| Cline | `~/.cline/skills/aleph-skill` | `.cline/skills/aleph-skill` |
+| Roo Code | `~/.roo/skills/aleph-skill` | `.roo/skills/aleph-skill` |
+| Cursor | `~/.cursor/skills/aleph-skill` | `.cursor/skills/aleph-skill` |
+| Windsurf | `~/.codeium/windsurf/skills/aleph-skill` | `.windsurf/skills/aleph-skill` |
+| JetBrains AI Assistant | IDE-managed, product/OS-specific | `.agents/skills/aleph-skill` |
+| Continue | none | `.continue/rules/aleph.md` plus `.aleph/core/aleph-skill` |
 | Generic Agent Skills | `~/.agents/skills/aleph-skill` | `.agents/skills/aleph-skill` |
+| Grok Build / Aider / generic CLI | none | `.aleph/profiles/<target>.json` plus `.aleph/core/aleph-skill` |
 
 ## Verification
+
+When upgrading an existing 2.0.0 workspace, keep an untouched backup and run draft validation first. v2.0.1 keeps `schema_version: 2.0.0`, but its stricter likelihood, D Research, privacy, and sealed-roleplay contracts can require report, packet/receipt, and numerical-artifact regeneration before final validation succeeds. Do not use the 1.x schema migrator or hand-edit hashes for this repair pass.
 
 Run the local release gate:
 
 ```powershell
-python scripts\validate_skill_package.py .
-python scripts\validate_simulation_artifacts.py --examples
-python scripts\preflight.py --json
-npm run self-test
+python "$env:ALEPH_SKILL_ROOT\scripts\validate_skill_package.py" "$env:ALEPH_SKILL_ROOT"
+python "$env:ALEPH_SKILL_ROOT\scripts\validate_simulation_artifacts.py" --examples
+python "$env:ALEPH_SKILL_ROOT\scripts\preflight.py" --json
+npm --prefix "$env:ALEPH_SKILL_ROOT" run self-test
+```
+
+Maintainers can then build the deterministic, distribution-manifest-exact release assets:
+
+```powershell
+npm --prefix "$env:ALEPH_SKILL_ROOT" run release:build
 ```
 
 For a completed simulation workspace:
 
 ```powershell
-python scripts\validate_simulation_artifacts.py --workspace <run-dir> --mode draft --write-report
-python scripts\render_simulation_report.py --workspace <run-dir>
-python scripts\validate_simulation_artifacts.py --workspace <run-dir> --mode final --require-report --write-report
-python scripts\evaluate_simulation_quality.py --workspace <run-dir> --threshold 90 --enforce
+python "$env:ALEPH_SKILL_ROOT\scripts\validate_simulation_artifacts.py" --workspace <run-dir> --mode draft --write-report
+python "$env:ALEPH_SKILL_ROOT\scripts\render_simulation_report.py" --workspace <run-dir>
+python "$env:ALEPH_SKILL_ROOT\scripts\validate_simulation_artifacts.py" --workspace <run-dir> --mode final --require-report --write-report
+python "$env:ALEPH_SKILL_ROOT\scripts\evaluate_simulation_quality.py" --workspace <run-dir> --threshold 90 --enforce
 ```
 
 ## Example prompt
 
 ```text
-Use $aleph-skill to simulate an oil price +40% shock starting June 2026.
+Use $aleph-skill to simulate an oil price +40% shock, with both the observation cutoff and shock start set to 2026-06-01.
 Focus on inflation, central-bank reaction, growth, shipping, and emerging markets over 24 months.
-Use D Research where available for the evidence layer, keep sourced actor dossiers separate from simulated decisions,
+Use compatible D Research where available, otherwise use the limited host-native evidence fallback; keep sourced actor dossiers separate from simulated decisions,
 and produce at least three branches with relative weights, indicators, contradictions, and uncertainty warnings.
 ```
 

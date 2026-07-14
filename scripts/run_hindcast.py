@@ -5,7 +5,8 @@ import json
 from pathlib import Path
 
 from aleph import EXIT_OK, EXIT_SEMANTIC, EXIT_USAGE
-from aleph.io import canonical_hash, write_json_atomic
+from aleph.io import canonical_hash, load_json_secure, write_json_atomic
+from aleph.issues import Issue
 from aleph.packs import evaluate_hindcast_case
 from aleph.paths import output_alias_issues
 
@@ -21,12 +22,15 @@ def main() -> None:
     if not case_path.is_file():
         print(json.dumps({"ok": False, "error": "case not found"}, indent=2))
         raise SystemExit(EXIT_USAGE)
-    try:
-        case = json.loads(case_path.read_text(encoding="utf-8"))
-        policy = json.loads(Path(args.policy).resolve().read_text(encoding="utf-8")) if args.policy else None
-    except (OSError, json.JSONDecodeError) as exc:
-        print(json.dumps({"ok": False, "error": str(exc)}, indent=2))
-        raise SystemExit(EXIT_SEMANTIC) from exc
+    case, case_issues = load_json_secure(case_path)
+    policy = None
+    policy_issues: list[Issue] = []
+    if args.policy:
+        policy, policy_issues = load_json_secure(Path(args.policy).resolve())
+    if case_issues or policy_issues:
+        problems = [value.to_dict() for value in [*case_issues, *policy_issues]]
+        print(json.dumps({"ok": False, "issues": problems}, indent=2))
+        raise SystemExit(EXIT_SEMANTIC)
     if not isinstance(case, dict) or (policy is not None and not isinstance(policy, dict)):
         print(json.dumps({"ok": False, "error": "case/policy must be JSON objects"}, indent=2))
         raise SystemExit(EXIT_SEMANTIC)

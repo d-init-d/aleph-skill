@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from _lib import skill_root
+from _lib import load_json, skill_root
 from aleph import EXIT_OK, EXIT_SEMANTIC
 
 
@@ -24,51 +24,147 @@ def run(cmd: list[str], cwd: Path) -> dict[str, Any]:
     }
 
 
+def append_adversarial_results(
+    workspace: Path,
+    *,
+    root: Path,
+    scripts: Path,
+    results: list[dict[str, Any]],
+) -> None:
+    if not workspace.is_dir():
+        results.append(
+            {
+                "cmd": ["fixture", str(workspace)],
+                "returncode": EXIT_SEMANTIC,
+                "stdout_full": "",
+                "stdout": "",
+                "stderr": f"adversarial fixture directory not found: {workspace}",
+                "stage": "adversarial-fixture",
+                "pass": False,
+            }
+        )
+        return
+
+    validation = run(
+        [
+            sys.executable,
+            str(scripts / "validate_simulation_artifacts.py"),
+            "--workspace",
+            str(workspace),
+            "--mode",
+            "final",
+        ],
+        root,
+    )
+    validation["expect_nonzero"] = True
+    try:
+        validation_data = json.loads(validation["stdout_full"])
+    except json.JSONDecodeError:
+        validation_data = None
+    validation_codes = (
+        validation_data.get("error_codes") if isinstance(validation_data, dict) else None
+    )
+    validation["pass"] = (
+        validation["returncode"] == EXIT_SEMANTIC
+        and isinstance(validation_data, dict)
+        and validation_data.get("status") == "fail"
+        and isinstance(validation_codes, list)
+        and "UNKNOWN_FIELD" in validation_codes
+    )
+    results.append(validation)
+
+    quality = run(
+        [
+            sys.executable,
+            str(scripts / "evaluate_simulation_quality.py"),
+            "--workspace",
+            str(workspace),
+            "--json",
+        ],
+        root,
+    )
+    try:
+        data = json.loads(quality["stdout_full"])
+        quality["pass"] = (
+            quality["returncode"] == EXIT_OK
+            and isinstance(data, dict)
+            and data.get("assurance_tier") not in {"verified", "calibrated"}
+            and data.get("validation_status") != "pass"
+        )
+    except json.JSONDecodeError:
+        quality["pass"] = False
+    results.append(quality)
+
+
+def derive_adversarial_fixture(source: Path, destination: Path) -> Path:
+    """Create a disposable, deterministic invalid workspace from a valid fixture."""
+    if not source.is_dir():
+        return destination
+    shutil.copytree(source, destination)
+    manifest_path = destination / "simulation-manifest.json"
+    manifest = load_json(manifest_path)
+    if not isinstance(manifest, dict):
+        raise ValueError("valid fixture manifest must be an object")
+    manifest["forged_release_claim"] = "verified"
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return destination
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Adversarial acceptance matrix.")
     parser.add_argument("--adversarial", help="Path to adversarial workspace")
+    parser.add_argument(
+        "--skip-unit-tests",
+        action="store_true",
+        help="Skip the unit suite when the caller has already run it.",
+    )
+    parser.add_argument(
+        "--skip-component-checks",
+        action="store_true",
+        help="Skip pack and adapter checks when the caller has already run them.",
+    )
     args = parser.parse_args()
     root = skill_root()
     scripts = root / "scripts"
-    results = []
+    results: list[dict[str, Any]] = []
 
     # Unit tests
-    results.append(run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"], root))
-
-    # Adversarial must fail
-    adv = Path(args.adversarial) if args.adversarial else root.parent / "test-output" / "adversarial-completed"
-    if not adv.is_dir():
-        adv = root / "tests" / "fixtures" / "adversarial"
-    if adv.is_dir():
-        r = run(
-            [sys.executable, str(scripts / "validate_simulation_artifacts.py"), "--workspace", str(adv), "--mode", "final"],
-            root,
+    if not args.skip_unit_tests:
+        results.append(
+            run(
+                [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"],
+                root,
+            )
         )
-        r["expect_nonzero"] = True
-        r["pass"] = r["returncode"] != 0
-        results.append(r)
-        # quality must not be verified/calibrated
-        q = run(
-            [
-                sys.executable,
-                str(scripts / "evaluate_simulation_quality.py"),
-                "--workspace",
-                str(adv),
-                "--json",
-            ],
-            root,
-        )
-        try:
-            data = json.loads(q["stdout_full"])
-            q["pass"] = data.get("assurance_tier") not in {"verified", "calibrated"} and data.get("validation_status") != "pass"
-        except json.JSONDecodeError:
-            q["pass"] = q["returncode"] != 0
-        results.append(q)
 
-    # Packs
-    results.append(run([sys.executable, str(scripts / "validate_domain_packs.py")], root))
-    # Adapters
-    results.append(run([sys.executable, str(scripts / "check_adapters.py")], root))
+    # Adversarial validation must fail without modifying a committed fixture.
+    if args.adversarial:
+        append_adversarial_results(
+            Path(args.adversarial).expanduser().resolve(),
+            root=root,
+            scripts=scripts,
+            results=results,
+        )
+    else:
+        with tempfile.TemporaryDirectory(prefix="aleph-adversarial-") as temporary:
+            derived = derive_adversarial_fixture(
+                root / "tests" / "fixtures" / "schema-2.0-valid",
+                Path(temporary) / "adversarial",
+            )
+            append_adversarial_results(
+                derived,
+                root=root,
+                scripts=scripts,
+                results=results,
+            )
+
+    # Packs and adapters
+    if not args.skip_component_checks:
+        results.append(run([sys.executable, str(scripts / "validate_domain_packs.py")], root))
+        results.append(run([sys.executable, str(scripts / "check_adapters.py")], root))
 
     # Portable init smoke and a complete compile -> run -> replay -> sensitivity
     # -> hindcast -> finalize -> strict revalidation lifecycle.
@@ -106,6 +202,23 @@ def main() -> None:
         )
         init_result["stage"] = "portable-init"
         results.append(init_result)
+        init_validation = run(
+            [
+                sys.executable,
+                str(scripts / "validate_simulation_artifacts.py"),
+                "--workspace",
+                str(initialized),
+                "--mode",
+                "draft",
+            ],
+            root,
+        )
+        init_validation["stage"] = "portable-init-draft-validation"
+        init_validation["pass"] = (
+            bool(init_result["pass"])
+            and init_validation["returncode"] == EXIT_OK
+        )
+        results.append(init_validation)
 
         lifecycle = temporary_root / "lifecycle"
         shutil.copytree(root / "tests" / "fixtures" / "schema-2.0-valid", lifecycle)

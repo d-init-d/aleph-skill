@@ -23,6 +23,11 @@ SENSITIVE_VALUE_PATTERNS = (
     re.compile(r"(?:\+\d[\d .()\-]{7,}\d|\b(?:phone|tel|mobile)\s*[:=]\s*\d)", re.I),
     re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
     re.compile(r"\b(?:latitude|longitude|gps)\s*[:=]\s*-?\d", re.I),
+    re.compile(
+        r"\b(?:diagnos(?:is|es|ed)|medical\s+(?:history|record|condition)|"
+        r"mental\s+health\s+(?:history|record|condition))\b",
+        re.I,
+    ),
 )
 SENSITIVE_KEYS = frozenset(
     {
@@ -40,6 +45,18 @@ SENSITIVE_KEYS = frozenset(
         "private_messages",
         "family_details",
         "medical_record",
+        "medical_records",
+        "medical_history",
+        "medical_information",
+        "medical_condition",
+        "medical_diagnosis",
+        "diagnosis",
+        "diagnoses",
+        "health_record",
+        "health_records",
+        "health_information",
+        "health_condition",
+        "mental_health",
         "financial_account",
         "protected_trait",
         "sexual_orientation",
