@@ -64,6 +64,7 @@
 ### Verification
 
 - Python 3.10-3.13 and Linux/macOS/Windows CI matrix declared.
+- Adversarial validator tests derive their tampered workspace from committed fixtures and do not depend on developer-local output directories.
 - 100+ regression tests, Ruff, strict mypy, package validation, adapter drift, deterministic replay, adversarial rejection, and end-to-end acceptance are release gates.
 - Domain packs remain `experimental`; probability output stays disabled until real calibration and hindcast evidence satisfy the calibrated gate.
 

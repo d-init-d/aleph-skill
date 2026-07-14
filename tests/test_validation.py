@@ -39,7 +39,6 @@ from init_simulation_workspace import infer_timeline_mode, parse_date  # noqa: E
 from render_simulation_report import render  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures"
-ADV_EXTERNAL = ROOT.parent / "test-output" / "adversarial-completed"
 
 
 class PathSecurityTests(unittest.TestCase):
@@ -110,10 +109,18 @@ class InstallerSecurityTests(unittest.TestCase):
 
 
 class ValidatorAdversarialTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temporary.cleanup)
+        self._workspace = Path(self._temporary.name) / "adversarial"
+        shutil.copytree(FIXTURES / "schema-2.0-valid", self._workspace)
+        edges_path = self._workspace / "edges.json"
+        edges = json.loads(edges_path.read_text(encoding="utf-8"))
+        edges[0]["to"] = edges[0]["from"]
+        write_json_atomic(edges_path, edges)
+
     def _adv(self) -> Path:
-        if ADV_EXTERNAL.is_dir():
-            return ADV_EXTERNAL
-        return FIXTURES / "adversarial"
+        return self._workspace
 
     def test_adversarial_fails_with_semantic_codes(self) -> None:
         ws = self._adv()

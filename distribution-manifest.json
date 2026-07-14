@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 209,
-  "tree_sha256": "0bf91f86fb97c2e7327e6f8ab7b1f47d4c3e46fa48d37b5bf85e02b99e10b0f7",
+  "tree_sha256": "844a901850a7f9f7df34eee288d8e014f4775e943f9aecc1fc1d479105acea56",
   "files": [
     {
       "path": "AGENTS.md",
@@ -13,8 +13,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "d72e4450a179c3535e47e9d51824d6213695bbc20f9cc14beaa74f9bc9d89316",
-      "size": 10541
+      "sha256": "ed2b499dc76136c7f6cce1df073c1a48be975378622288f701f16b8b5869f341",
+      "size": 10684
     },
     {
       "path": "LICENSE",
@@ -1043,8 +1043,8 @@
     },
     {
       "path": "tests/test_validation.py",
-      "sha256": "bd453c75cf2a9bd95614abf5b033f6c3e1489f703ffe23a9a6c508c51245cba0",
-      "size": 23938
+      "sha256": "e22ee213f24e4625def444a4e47b6ad767ff83d15295df85a7a5033e40a51371",
+      "size": 24276
     },
     {
       "path": "tests/test_validator_integrity_v2.py",
