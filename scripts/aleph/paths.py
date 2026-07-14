@@ -7,6 +7,8 @@ from pathlib import Path
 
 from .issues import Issue, issue
 
+FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+
 
 class PathEscapeError(Exception):
     def __init__(self, issues: list[Issue]):
@@ -23,6 +25,28 @@ def _is_windows_drive(path_str: str) -> bool:
 
 def _is_unc(path_str: str) -> bool:
     return path_str.startswith("\\\\") or path_str.startswith("//")
+
+
+def path_contains_link_or_reparse(path: Path) -> bool:
+    """Inspect existing path components without treating Windows 8.3 aliases as links."""
+    absolute = Path(os.path.abspath(path))
+    parts = absolute.parts
+    if not parts:
+        return False
+    current = Path(parts[0])
+    for part in parts[1:]:
+        current /= part
+        if not os.path.lexists(current):
+            break
+        try:
+            attributes = getattr(current.lstat(), "st_file_attributes", 0)
+        except OSError:
+            return True
+        if current.is_symlink() or os.path.islink(current):
+            return True
+        if bool(attributes & FILE_ATTRIBUTE_REPARSE_POINT):
+            return True
+    return False
 
 
 def validate_relative_artifact_path(raw: str, *, artifact: str = "artifact_path") -> list[Issue]:
@@ -146,13 +170,12 @@ def assert_install_paths_safe(source: Path, destination: Path) -> list[Issue]:
     except OSError as exc:
         return [issue("INSTALL_SOURCE_DEST", message=str(exc))]
 
-    if os.path.normcase(str(dest)) != os.path.normcase(str(destination_absolute)):
+    if path_contains_link_or_reparse(destination_absolute):
         problems.append(
             issue(
                 "INSTALL_SOURCE_DEST",
                 message="destination contains a symlink or reparse point",
-                expected=str(destination_absolute),
-                actual=str(dest),
+                actual=str(destination_absolute),
             )
         )
         return problems

@@ -15,7 +15,11 @@ from typing import Any
 from . import PACKAGE_VERSION
 from .io import canonical_json_bytes, sha256_file, write_json_atomic
 from .issues import Issue, issue
-from .paths import assert_install_paths_safe, is_distribution_path
+from .paths import (
+    assert_install_paths_safe,
+    is_distribution_path,
+    path_contains_link_or_reparse,
+)
 
 INSTALL_MODES = frozenset({"dry-run", "copy", "symlink"})
 MANIFEST_NAME = "distribution-manifest.json"
@@ -43,15 +47,14 @@ def _is_link_or_reparse(path: Path) -> bool:
         attributes = getattr(path.lstat(), "st_file_attributes", 0)
     except OSError:
         return True
-    if path.is_symlink() or os.path.islink(path) or bool(attributes & FILE_ATTRIBUTE_REPARSE_POINT):
-        return True
-    return os.path.normcase(os.path.realpath(path)) != os.path.normcase(os.path.abspath(path))
+    return path.is_symlink() or os.path.islink(path) or bool(
+        attributes & FILE_ATTRIBUTE_REPARSE_POINT
+    )
 
 
 def _path_contains_link_or_reparse(path: Path) -> bool:
     """Detect a linked/reparse component in an existing path prefix."""
-    absolute = Path(os.path.abspath(path))
-    return os.path.normcase(os.path.realpath(absolute)) != os.path.normcase(str(absolute))
+    return path_contains_link_or_reparse(path)
 
 
 def _sha256_bytes(value: bytes) -> str:

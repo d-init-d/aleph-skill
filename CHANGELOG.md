@@ -59,12 +59,14 @@
 - D Research verified assurance requires a signed preserved ledger, a hashed import receipt, exact regenerated evidence CSV, and a reverified compatible 3.x package identity.
 - Roleplay Tier A requires referenced HMAC receipt bodies; self-attested receipt strings cannot support verified assurance.
 - Distribution-manifest parsing and hashing use the same bounded byte buffer; installer commits recheck reparse-point parents and roll back copy, symlink, adapter, and combined bundle mutations on receipt failure.
+- Reparse detection inspects filesystem attributes per component, preserving junction defenses without misclassifying Windows 8.3 path aliases.
 - Successful install transactions discard rollback backups only after their receipt or combined bundle receipt is durable, preventing duplicate hidden skills from contaminating host discovery.
 
 ### Verification
 
 - Python 3.10-3.13 and Linux/macOS/Windows CI matrix declared.
 - Adversarial validator tests derive their tampered workspace from committed fixtures and do not depend on developer-local output directories.
+- Distribution fixtures use repository-enforced LF bytes so manifest hashes remain identical across Git checkouts on Windows, macOS, and Linux.
 - 100+ regression tests, Ruff, strict mypy, package validation, adapter drift, deterministic replay, adversarial rejection, and end-to-end acceptance are release gates.
 - Domain packs remain `experimental`; probability output stays disabled until real calibration and hindcast evidence satisfy the calibrated gate.
 

@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 209,
-  "tree_sha256": "844a901850a7f9f7df34eee288d8e014f4775e943f9aecc1fc1d479105acea56",
+  "tree_sha256": "ce89f9eb86ae82f1eb003fe796a5d440f5276b0e7395a5b76ae78d88edbf9423",
   "files": [
     {
       "path": "AGENTS.md",
@@ -13,8 +13,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "ed2b499dc76136c7f6cce1df073c1a48be975378622288f701f16b8b5869f341",
-      "size": 10684
+      "sha256": "f37e94413eb15ae340399963ac4fc1c440f18aa10e40a692b2626f38dbef1e42",
+      "size": 10972
     },
     {
       "path": "LICENSE",
@@ -658,8 +658,8 @@
     },
     {
       "path": "scripts/aleph/installer.py",
-      "sha256": "7c011c8221cbf26eb8b03881a4a13930f71433baeabe7b5f38d0ce076e8a4f68",
-      "size": 42297
+      "sha256": "0f34c364152052d152bb966bdd435a9b0622fe41c6286df8bd60269a8fb64c71",
+      "size": 42160
     },
     {
       "path": "scripts/aleph/io.py",
@@ -688,8 +688,8 @@
     },
     {
       "path": "scripts/aleph/paths.py",
-      "sha256": "fe265a6d24ccfbe8bbcdf7710523ae824bc1d79f0604d98246b97e9b5ce4fd3b",
-      "size": 10120
+      "sha256": "97ad0917eb4662e5334c87be069571c278156f1a94b187df1808b5bfa7788825",
+      "size": 10815
     },
     {
       "path": "scripts/aleph/privacy.py",
@@ -903,8 +903,8 @@
     },
     {
       "path": "tests/fixtures/schema-1.2-valid/evidence-map.csv",
-      "sha256": "22fed217d64aa7c0abf294f4b162b8202dd00e24b074ddb71cfc7d617ffe83b0",
-      "size": 660
+      "sha256": "f3f5c4da93523476a1a5364a9e0002b74293f453175bd0100712f56a6f61277d",
+      "size": 657
     },
     {
       "path": "tests/fixtures/schema-1.2-valid/human-track-ledger.jsonl",
@@ -948,8 +948,8 @@
     },
     {
       "path": "tests/fixtures/schema-2.0-valid/evidence-map.csv",
-      "sha256": "22fed217d64aa7c0abf294f4b162b8202dd00e24b074ddb71cfc7d617ffe83b0",
-      "size": 660
+      "sha256": "f3f5c4da93523476a1a5364a9e0002b74293f453175bd0100712f56a6f61277d",
+      "size": 657
     },
     {
       "path": "tests/fixtures/schema-2.0-valid/human-track-ledger.jsonl",
@@ -1008,8 +1008,8 @@
     },
     {
       "path": "tests/test_final_packaging_hardening.py",
-      "sha256": "a965f5b653554eb3a193b2582dbe1d6ecc66cb66ca70604d800d17d62665ec56",
-      "size": 28782
+      "sha256": "b39a4ea8e4cd0dae0dced572c8a4c6eafbf9e2ad23e4d47287f143b25a14e5a2",
+      "size": 30024
     },
     {
       "path": "tests/test_final_roleplay_hardening.py",

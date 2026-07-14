@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +35,7 @@ from aleph.installer import (  # noqa: E402
 )
 from aleph.io import write_json_atomic  # noqa: E402
 from aleph.migrate import migrate_workspace  # noqa: E402
+from aleph.paths import assert_install_paths_safe  # noqa: E402
 from aleph.validator import (  # noqa: E402
     validate_branches,
     validate_manifest_core,
@@ -175,6 +177,32 @@ class PublishedSchemaContractTests(unittest.TestCase):
 
 
 class InstallerAttestationTests(unittest.TestCase):
+    def test_realpath_spelling_difference_alone_is_not_a_reparse_point(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            destination_path = root / "destination"
+            source.mkdir()
+            original_realpath = os.path.realpath
+            destination_key = os.path.normcase(os.path.abspath(destination_path))
+
+            def alternate_spelling(path: os.PathLike[str] | str, **kwargs: Any) -> str:
+                resolved = original_realpath(path, **kwargs)
+                if os.path.normcase(os.path.abspath(path)) == destination_key:
+                    return resolved.swapcase()
+                return resolved
+
+            with patch("aleph.paths.os.path.realpath", side_effect=alternate_spelling):
+                problems = assert_install_paths_safe(source, destination_path)
+            self.assertFalse(
+                [
+                    value
+                    for value in problems
+                    if value.code == "INSTALL_SOURCE_DEST" and "reparse" in value.message
+                ],
+                problems,
+            )
+
     def test_copy_refuses_absent_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
