@@ -3,13 +3,13 @@
   "package_version": "2.0.1",
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
-  "file_count": 218,
-  "tree_sha256": "bf8587ffc5ba83a1d5e945989455b777c6be08dbfc20bb5dcd1169a828a76afa",
+  "file_count": 220,
+  "tree_sha256": "f7b2e95897af682ea5347b51f66f88b18faeda1fbe631555a6c5d4cc53ee3d71",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
-      "sha256": "4aa08302b6aeb85fa11b8da1ddfc0ad15a28e9b6674107a979cbf66b3912419a",
-      "size": 5937
+      "sha256": "162aa06e59960a38637a93e9dbbd6fe3cea8f76244720ec179470122f71701a5",
+      "size": 5995
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -18,8 +18,8 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "sha256": "e7ada3abec6164a432fe1bb27ca55ac496f9a35103346cc4f526ee88df15683c",
-      "size": 4203
+      "sha256": "e58a4251973fcb3abbb291cb710fb936775ef7ccc6bba3559f71a720a6f43267",
+      "size": 3300
     },
     {
       "path": ".github/workflows/verify.yml",
@@ -33,8 +33,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "e94a6a8924ff7d7a3cfb8fd5d1e92e02ed62634acb65821015bb0cc5a750f13f",
-      "size": 16078
+      "sha256": "768029da465f87f4918ba2626562af9bdfe65b1b112c085c97041116791c4bf1",
+      "size": 16235
     },
     {
       "path": "LICENSE",
@@ -822,6 +822,11 @@
       "size": 1496
     },
     {
+      "path": "scripts/verify_release_tag.py",
+      "sha256": "ee3b0a77749f60b1f09e5dd97ee3f2800a76a4b20f57ac62814c7c79f975d306",
+      "size": 8482
+    },
+    {
       "path": "templates/actor-dossier.json",
       "sha256": "d0e34954ee86c575554de80501b1e035f34b740ab126ea06473fabdb91b3975e",
       "size": 4383
@@ -1058,13 +1063,18 @@
     },
     {
       "path": "tests/test_release_packaging_v201.py",
-      "sha256": "cee24192f4fc205080363520ff6ff8fef09e63a2ed7941547b410ec5d72c7e6c",
-      "size": 9305
+      "sha256": "20b42d49c72b8cff2d8dc40b49319f8617035f1bd674b705ec165d1a69e15977",
+      "size": 9192
     },
     {
       "path": "tests/test_release_quality_v201.py",
       "sha256": "0dfc09588ec89ac779ba42a59bc8e2a9268dfcb42b427ae51b860e1bb0c0d001",
       "size": 27386
+    },
+    {
+      "path": "tests/test_release_tag_verifier.py",
+      "sha256": "250be98bf3a50f5558ab5904205121f692847670b21fc5f9c4ff72c8cbdd1183",
+      "size": 7256
     },
     {
       "path": "tests/test_roleplay_portability_v2.py",

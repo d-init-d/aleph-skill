@@ -27,7 +27,7 @@
 - Kept development release checks non-mutating by disabling Ruff's project cache and routing mypy and coverage state to disposable external paths, so a self-tested ZIP remains eligible for symlink installation.
 - Made installer machine status internally consistent: every refused or failed symlink transaction now returns `ok: false`, including operating-system privilege failures, while preserving rollback and receipt details.
 - Added a tag-gated GitHub Release workflow with locked dependencies, commit-pinned actions, a second reproducibility build, SHA-256 assets, and GitHub build-provenance attestations; repository-level immutable releases protect the published tag and assets.
-- Made release-tag verification resilient to `actions/checkout` peeling annotated tags: the workflow refetches the remote tag object into an isolated namespace, binds it to the checked-out commit, and requires that commit to be contained in `main`.
+- Made release-tag verification resilient to `actions/checkout` peeling annotated tags: a two-phase verifier refetches the remote tag object into an isolated namespace, binds it to the checked-out commit and `main`, then refuses publication if the tag object or target moved during the build. Git-topology integration tests cover annotated, lightweight, mismatched, moved, side-branch, and malformed tags.
 - Forward-checked the reproducible ZIP with Grok Build, the requested GLM/Kimi/MiniMax models through OpenCode, and every Cline Pass model exposed by Cline 3.0.40; all passed both the semantic safety-contract audit and packaged fixture, while host/model-specific strict-output-format variability remains explicitly documented.
 
 ### Versioning
