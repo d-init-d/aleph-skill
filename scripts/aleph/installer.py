@@ -788,8 +788,24 @@ def install_adapter_file(
             },
             receipt_path,
         )
+    if _is_link_or_reparse(declared_source) or not declared_source.is_file():
+        return _finish_adapter_result(
+            {
+                "ok": False,
+                "status": "refused",
+                "issues": [
+                    issue(
+                        "INSTALL_NOT_ALLOWLISTED",
+                        pointer=str(declared_source),
+                        message="adapter source must be a regular non-symlink file",
+                    ).to_dict()
+                ],
+            },
+            receipt_path,
+        )
+    source_file = declared_source.resolve(strict=True)
     try:
-        relative = declared_source.relative_to(source_root).as_posix()
+        relative = source_file.relative_to(source_root).as_posix()
     except ValueError:
         return _finish_adapter_result(
             {
@@ -820,21 +836,6 @@ def install_adapter_file(
         return _finish_adapter_result(
             {"ok": False, "status": "refused", "issues": issues}, receipt_path
         )
-    if _is_link_or_reparse(declared_source) or not declared_source.is_file():
-        return _finish_adapter_result(
-            {
-                "ok": False,
-                "status": "refused",
-                "issues": [
-                    issue(
-                        "INSTALL_NOT_ALLOWLISTED",
-                        pointer=relative,
-                        message="adapter source must be a regular non-symlink file",
-                    ).to_dict()
-                ],
-            },
-            receipt_path,
-        )
     secret_findings = [
         finding for finding in scan_secret_like_files(source_root) if finding["path"] == relative
     ]
@@ -854,7 +855,6 @@ def install_adapter_file(
             },
             receipt_path,
         )
-    source_file = declared_source.resolve(strict=True)
     source_digest = sha256_file(source_file)
     manifest_entry = next(
         (

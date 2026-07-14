@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 209,
-  "tree_sha256": "7f346b2e09d10c1d2b7c1b04a3d0a02f53c1ed8aa39c978d7c4a3de7ed1ac38c",
+  "tree_sha256": "30d946076d1a2a8f86a0eb94d368b0c86358d73f2416cb8302853b74d70e1ea8",
   "files": [
     {
       "path": "AGENTS.md",
@@ -13,8 +13,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "3aa7bd1fbdad5376a3b5f64a9c50f544231b9abaeb43a64852d102c1c1480852",
-      "size": 11129
+      "sha256": "ca682f5fa58169a9ad3675f19607d0868458b1c02c8025f831d36206e0dad28b",
+      "size": 11296
     },
     {
       "path": "LICENSE",
@@ -658,8 +658,8 @@
     },
     {
       "path": "scripts/aleph/installer.py",
-      "sha256": "c87c3206fd296f9ca88236b507a763bd65e50c3ad5aa9c9f16b20767fce69d78",
-      "size": 42390
+      "sha256": "33e644a4d6209705fea4d4c9a07f35fed38d50a604c5ec4e27e250f31e7fd94a",
+      "size": 42398
     },
     {
       "path": "scripts/aleph/io.py",
@@ -688,8 +688,8 @@
     },
     {
       "path": "scripts/aleph/paths.py",
-      "sha256": "97ad0917eb4662e5334c87be069571c278156f1a94b187df1808b5bfa7788825",
-      "size": 10815
+      "sha256": "43d8ebbb13354e7b0d3283bb56364acd3d6f2b325c835f93aab56f70f17cccc2",
+      "size": 11085
     },
     {
       "path": "scripts/aleph/privacy.py",
@@ -1028,8 +1028,8 @@
     },
     {
       "path": "tests/test_release_blocker_regressions.py",
-      "sha256": "5030f40ecb6b62f4190924b75ee4033a297ab654bc535c14d9cf3041758ee009",
-      "size": 24122
+      "sha256": "6b53645a53d2c2a53d9fafd07a13a56aca8c30c44012647391ed883feece18ea",
+      "size": 24134
     },
     {
       "path": "tests/test_release_contract.py",

@@ -34,7 +34,7 @@ def path_contains_link_or_reparse(path: Path) -> bool:
     if not parts:
         return False
     current = Path(parts[0])
-    for part in parts[1:]:
+    for index, part in enumerate(parts[1:], start=1):
         current /= part
         if not os.path.lexists(current):
             break
@@ -42,9 +42,14 @@ def path_contains_link_or_reparse(path: Path) -> bool:
             attributes = getattr(current.lstat(), "st_file_attributes", 0)
         except OSError:
             return True
-        if current.is_symlink() or os.path.islink(current):
-            return True
-        if bool(attributes & FILE_ATTRIBUTE_REPARSE_POINT):
+        linked = current.is_symlink() or os.path.islink(current) or bool(
+            attributes & FILE_ATTRIBUTE_REPARSE_POINT
+        )
+        if linked and index == 1 and os.name != "nt":
+            # macOS exposes stable administrator-owned root aliases such as
+            # /var -> /private/var. Continue inspecting every lower component.
+            continue
+        if linked:
             return True
     return False
 

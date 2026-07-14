@@ -72,7 +72,7 @@ class ExecutionContractRegressionTests(unittest.TestCase):
             edges = json.loads((workspace / "edges.json").read_text(encoding="utf-8"))
 
             trace_path, rows, issues = validate_declared_trace(workspace, manifest, nodes, edges)
-            self.assertEqual(trace_path, workspace / "propagation-trace.jsonl")
+            self.assertEqual(trace_path, (workspace / "propagation-trace.jsonl").resolve())
             self.assertEqual(len(rows), 1)
             self.assertFalse(issues, [value.to_dict() for value in issues])
 
