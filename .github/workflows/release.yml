@@ -32,17 +32,17 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Verify annotated tag and main commit
-        shell: bash
-        run: |
-          test "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" = "tag"
-          git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
-          test "$(git rev-parse "refs/tags/$GITHUB_REF_NAME^{commit}")" = \
-            "$(git rev-parse refs/remotes/origin/main)"
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.13"
+      - name: Verify annotated tag and main ancestry
+        env:
+          RELEASE_TAG_STATE: ${{ runner.temp }}/aleph-release-tag-state.json
+        run: |
+          python scripts/verify_release_tag.py \
+            --tag "$GITHUB_REF_NAME" \
+            --state-out "$RELEASE_TAG_STATE"
       - name: Set up uv
         uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
@@ -79,7 +79,11 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG_STATE: ${{ runner.temp }}/aleph-release-tag-state.json
         run: |
+          python scripts/verify_release_tag.py \
+            --tag "$GITHUB_REF_NAME" \
+            --expected-state "$RELEASE_TAG_STATE"
           notes=".github/release-notes/$GITHUB_REF_NAME.md"
           test -f "$notes"
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then

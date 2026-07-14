@@ -172,11 +172,13 @@ class ReleasePackagingV201Tests(unittest.TestCase):
             "scripts/build_release_assets.py --output-dir dist-repro",
             "actions/attest-build-provenance@",
             "--verify-tag",
-            "git cat-file -t",
-            "refs/remotes/origin/main",
+            "scripts/verify_release_tag.py",
+            "--state-out",
+            "--expected-state",
             "already exists; refusing to modify it",
         ):
             self.assertIn(required, workflow)
+        self.assertEqual(workflow.count("scripts/verify_release_tag.py"), 2)
         self.assertNotIn("gh release edit", workflow)
         self.assertNotIn("--clobber", workflow)
         self.assertTrue(
