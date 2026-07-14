@@ -173,10 +173,16 @@ class ReleasePackagingV201Tests(unittest.TestCase):
             "actions/attest-build-provenance@",
             "--verify-tag",
             "git cat-file -t",
+            "refs/aleph-release-tags/",
+            "git rev-parse HEAD",
+            "git merge-base --is-ancestor",
             "refs/remotes/origin/main",
             "already exists; refusing to modify it",
         ):
             self.assertIn(required, workflow)
+        self.assertNotIn(
+            'git cat-file -t "refs/tags/$GITHUB_REF_NAME"', workflow
+        )
         self.assertNotIn("gh release edit", workflow)
         self.assertNotIn("--clobber", workflow)
         self.assertTrue(
