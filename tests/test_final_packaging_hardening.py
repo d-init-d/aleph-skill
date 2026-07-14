@@ -31,6 +31,7 @@ from aleph.installer import (  # noqa: E402
     install_adapter_file,
     plan_install,
     rollback_install_result,
+    scan_secret_like_files,
     verify_distribution_manifest,
 )
 from aleph.io import write_json_atomic  # noqa: E402
@@ -177,6 +178,16 @@ class PublishedSchemaContractTests(unittest.TestCase):
 
 
 class InstallerAttestationTests(unittest.TestCase):
+    def test_linked_worktree_git_pointer_is_pruned_from_secret_findings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source"
+            source.mkdir()
+            (source / ".git").write_text("gitdir: ../administrative-metadata\n", encoding="utf-8")
+            self.assertNotIn(
+                ".git",
+                {value["path"] for value in scan_secret_like_files(source)},
+            )
+
     def test_realpath_spelling_difference_alone_is_not_a_reparse_point(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

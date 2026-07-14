@@ -117,6 +117,10 @@ def scan_secret_like_files(source: Path) -> list[dict[str, str]]:
             path = root_path / name
             relative = path.relative_to(source).as_posix()
             lowered = name.lower()
+            if relative == ".git":
+                # Linked worktrees store an administrative gitdir pointer as a file.
+                # It is pruned from distributions just like a normal .git directory.
+                continue
             if name.startswith(".") and relative not in {".gitattributes", ".gitignore"}:
                 findings.append({"path": relative, "reason": "hidden file is not distributable"})
                 continue

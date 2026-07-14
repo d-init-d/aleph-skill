@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 209,
-  "tree_sha256": "ce89f9eb86ae82f1eb003fe796a5d440f5276b0e7395a5b76ae78d88edbf9423",
+  "tree_sha256": "7f346b2e09d10c1d2b7c1b04a3d0a02f53c1ed8aa39c978d7c4a3de7ed1ac38c",
   "files": [
     {
       "path": "AGENTS.md",
@@ -13,8 +13,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "f37e94413eb15ae340399963ac4fc1c440f18aa10e40a692b2626f38dbef1e42",
-      "size": 10972
+      "sha256": "3aa7bd1fbdad5376a3b5f64a9c50f544231b9abaeb43a64852d102c1c1480852",
+      "size": 11129
     },
     {
       "path": "LICENSE",
@@ -658,8 +658,8 @@
     },
     {
       "path": "scripts/aleph/installer.py",
-      "sha256": "0f34c364152052d152bb966bdd435a9b0622fe41c6286df8bd60269a8fb64c71",
-      "size": 42160
+      "sha256": "c87c3206fd296f9ca88236b507a763bd65e50c3ad5aa9c9f16b20767fce69d78",
+      "size": 42390
     },
     {
       "path": "scripts/aleph/io.py",
@@ -1008,8 +1008,8 @@
     },
     {
       "path": "tests/test_final_packaging_hardening.py",
-      "sha256": "b39a4ea8e4cd0dae0dced572c8a4c6eafbf9e2ad23e4d47287f143b25a14e5a2",
-      "size": 30024
+      "sha256": "548b3f3ea787f1a75da1bb084c7d54f2fa55693a1eeaef92435c60e3d7b6616c",
+      "size": 30504
     },
     {
       "path": "tests/test_final_roleplay_hardening.py",

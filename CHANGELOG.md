@@ -60,6 +60,7 @@
 - Roleplay Tier A requires referenced HMAC receipt bodies; self-attested receipt strings cannot support verified assurance.
 - Distribution-manifest parsing and hashing use the same bounded byte buffer; installer commits recheck reparse-point parents and roll back copy, symlink, adapter, and combined bundle mutations on receipt failure.
 - Reparse detection inspects filesystem attributes per component, preserving junction defenses without misclassifying Windows 8.3 path aliases.
+- Linked-worktree `.git` pointer files are pruned as administrative metadata, matching ordinary `.git` directory handling without entering the distribution.
 - Successful install transactions discard rollback backups only after their receipt or combined bundle receipt is durable, preventing duplicate hidden skills from contaminating host discovery.
 
 ### Verification
