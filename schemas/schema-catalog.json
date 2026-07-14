@@ -4,7 +4,7 @@
   "supported_keywords": [
     "$schema", "$id", "$ref", "$defs", "type", "properties", "required",
     "additionalProperties", "items", "minItems", "uniqueItems", "enum", "const",
-    "pattern", "format", "minLength", "maxLength", "minItems", "maxItems", "minimum", "maximum", "exclusiveMinimum", "anyOf", "oneOf", "allOf",
+    "pattern", "format", "minLength", "maxLength", "maxItems", "minimum", "maximum", "exclusiveMinimum", "anyOf", "oneOf", "allOf", "if", "then", "else",
     "description"
   ],
   "artifacts": {

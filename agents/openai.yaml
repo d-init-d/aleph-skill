@@ -1,6 +1,6 @@
 interface:
   display_name: "Aleph Skill"
   short_description: "Adaptive causal timelines across past and future"
-  default_prompt: "Use $aleph-skill with D Research to build an evidence-saturated causal timeline from the change point through present and future branches, with separate human research and roleplay tracks."
+  default_prompt: "Use $aleph-skill with compatible D Research when available, otherwise the limited host-native evidence fallback, to build an auditable causal timeline with separate research and sealed roleplay tracks."
 policy:
   allow_implicit_invocation: true

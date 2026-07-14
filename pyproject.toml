@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aleph-skill"
-version = "2.0.0"
+version = "2.0.1"
 description = "Portable causal timeline simulation with strict validation, numerical engine, domain packs, and thin adapters."
 requires-python = ">=3.10"
 license = { text = "CC-BY-NC-4.0" }
@@ -48,17 +48,13 @@ select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
 
 [tool.mypy]
 python_version = "3.10"
-check_untyped_defs = true
-ignore_missing_imports = true
-no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
+strict = true
 
 [tool.coverage.run]
 branch = true
 source = ["scripts/aleph"]
 
 [tool.coverage.report]
-fail_under = 80
+fail_under = 82
 show_missing = true
 skip_covered = true

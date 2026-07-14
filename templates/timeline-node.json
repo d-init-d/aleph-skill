@@ -15,7 +15,7 @@
   "state_after": {"summary": "State after the perturbation is applied."},
   "lag": "P0D",
   "evidence_ids": ["evidence:example"],
-  "probability": 1.0,
+  "probability": null,
   "alternative_explanations": ["The movement may partly reflect an omitted contextual factor."],
   "sensitivity": {"level": "medium", "drivers": ["example driver"]}
 }

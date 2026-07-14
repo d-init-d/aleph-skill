@@ -21,7 +21,7 @@
     "simulation_start": "2026-07-01",
     "simulation_end": "2028-07-01",
     "future_projection": true,
-    "calibration_strategy": "Calibrate mechanisms against observed history up to the cutoff; treat every post-cutoff state as a probabilistic simulation.",
+    "calibration_strategy": "Check mechanisms against observed history up to the cutoff; rank post-cutoff alternatives with normalized relative weights that are not probabilities.",
     "monitoring_indicators": ["factor:example"]
   },
   "scope": {
@@ -49,18 +49,19 @@
         "research_waves_completed": 1
       }
     },
-    "research_quality": "best-available",
+    "research_quality": "limited",
     "research_control": {
       "policy": "evidence-saturation",
       "sources_examined": 1,
       "saturation_reached": true,
       "consecutive_no_new_material_claims": 1,
       "stop_reason": "All fixture claims are covered and further sources would add no material information.",
-      "unresolved_critical_gaps": []
+      "unresolved_critical_gaps": [],
+      "next_wave_queue": []
     },
     "d_research": {
-      "status": "available",
-      "invoked": true
+      "status": "unavailable",
+      "invoked": false
     },
     "subagents": {
       "status": "unavailable",

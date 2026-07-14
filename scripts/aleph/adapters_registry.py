@@ -9,26 +9,47 @@ from typing import Any
 
 from . import PACKAGE_VERSION
 
-NATIVE_TARGETS = ["codex", "claude-code", "opencode", "gemini-cli", "github-copilot-cli", "agents"]
-GENERATED_TARGETS = ["cursor", "vscode-copilot", "windsurf", "cline", "roo-code", "continue", "jetbrains"]
+NATIVE_TARGETS = [
+    "codex",
+    "claude-code",
+    "opencode",
+    "gemini-cli",
+    "github-copilot-cli",
+    "agents",
+    "cursor",
+    "vscode-copilot",
+    "windsurf",
+    "cline",
+    "roo-code",
+    "jetbrains",
+]
+GENERATED_TARGETS = ["continue"]
 EXTERNAL_TARGETS = ["grok-build", "aider", "generic-cli"]
 ALL_TARGETS = NATIVE_TARGETS + GENERATED_TARGETS + EXTERNAL_TARGETS
 PORTABLE_CORE_PATH = ".aleph/core/aleph-skill"
+RETIRED_GENERATED_FILES = (
+    "adapters/generated/cursor.md",
+    "adapters/generated/vscode-copilot.md",
+    "adapters/generated/windsurf.md",
+    "adapters/generated/cline.md",
+    "adapters/generated/roo-code.md",
+    "adapters/generated/jetbrains.md",
+)
 
 TARGET_SPECS: dict[str, dict[str, Any]] = {
-    "codex": {"kind": "native", "install_kind": "skill_directory", "user_path": "~/.codex/skills/aleph-skill", "project_path": ".codex/skills/aleph-skill"},
+    "codex": {"kind": "native", "install_kind": "skill_directory", "user_path": "~/.agents/skills/aleph-skill", "project_path": ".agents/skills/aleph-skill"},
     "claude-code": {"kind": "native", "install_kind": "skill_directory", "user_path": "~/.claude/skills/aleph-skill", "project_path": ".claude/skills/aleph-skill"},
     "opencode": {"kind": "native", "install_kind": "skill_directory", "user_path": "~/.config/opencode/skills/aleph-skill", "project_path": ".opencode/skills/aleph-skill"},
     "gemini-cli": {"kind": "native", "install_kind": "skill_directory", "user_path": "~/.gemini/skills/aleph-skill", "project_path": ".gemini/skills/aleph-skill"},
-    "github-copilot-cli": {"kind": "native", "install_kind": "skill_directory", "user_path": "~/.copilot/skills/aleph-skill", "project_path": ".copilot/skills/aleph-skill"},
+    "github-copilot-cli": {"kind": "native", "install_kind": "skill_directory", "user_path": "~/.copilot/skills/aleph-skill", "project_path": ".github/skills/aleph-skill"},
     "agents": {"kind": "native", "install_kind": "skill_directory", "user_path": "~/.agents/skills/aleph-skill", "project_path": ".agents/skills/aleph-skill"},
-    "cursor": {"kind": "generated", "install_kind": "instruction_file", "project_path": ".cursor/rules/aleph.mdc", "source_path": "adapters/generated/cursor.md", "format": "cursor-mdc"},
-    "vscode-copilot": {"kind": "generated", "install_kind": "instruction_file", "project_path": ".github/instructions/aleph.instructions.md", "source_path": "adapters/generated/vscode-copilot.md", "format": "copilot-instructions"},
-    "windsurf": {"kind": "generated", "install_kind": "instruction_file", "project_path": ".windsurf/rules/aleph.md", "source_path": "adapters/generated/windsurf.md", "format": "windsurf-rule"},
-    "cline": {"kind": "generated", "install_kind": "instruction_file", "project_path": ".clinerules/aleph.md", "source_path": "adapters/generated/cline.md", "format": "cline-rule"},
-    "roo-code": {"kind": "generated", "install_kind": "instruction_file", "project_path": ".roo/rules/aleph.md", "source_path": "adapters/generated/roo-code.md", "format": "roo-rule"},
+    "cursor": {"kind": "native", "install_kind": "skill_directory", "user_path": "~/.cursor/skills/aleph-skill", "project_path": ".cursor/skills/aleph-skill"},
+    "vscode-copilot": {"kind": "native", "install_kind": "skill_directory", "user_path": "~/.copilot/skills/aleph-skill", "project_path": ".github/skills/aleph-skill"},
+    "windsurf": {"kind": "native", "install_kind": "skill_directory", "user_path": "~/.codeium/windsurf/skills/aleph-skill", "project_path": ".windsurf/skills/aleph-skill"},
+    "cline": {"kind": "native", "install_kind": "skill_directory", "user_path": "~/.cline/skills/aleph-skill", "project_path": ".cline/skills/aleph-skill"},
+    "roo-code": {"kind": "native", "install_kind": "skill_directory", "user_path": "~/.roo/skills/aleph-skill", "project_path": ".roo/skills/aleph-skill"},
+    "jetbrains": {"kind": "native", "install_kind": "skill_directory", "project_path": ".agents/skills/aleph-skill"},
     "continue": {"kind": "generated", "install_kind": "instruction_file", "project_path": ".continue/rules/aleph.md", "source_path": "adapters/generated/continue.md", "format": "continue-rule"},
-    "jetbrains": {"kind": "generated", "install_kind": "instruction_file", "project_path": ".idea/ai-assistant/aleph.md", "source_path": "adapters/generated/jetbrains.md", "format": "jetbrains-ai-rule"},
     "grok-build": {"kind": "external", "install_kind": "external_profile", "project_path": ".aleph/profiles/grok-build.json", "source_path": "adapters/external/grok-build.json", "executable": "grok"},
     "aider": {"kind": "external", "install_kind": "external_profile", "project_path": ".aleph/profiles/aider.json", "source_path": "adapters/external/aider.json", "executable": "aider"},
     "generic-cli": {"kind": "external", "install_kind": "external_profile", "project_path": ".aleph/profiles/generic-cli.json", "source_path": "adapters/external/generic-cli.json", "executable": None},
@@ -59,36 +80,32 @@ def _core_contract(target: str) -> str:
     return f"""## Aleph 2.0 execution contract
 
 - Target host: `{target}`. Detect available tools and subagents at runtime; never claim capabilities from this file alone.
-- Verified core: `{PORTABLE_CORE_PATH}`. Resolve every bundled reference and script from this directory, never from the process working directory.
+- Verified core: `<ABSOLUTE_PROJECT_ROOT>/{PORTABLE_CORE_PATH}`. Resolve `<ABSOLUTE_PROJECT_ROOT>` from the absolute path of this loaded rule at `<ABSOLUTE_PROJECT_ROOT>/.continue/rules/aleph.md`, never from the process working directory. Export or assign the resulting absolute core path as `ALEPH_SKILL_ROOT` and refuse to run if its `SKILL.md` is missing.
 - Initialize a workspace outside the installed skill directory and use only schema `2.0.0` artifacts.
 - Separate fact, inference, assumption, simulation, and counterfactual statements.
-- Use D Research 3.x when its identity and version pass `{PORTABLE_CORE_PATH}/scripts/preflight.py`; otherwise declare limited research.
+- Use D Research 3.x when its identity and version pass the preflight helper under absolute `ALEPH_SKILL_ROOT` at `scripts/preflight.py`; otherwise use the core's limited host-native fallback and cap assurance at `limited`.
 - For every material actor, complete research first, freeze a temporal knowledge packet, then use a distinct offline roleplay execution.
 - Roleplay proposes decision-graph actions only. It never browses, adds evidence, invents private motives, or emits probability/confidence.
 - Use `relative_weight` unless a declared calibration policy and hindcast gate authorize probability.
 - Finalize only after strict validation, replay, integrity receipts, and assurance gates pass.
 
-Run scripts with the host's Python 3.10+ executable, for example `python {PORTABLE_CORE_PATH}/scripts/preflight.py --json`. Pass workspace paths explicitly. Do not copy secrets into artifacts or command prompts.
+Replace `<ABSOLUTE_PROJECT_ROOT>` with the resolved absolute project path before running a helper. On POSIX, use `export ALEPH_SKILL_ROOT="<ABSOLUTE_PROJECT_ROOT>/{PORTABLE_CORE_PATH}"`; on PowerShell, use `$env:ALEPH_SKILL_ROOT = "<ABSOLUTE_PROJECT_ROOT>/{PORTABLE_CORE_PATH}"`. Then run `python "$ALEPH_SKILL_ROOT/scripts/preflight.py" --json` on POSIX or `python "$env:ALEPH_SKILL_ROOT/scripts/preflight.py" --json` on PowerShell. Never invoke the core through a process-relative path. Pass workspace paths explicitly. Do not copy secrets into artifacts or command prompts.
 """
 
 
 def generate_instruction_adapter(target: str, skill_root: Path) -> str:
     del skill_root  # Generation is intentionally independent of SKILL.md excerpts.
     contract = _core_contract(target)
-    if target == "cursor":
-        return "---\ndescription: Aleph 2.0 causal simulation protocol\nglobs: []\nalwaysApply: false\n---\n\n# Aleph for Cursor\n\n" + contract
-    if target == "vscode-copilot":
-        return "---\napplyTo: '**'\ndescription: 'Aleph 2.0 causal simulation protocol'\n---\n\n# Aleph for GitHub Copilot in VS Code\n\n" + contract
-    if target == "windsurf":
-        return "# Aleph for Windsurf\n\nUse this rule only for causal simulation and counterfactual analysis tasks.\n\n" + contract
-    if target == "cline":
-        return "# Aleph for Cline\n\nBefore tool use, read the installed Aleph `SKILL.md` and only the references needed for the current phase.\n\n" + contract
-    if target == "roo-code":
-        return "# Aleph for Roo Code\n\nKeep research, roleplay, adjudication, and validation as separate auditable modes.\n\n" + contract
     if target == "continue":
-        return "---\nname: Aleph 2.0 causal simulation\ndescription: Evidence-grounded timeline simulation guardrails\n---\n\n# Aleph for Continue\n\n" + contract
-    if target == "jetbrains":
-        return "# Aleph for JetBrains AI Assistant\n\nLoad the portable Aleph skill instructions before producing or modifying simulation artifacts.\n\n" + contract
+        return (
+            "---\n"
+            "name: Aleph 2.0 causal simulation\n"
+            "description: Evidence-grounded timeline simulation guardrails\n"
+            "alwaysApply: false\n"
+            "---\n\n"
+            "# Aleph for Continue\n\n"
+            + contract
+        )
     raise ValueError(f"not a generated adapter target: {target}")
 
 
@@ -139,7 +156,17 @@ def write_generated_adapters(skill_root: Path) -> dict[str, Any]:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8", newline="\n")
         written.append({"path": relative, "sha256": _sha(content)})
-    return {"written": written, "registry": "adapters/registry.json"}
+    removed = []
+    for relative in RETIRED_GENERATED_FILES:
+        path = skill_root / relative
+        if path.is_file() or path.is_symlink():
+            path.unlink()
+            removed.append(relative)
+    return {
+        "written": written,
+        "removed": removed,
+        "registry": "adapters/registry.json",
+    }
 
 
 def _semantic_adapter_issues(relative: str, content: str) -> list[str]:
@@ -148,9 +175,26 @@ def _semantic_adapter_issues(relative: str, content: str) -> list[str]:
         if "self_elevate" in content.lower() or "capability_tier_cap" in content.lower():
             # Those keys belong in the registry, not host instruction prose.
             problems.append("vendor instruction leaks registry-only capability fields")
-        for phrase in ("Roleplay proposes decision-graph actions only", "never claim capabilities", "relative_weight"):
+        for phrase in (
+            "Roleplay proposes decision-graph actions only",
+            "never claim capabilities",
+            "relative_weight",
+            "ALEPH_SKILL_ROOT",
+            "<ABSOLUTE_PROJECT_ROOT>/.continue/rules/aleph.md",
+        ):
             if phrase not in content:
                 problems.append(f"missing semantic guardrail: {phrase}")
+        if "python .aleph/" in content.replace("\\", "/"):
+            problems.append("generated adapter invokes the core relative to the process working directory")
+        for line in content.splitlines():
+            key, separator, raw_value = line.partition(":")
+            if not separator:
+                continue
+            value = raw_value.strip().strip("[]").replace("'", "").replace('"', "")
+            if key.strip().casefold() == "applyto" and value in {"**", "**/*"}:
+                problems.append("generated adapter applies to every file")
+            if key.strip().casefold().replace("_", "") == "alwaysapply" and value.casefold() == "true":
+                problems.append("generated adapter is always active")
     return problems
 
 
@@ -171,7 +215,12 @@ def check_adapter_drift(skill_root: Path) -> dict[str, Any]:
             issues.append({"target": relative, "error": "drift", "expected_sha": _sha(expected), "actual_sha": _sha(actual)})
         for semantic in _semantic_adapter_issues(relative, actual):
             issues.append({"target": relative, "error": "semantic", "message": semantic})
-    return {"ok": not issues, "checked": len(expected_generated_files(skill_root)), "issues": issues}
+    for relative in RETIRED_GENERATED_FILES:
+        path = skill_root / relative
+        if path.exists() or path.is_symlink():
+            issues.append({"target": relative, "error": "retired-generated-adapter"})
+    checked = len(expected_generated_files(skill_root)) + len(RETIRED_GENERATED_FILES)
+    return {"ok": not issues, "checked": checked, "issues": issues}
 
 
 def _sha(text: str) -> str:

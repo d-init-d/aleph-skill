@@ -70,9 +70,27 @@ def _check_json_value(
         return [issue("RESOURCE_LIMIT", pointer=pointer or "/", message="JSON collection item limit exceeded")]
     if isinstance(value, float) and not math.isfinite(value):
         return [issue("NON_FINITE", pointer=pointer or "/", message="NaN/Infinity refused", actual=str(value))]
+    if isinstance(value, str) and _contains_lone_surrogate(value):
+        return [
+            issue(
+                "INVALID_ARTIFACT",
+                pointer=pointer or "/",
+                message="lone UTF-16 surrogate refused",
+            )
+        ]
     problems: list[Issue] = []
     if isinstance(value, dict):
         for key, child in value.items():
+            if _contains_lone_surrogate(str(key)):
+                problems.append(
+                    issue(
+                        "INVALID_ARTIFACT",
+                        pointer=pointer or "/",
+                        message="JSON object key contains a lone UTF-16 surrogate",
+                        actual=ascii(key),
+                    )
+                )
+                continue
             escaped = str(key).replace("~", "~0").replace("/", "~1")
             problems.extend(
                 _check_json_value(
@@ -101,29 +119,64 @@ def _reject_json_constant(value: str) -> None:
     raise ValueError(f"non-standard JSON constant refused: {value}")
 
 
+def _contains_lone_surrogate(value: str) -> bool:
+    """Return whether a decoded JSON string contains an invalid UTF-16 surrogate."""
+    return any(0xD800 <= ord(character) <= 0xDFFF for character in value)
+
+
+def _reject_duplicate_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, child in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON object key refused: {key}")
+        value[key] = child
+    return value
+
+
+def load_json_secure_with_digest(
+    path: Path,
+    *,
+    max_bytes: int = DEFAULT_MAX_FILE_BYTES,
+    max_depth: int = DEFAULT_JSON_DEPTH,
+) -> tuple[Any | None, str | None, list[Issue]]:
+    """Read, digest, and parse the same bounded bytes as strict JSON."""
+    try:
+        with path.open("rb") as handle:
+            raw = handle.read(max_bytes + 1)
+        if len(raw) > max_bytes:
+            return None, None, [
+                issue(
+                    "RESOURCE_LIMIT",
+                    artifact=str(path),
+                    message=f"file size exceeds {max_bytes}",
+                )
+            ]
+        text = raw.decode("utf-8")
+        data = json.loads(
+            text,
+            parse_constant=_reject_json_constant,
+            object_pairs_hook=_reject_duplicate_json_object,
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError) as exc:
+        return None, None, [issue("INVALID_ARTIFACT", artifact=str(path), message=str(exc))]
+    depth_issues = _check_json_value(data, max_depth=max_depth)
+    if depth_issues:
+        return None, None, depth_issues
+    return data, sha256_bytes(raw), []
+
+
 def load_json_secure(
     path: Path,
     *,
     max_bytes: int = DEFAULT_MAX_FILE_BYTES,
     max_depth: int = DEFAULT_JSON_DEPTH,
 ) -> tuple[Any | None, list[Issue]]:
-    try:
-        size = path.stat().st_size
-    except OSError as exc:
-        return None, [issue("INVALID_ARTIFACT", artifact=str(path), message=str(exc))]
-    if size > max_bytes:
-        return None, [
-            issue("RESOURCE_LIMIT", artifact=str(path), message=f"file size {size} exceeds {max_bytes}")
-        ]
-    try:
-        text = path.read_text(encoding="utf-8")
-        data = json.loads(text, parse_constant=_reject_json_constant)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
-        return None, [issue("INVALID_ARTIFACT", artifact=str(path), message=str(exc))]
-    depth_issues = _check_json_value(data, max_depth=max_depth)
-    if depth_issues:
-        return None, depth_issues
-    return data, []
+    data, _digest, problems = load_json_secure_with_digest(
+        path,
+        max_bytes=max_bytes,
+        max_depth=max_depth,
+    )
+    return data, problems
 
 
 def stream_jsonl(
@@ -150,8 +203,12 @@ def stream_jsonl(
                 ]
                 continue
             try:
-                value = json.loads(line, parse_constant=_reject_json_constant)
-            except (json.JSONDecodeError, ValueError) as exc:
+                value = json.loads(
+                    line,
+                    parse_constant=_reject_json_constant,
+                    object_pairs_hook=_reject_duplicate_json_object,
+                )
+            except (json.JSONDecodeError, ValueError, RecursionError) as exc:
                 yield line_no, None, [
                     issue("INVALID_JSONL", artifact=str(path), pointer=f"/line/{line_no}", message=str(exc))
                 ]
@@ -187,9 +244,45 @@ def stream_csv_rows(path: Path, *, max_file_bytes: int = DEFAULT_MAX_FILE_BYTES)
             return [], [issue("RESOURCE_LIMIT", artifact=str(path), message="CSV exceeds size limit")]
     except OSError as exc:
         return [], [issue("INVALID_ARTIFACT", artifact=str(path), message=str(exc))]
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        return list(reader), []
+    try:
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            headers = list(reader.fieldnames or [])
+            normalized_headers = [header.strip() for header in headers]
+            if not headers or any(not header for header in normalized_headers):
+                return [], [
+                    issue(
+                        "INVALID_ARTIFACT",
+                        artifact=str(path),
+                        message="CSV header names must be non-empty",
+                    )
+                ]
+            seen: set[str] = set()
+            duplicates: set[str] = set()
+            for header in normalized_headers:
+                if header in seen:
+                    duplicates.add(header)
+                seen.add(header)
+            if duplicates:
+                return [], [
+                    issue(
+                        "INVALID_ARTIFACT",
+                        artifact=str(path),
+                        message=f"duplicate CSV headers refused: {sorted(duplicates)}",
+                    )
+                ]
+            rows = list(reader)
+            if any(None in row for row in rows):
+                return [], [
+                    issue(
+                        "INVALID_ARTIFACT",
+                        artifact=str(path),
+                        message="CSV row has more values than declared headers",
+                    )
+                ]
+            return rows, []
+    except (OSError, UnicodeDecodeError, csv.Error) as exc:
+        return [], [issue("INVALID_ARTIFACT", artifact=str(path), message=str(exc))]
 
 
 def _write_atomic_bytes(path: Path, data: bytes) -> None:

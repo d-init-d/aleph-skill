@@ -1,0 +1,38 @@
+{
+  "packet_hash": "87f93e8c506045ad64a2e063117402b0bbfb8de0867d165ac4c86b89633d36b8",
+  "actor_id": "actor:governor",
+  "decision_id": "decision:main",
+  "execution_id": "execution:roleplay-governor",
+  "status": "completed",
+  "network_used": false,
+  "tools_used": [],
+  "browsed": false,
+  "hypotheses": [
+    {
+      "id": "hypothesis:hike",
+      "action": "hike_25bp",
+      "reasoning": "The published mandate and institutional process permit a 25bp hike.",
+      "constraints_applied": [
+        "published committee mandate"
+      ],
+      "known_unknowns": [
+        "future committee vote timing"
+      ],
+      "status": "simulation",
+      "evidence_ids": []
+    },
+    {
+      "id": "hypothesis:hold",
+      "action": "hold",
+      "reasoning": "The same institutional process permits holding while vote timing remains unknown.",
+      "constraints_applied": [
+        "published committee mandate"
+      ],
+      "known_unknowns": [
+        "future committee vote timing"
+      ],
+      "status": "simulation",
+      "evidence_ids": []
+    }
+  ]
+}

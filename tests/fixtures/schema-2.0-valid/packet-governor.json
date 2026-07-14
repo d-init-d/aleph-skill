@@ -1,0 +1,31 @@
+{
+  "schema_version": "2.0.0",
+  "id": "packet:actor:governor:decision:main",
+  "frozen": true,
+  "actor_id": "actor:governor",
+  "decision_id": "decision:main",
+  "decision_time": "2026-01-01T00:00:00Z",
+  "knowledge_cutoff": "2026-01-01",
+  "dossier_hash": "51e60d5d4d3ed44f4cfc523c33894f6b1ba4d0223d93418dfb8288d121f1cdce",
+  "scenario_hash": "980e99ffc839cf1ee54eb365246e058a3fd4ac14cad8217d7dbc07248f31c4a7",
+  "claims": [
+    {
+      "id": "claim:governor-mandate",
+      "text": "Governor chairs the policy committee under a published mandate.",
+      "available_at": "2024-01-01",
+      "actor_access": "public_role",
+      "access_basis": "public_role"
+    }
+  ],
+  "institutional_constraints": [
+    "published committee mandate"
+  ],
+  "allowed_actions": [
+    "hike_25bp",
+    "hold"
+  ],
+  "explicit_unknowns": [
+    "future committee vote timing"
+  ],
+  "packet_hash": "87f93e8c506045ad64a2e063117402b0bbfb8de0867d165ac4c86b89633d36b8"
+}

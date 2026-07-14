@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 import shutil
@@ -13,7 +12,12 @@ from pathlib import Path
 from typing import Any
 
 from . import PACKAGE_VERSION
-from .io import canonical_json_bytes, sha256_file, write_json_atomic
+from .io import (
+    canonical_json_bytes,
+    load_json_secure_with_digest,
+    sha256_file,
+    write_json_atomic,
+)
 from .issues import Issue, issue
 from .paths import (
     assert_install_paths_safe,
@@ -233,18 +237,16 @@ def verify_distribution_manifest(source: Path, *, require: bool = True) -> dict[
             "status": "absent",
             "issues": [] if not require else [issue("INSTALL_NOT_ALLOWLISTED", message="distribution manifest missing").to_dict()],
         }
-    try:
-        with path.open("rb") as handle:
-            manifest_bytes = handle.read(MANIFEST_MAX_BYTES + 1)
-        if len(manifest_bytes) > MANIFEST_MAX_BYTES:
-            raise ValueError(
-                f"distribution manifest exceeds {MANIFEST_MAX_BYTES} bytes"
-            )
-        stored = json.loads(manifest_bytes.decode("utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        return {"ok": False, "status": "invalid", "issues": [issue("INSTALL_NOT_ALLOWLISTED", message=str(exc)).to_dict()]}
-    except ValueError as exc:
-        return {"ok": False, "status": "invalid", "issues": [issue("RESOURCE_LIMIT", message=str(exc)).to_dict()]}
+    stored, manifest_digest, load_issues = load_json_secure_with_digest(
+        path,
+        max_bytes=MANIFEST_MAX_BYTES,
+    )
+    if load_issues or manifest_digest is None:
+        return {
+            "ok": False,
+            "status": "invalid",
+            "issues": [problem.to_dict() for problem in load_issues],
+        }
     expected = build_distribution_manifest(source)
     problems: list[Issue] = source_symlink_issues(source)
     if not isinstance(stored, dict):
@@ -258,7 +260,46 @@ def verify_distribution_manifest(source: Path, *, require: bool = True) -> dict[
         )
         stored = {}
     if stored != expected:
-        stored_files = stored.get("files", []) if isinstance(stored, dict) else []
+        expected_keys = set(expected)
+        if set(stored) != expected_keys:
+            problems.append(
+                issue(
+                    "STALE_ARTIFACT",
+                    artifact=MANIFEST_NAME,
+                    pointer="/",
+                    message="distribution manifest fields differ from the exact contract",
+                    expected=sorted(expected_keys),
+                    actual=sorted(stored),
+                )
+            )
+        for field in (
+            "schema_version",
+            "package_version",
+            "algorithm",
+            "self_excluded",
+            "file_count",
+        ):
+            if stored.get(field) != expected[field]:
+                problems.append(
+                    issue(
+                        "STALE_ARTIFACT",
+                        artifact=MANIFEST_NAME,
+                        pointer=field,
+                        message="distribution manifest metadata mismatch",
+                        expected=expected[field],
+                        actual=stored.get(field),
+                    )
+                )
+        stored_files = stored.get("files", [])
+        if stored_files != expected["files"]:
+            problems.append(
+                issue(
+                    "STALE_ARTIFACT",
+                    artifact=MANIFEST_NAME,
+                    pointer="files",
+                    message="ordered distribution manifest entries mismatch",
+                )
+            )
         stored_by_path: dict[str, dict[str, Any]] = {}
         for entry in stored_files if isinstance(stored_files, list) else []:
             if not isinstance(entry, dict):
@@ -275,7 +316,7 @@ def verify_distribution_manifest(source: Path, *, require: bool = True) -> dict[
     return {
         "ok": not problems,
         "status": "verified" if not problems else "stale",
-        "manifest_sha256": _sha256_bytes(manifest_bytes),
+        "manifest_sha256": manifest_digest,
         "tree_sha256": expected["tree_sha256"],
         "file_count": expected["file_count"],
         "files": [entry["path"] for entry in expected["files"]] + [MANIFEST_NAME],
@@ -495,6 +536,7 @@ def install(
 
     if mode == "symlink":
         if plan["manifest"]["status"] != "verified":
+            plan["ok"] = False
             plan["status"] = "refused"
             plan["issues"].append(issue("INSTALL_NOT_ALLOWLISTED", message="symlink install requires a verified distribution manifest").to_dict())
             _write_receipt(plan, receipt_path, source, destination)
@@ -517,11 +559,13 @@ def install(
         symlink_backup: Path | None = None
         if destination.exists() or destination.is_symlink():
             if destination.is_dir() and not destination.is_symlink():
+                plan["ok"] = False
                 plan["status"] = "refused"
                 plan["issues"].append(issue("INSTALL_SOURCE_DEST", message="refusing to remove a real directory for symlink install").to_dict())
                 _write_receipt(plan, receipt_path, source, destination)
                 return plan
             if not force:
+                plan["ok"] = False
                 plan["status"] = "refused"
                 plan["issues"].append(issue("INSTALL_SOURCE_DEST", message="destination exists; use force").to_dict())
                 _write_receipt(plan, receipt_path, source, destination)
@@ -535,6 +579,7 @@ def install(
         except OSError as exc:
             if symlink_backup is not None and symlink_backup.exists() and not os.path.lexists(destination):
                 os.replace(symlink_backup, destination)
+            plan["ok"] = False
             plan["status"] = "failed"
             plan["rollback_status"] = "restored" if symlink_backup is not None else "not-needed"
             plan["issues"].append(issue("INSTALL_SOURCE_DEST", message=f"symlink failed: {exc}").to_dict())

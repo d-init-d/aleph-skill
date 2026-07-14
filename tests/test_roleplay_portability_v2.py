@@ -327,14 +327,16 @@ class InstallerAdapterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source_root = root / "source"
-            source = source_root / "adapters" / "generated" / "cursor.md"
+            source = source_root / "adapters" / "generated" / "continue.md"
             source.parent.mkdir(parents=True)
             (source_root / "SKILL.md").write_text(
                 "---\nname: aleph-skill\n---\n", encoding="utf-8"
             )
-            source.write_text(generate_instruction_adapter("cursor", source_root), encoding="utf-8")
+            source.write_text(
+                generate_instruction_adapter("continue", source_root), encoding="utf-8"
+            )
             write_json_atomic(source_root / MANIFEST_NAME, build_distribution_manifest(source_root))
-            destination = root / ".cursor" / "rules" / "aleph.mdc"
+            destination = root / ".continue" / "rules" / "aleph.md"
             result = install_adapter_file(
                 source,
                 destination,
@@ -351,7 +353,7 @@ class InstallerAdapterTests(unittest.TestCase):
         after = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
         self.assertTrue(result["ok"], result)
         self.assertEqual(before, after)
-        self.assertNotEqual(generate_instruction_adapter("cursor", ROOT), generate_instruction_adapter("windsurf", ROOT))
+        self.assertIn("alwaysApply: false", generate_instruction_adapter("continue", ROOT))
 
     def test_secret_scanner_finds_nested_hidden_secret(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -360,6 +362,68 @@ class InstallerAdapterTests(unittest.TestCase):
             (root / "nested" / ".env.production").write_text("API_KEY=abcdefghijklmnop\n", encoding="utf-8")
             findings = scan_secret_like_files(root)
             self.assertEqual(findings[0]["path"], "nested/.env.production")
+
+    def test_actor_packet_writes_only_the_raw_sealed_packet(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            workspace.mkdir()
+            actors = [
+                {
+                    "id": "actor:test",
+                    "subject_class": "public_role_person",
+                    "living_status": "living",
+                    "public_role": "Mayor",
+                    "scope_note": "public role only",
+                    "evidence_ids": ["evidence:role"],
+                    "decision_graph": {"allowed_actions": ["approve", "delay"]},
+                    "institutional_constraints": ["law"],
+                    "uncertainty_factors": ["timing"],
+                    "research_track": {
+                        "claims": [
+                            {
+                                "id": "claim:known",
+                                "claim": "Known public-role claim",
+                                "available_at": "2026-06-01T00:00:00Z",
+                                "access_basis": "public_role",
+                            }
+                        ]
+                    },
+                }
+            ]
+            (workspace / "actors.json").write_text(json.dumps(actors), encoding="utf-8")
+            (workspace / "simulation-manifest.json").write_text(
+                '{"schema_version":"2.0.0"}\n', encoding="utf-8"
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "actor_packet.py"),
+                    "--workspace",
+                    str(workspace),
+                    "--actor-id",
+                    "actor:test",
+                    "--decision-time",
+                    "2026-07-01T00:00:00Z",
+                    "--cutoff",
+                    "2026-06-30T00:00:00Z",
+                    "--out",
+                    "packets/test.json",
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            result = json.loads(completed.stdout)
+            retained = json.loads((workspace / "packets" / "test.json").read_text(encoding="utf-8"))
+            self.assertEqual(retained, result["packet"])
+            self.assertEqual(result["packet_hash"], retained["packet_hash"])
+            self.assertEqual(result["output_path"], "packets/test.json")
+            self.assertNotIn("packet", retained)
+            self.assertNotIn("exclusion_ledger", retained)
+            self.assertNotIn("privacy", retained)
 
     def test_actor_packet_refuses_output_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

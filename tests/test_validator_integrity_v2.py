@@ -21,18 +21,6 @@ FIXTURE = ROOT / "tests" / "fixtures" / "schema-2.0-valid"
 
 def make_strict_workspace(destination: Path) -> Path:
     shutil.copytree(FIXTURE, destination, dirs_exist_ok=True)
-    actors = json.loads((destination / "actors.json").read_text(encoding="utf-8"))
-    actor = actors[0]
-    actor["research_track"]["execution_id"] = "execution:research"
-    actor["roleplay_track"]["execution_id"] = "execution:roleplay"
-    actor["roleplay_track"]["packet_hash"] = "1" * 64
-    actor["decision_graph"] = {"allowed_actions": ["hike_25bp", "hold"]}
-    for index, claim in enumerate(actor["research_track"]["claims"]):
-        claim.update({"id": f"claim:actor-{index}", "access_basis": "public institutional record"})
-    for index, hypothesis in enumerate(actor["roleplay_track"]["hypotheses"]):
-        hypothesis["id"] = f"hypothesis:{index}"
-    write_json_atomic(destination / "actors.json", actors)
-
     trace = json.loads((destination / "propagation-trace.jsonl").read_text(encoding="utf-8").strip())
     trace["sample_refs"] = ["run:0"]
     trace.pop("hash_chain", None)
@@ -45,48 +33,6 @@ def make_strict_workspace(destination: Path) -> Path:
         branch["trace_hash"] = sha256_file(destination / "propagation-trace.jsonl")
     write_json_atomic(destination / "branch-ledger.json", ledger)
 
-    research_output = "2" * 64
-    rows = [
-        {
-            "actor_id": "actor:governor",
-            "track": "research",
-            "execution_mode": "isolated-pass",
-            "agent_ref": "research-agent-1",
-            "execution_id": "execution:research",
-            "started_at": "2026-07-01T10:00:00Z",
-            "completed_at": "2026-07-01T11:00:00Z",
-            "input_artifact": "research-prompt.md",
-            "input_hash": "1" * 64,
-            "output_artifact": "research-governor.md",
-            "output_hash": research_output,
-            "receipt_id": "receipt:research",
-            "receipt_hash": "3" * 64,
-            "receipt_attestation": "self",
-            "status": "completed",
-        },
-        {
-            "actor_id": "actor:governor",
-            "track": "roleplay",
-            "execution_mode": "isolated-pass",
-            "agent_ref": "roleplay-agent-2",
-            "execution_id": "execution:roleplay",
-            "started_at": "2026-07-01T12:00:00Z",
-            "completed_at": "2026-07-01T13:00:00Z",
-            "input_artifact": "packet.json",
-            "input_hash": research_output,
-            "output_artifact": "roleplay-governor.md",
-            "output_hash": "4" * 64,
-            "receipt_id": "receipt:roleplay",
-            "receipt_hash": "5" * 64,
-            "previous_receipt_hash": "3" * 64,
-            "receipt_attestation": "self",
-            "status": "completed",
-        },
-    ]
-    (destination / "human-track-ledger.jsonl").write_text(
-        "\n".join(json.dumps(row) for row in rows) + "\n",
-        encoding="utf-8",
-    )
     for script, extra in (("run_simulation.py", ["--ticks", "182"]), ("replay_simulation.py", [])):
         completed = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / script), "--workspace", str(destination), *extra],
@@ -150,7 +96,7 @@ class ValidatorIntegrityV2Tests(unittest.TestCase):
                     "validation and audit",
                     "source appendix",
                     "warnings and next steps",
-                    "future monitoring and probability updates",
+                    "future monitoring and likelihood updates",
                 ]
             )
             (workspace / "REPORT.md").write_text(f"# Report\n\nThis prose mentions {terms}.\n", encoding="utf-8")

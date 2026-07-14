@@ -40,7 +40,7 @@ Delayed cycles are resolved through emission snapshots. A delayed effect capture
 
 Counter-addressed RNG binds every draw to the seed, run ID, edge ID, and purpose. Length-prefixed typed fields prevent ambiguous counter addresses. Worker count does not alter the run hash.
 
-Invalid runs are excluded from branch clusters and remain unresolved probability mass. The run fails when the invalid fraction exceeds its configured hard gate. Valid branch mass plus unresolved mass must equal one.
+Invalid runs are excluded from branch clusters and remain unresolved simulation mass. The run fails when the invalid fraction exceeds its configured hard gate. Valid relative-weight mass plus unresolved mass must equal one; this accounting identity does not turn uncalibrated weights into probabilities.
 
 ## Trace requirement
 

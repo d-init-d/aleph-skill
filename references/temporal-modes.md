@@ -19,7 +19,7 @@ Each branch must include:
 - an end time and end state,
 - observable leading indicators,
 - disconfirming conditions,
-- probability-update triggers,
+- observation-update triggers that cause a new simulation and update the declared likelihood mode,
 - sensitivity to intervention magnitude and actor response.
 
 Do not call a branch a forecast certainty. State the observation cutoff prominently.
@@ -47,4 +47,4 @@ No node after the observation cutoff may be labeled `fact`. A `simulated_branch`
 
 ## Temporal knowledge
 
-Actors know only information available and accessible at their roleplay `knowledge_cutoff`. For future projections, update relative weights or calibrated probabilities through a new simulation run; do not retroactively rewrite what actors knew.
+Actors know only information available and accessible at their roleplay `knowledge_cutoff`. For future projections, update `relative_weight` through a new simulation run by default. Update `calibrated_probability` only when the calibration policy, hindcast, sample, interval, model/config, and validation gates still pass. Do not retroactively rewrite what actors knew.

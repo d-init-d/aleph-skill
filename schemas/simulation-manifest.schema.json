@@ -45,14 +45,26 @@
         "adaptive_scope": {
           "type": "object", "additionalProperties": false, "required": ["assessed", "overall_complexity", "dimensions", "rationale", "decomposition"],
           "properties": {
-            "assessed": {"const": true}, "overall_complexity": {"type": "number", "minimum": 0, "maximum": 1}, "rationale": {"type": "string"},
+            "assessed": {"type": "boolean"}, "overall_complexity": {"type": "number", "minimum": 0, "maximum": 1}, "rationale": {"type": "string"},
             "dimensions": {"type": "object", "additionalProperties": false, "required": ["temporal_span", "domain_breadth", "geographic_breadth", "actor_density", "causal_depth", "evidence_uncertainty", "stakes"], "properties": {"temporal_span": {"type": "number", "minimum": 0, "maximum": 1}, "domain_breadth": {"type": "number", "minimum": 0, "maximum": 1}, "geographic_breadth": {"type": "number", "minimum": 0, "maximum": 1}, "actor_density": {"type": "number", "minimum": 0, "maximum": 1}, "causal_depth": {"type": "number", "minimum": 0, "maximum": 1}, "evidence_uncertainty": {"type": "number", "minimum": 0, "maximum": 1}, "stakes": {"type": "number", "minimum": 0, "maximum": 1}}},
             "decomposition": {"type": "object", "additionalProperties": false, "required": ["subquestions", "critical_paths", "research_waves_completed"], "properties": {"subquestions": {"type": "array", "items": {"type": "string"}}, "critical_paths": {"type": "array", "items": {"type": "string"}}, "research_waves_completed": {"type": "integer", "minimum": 0}}}
           }
         },
-        "research_quality": {"enum": ["best-available", "limited"]},
-        "research_control": {"type": "object", "additionalProperties": false, "required": ["policy", "sources_examined", "saturation_reached", "unresolved_critical_gaps"], "properties": {"policy": {"const": "evidence-saturation"}, "sources_examined": {"type": "integer", "minimum": 0}, "saturation_reached": {"type": "boolean"}, "consecutive_no_new_material_claims": {"type": "integer", "minimum": 0}, "stop_reason": {"type": "string"}, "unresolved_critical_gaps": {"type": "array", "items": {"type": "string"}}}},
-        "d_research": {"type": "object", "additionalProperties": false, "required": ["status", "invoked"], "properties": {"status": {"type": "string"}, "invoked": {"type": "boolean"}, "path": {"type": "string"}, "package_major": {"type": "integer", "minimum": 1}, "ledger_ref": {"type": "string"}}},
+        "research_quality": {"enum": ["best-available", "limited", "unknown"]},
+        "research_control": {"type": "object", "additionalProperties": false, "required": ["policy", "sources_examined", "saturation_reached", "unresolved_critical_gaps"], "properties": {"policy": {"const": "evidence-saturation"}, "sources_examined": {"type": "integer", "minimum": 0}, "saturation_reached": {"type": "boolean"}, "consecutive_no_new_material_claims": {"type": "integer", "minimum": 0}, "stop_reason": {"type": "string"}, "unresolved_critical_gaps": {"type": "array", "items": {"type": "string"}}, "next_wave_queue": {"type": "array", "items": {"type": "string", "minLength": 1}}}},
+        "d_research": {
+          "type": "object", "additionalProperties": false, "required": ["status", "invoked"],
+          "properties": {
+            "status": {"enum": ["unknown", "unavailable", "incompatible", "available", "imported", "verified"]},
+            "invoked": {"type": "boolean"}, "path": {"type": "string", "minLength": 1},
+            "package_major": {"const": 3}, "ledger_ref": {"type": "string", "minLength": 1}
+          },
+          "allOf": [
+            {"if": {"properties": {"status": {"enum": ["unknown", "unavailable", "incompatible"]}}}, "then": {"properties": {"invoked": {"const": false}}}},
+            {"if": {"properties": {"status": {"const": "available"}}}, "then": {"required": ["path", "package_major"]}},
+            {"if": {"properties": {"status": {"enum": ["imported", "verified"]}}}, "then": {"required": ["path", "package_major", "ledger_ref"], "properties": {"invoked": {"const": true}}}}
+          ]
+        },
         "subagents": {"type": "object", "additionalProperties": false, "required": ["status"], "properties": {"status": {"type": "string"}, "tool": {"type": ["string", "null"]}, "detection_method": {"type": "string"}, "fallback_reason": {"type": "string"}}},
         "repair_cycles_completed": {"type": "integer", "minimum": 0},
         "checkpoints": {"type": "object", "additionalProperties": false, "required": ["initialized", "scope_assessed", "baseline_researched", "human_tracks_completed", "graph_built", "propagated", "branched", "validated"], "properties": {"initialized": {"type": "boolean"}, "scope_assessed": {"type": "boolean"}, "baseline_researched": {"type": "boolean"}, "human_tracks_completed": {"type": "boolean"}, "graph_built": {"type": "boolean"}, "propagated": {"type": "boolean"}, "branched": {"type": "boolean"}, "validated": {"type": "boolean"}}}
@@ -71,6 +83,21 @@
     "active_contexts": {"type": "array", "items": {"type": "string"}},
     "assumptions": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["id", "statement"], "properties": {"id": {"type": "string", "pattern": "^assumption:"}, "statement": {"type": "string", "minLength": 1}}}}
   },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"enum": ["complete", "completed"]}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "execution": {
+            "properties": {
+              "adaptive_scope": {"properties": {"assessed": {"const": true}}},
+              "research_quality": {"enum": ["best-available", "limited"]}
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "receipt_ref": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "bundle_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "assurance_tier": {"type": ["string", "null"]}}}
   }

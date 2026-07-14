@@ -21,7 +21,7 @@
     "started_at": "2026-07-01T00:00:00Z",
     "completed_at": "2026-07-01T00:01:00Z",
     "preferred_tool": "d-research",
-    "artifact": "actors.json#actor:example/research_track",
+    "artifact": "packets/actor-example.json",
     "notes": "Research gathers public-role evidence only and never roleplays.",
     "claims": [
       {
@@ -41,7 +41,7 @@
     "execution_id": "execution:roleplay:actor-example",
     "started_at": "2026-07-01T00:01:01Z",
     "completed_at": "2026-07-01T00:02:00Z",
-    "artifact": "actors.json#actor:example/roleplay_track",
+    "artifact": "roleplay/actor-example.json",
     "knowledge_cutoff": "2026-06-01T00:00:00Z",
     "dossier_evidence_ids": ["evidence:example"],
     "packet_hash": "6666666666666666666666666666666666666666666666666666666666666666",

@@ -96,10 +96,15 @@ class ReleaseContractTests(unittest.TestCase):
         package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
         lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        uv_lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
         self.assertEqual(package["version"], PACKAGE_VERSION)
         self.assertEqual(lock["version"], PACKAGE_VERSION)
         self.assertEqual(lock["packages"][""]["version"], PACKAGE_VERSION)
         self.assertIn(f'version = "{PACKAGE_VERSION}"', pyproject)
+        self.assertIn(
+            f'[[package]]\nname = "aleph-skill"\nversion = "{PACKAGE_VERSION}"',
+            uv_lock,
+        )
         self.assertEqual(SCHEMA_VERSION, "2.0.0")
 
     def test_self_test_is_non_mutating(self) -> None:
@@ -112,10 +117,15 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("coverage_data.unlink(missing_ok=True)", gate)
 
     def test_ci_matrix_exists(self) -> None:
-        workflow = ROOT / ".github" / "workflows" / "ci.yml"
-        self.assertTrue(workflow.is_file())
-        text = workflow.read_text(encoding="utf-8")
-        for os_name in ("ubuntu-latest", "windows-latest", "macos-latest"):
+        ci_workflow = ROOT / ".github" / "workflows" / "ci.yml"
+        verify_workflow = ROOT / ".github" / "workflows" / "verify.yml"
+        self.assertTrue(ci_workflow.is_file())
+        self.assertTrue(verify_workflow.is_file())
+        ci_text = ci_workflow.read_text(encoding="utf-8")
+        text = verify_workflow.read_text(encoding="utf-8")
+        self.assertIn("uses: ./.github/workflows/verify.yml", ci_text)
+        self.assertIn("workflow_call:", text)
+        for os_name in ("ubuntu-24.04", "windows-2025", "macos-15"):
             self.assertIn(os_name, text)
         for version in ("3.10", "3.11", "3.12", "3.13"):
             self.assertIn(version, text)

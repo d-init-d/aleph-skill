@@ -67,13 +67,23 @@ def validate_relative_artifact_path(raw: str, *, artifact: str = "artifact_path"
         problems.append(issue("PATH_ESCAPE", artifact=artifact, pointer=text, message="NUL byte in path"))
     if text.startswith("/") or text.startswith("~"):
         problems.append(issue("PATH_ABSOLUTE", artifact=artifact, pointer=text, message="absolute path refused"))
-    if _is_windows_drive(text):
+    is_windows_drive = _is_windows_drive(text)
+    if is_windows_drive:
         problems.append(issue("PATH_DRIVE", artifact=artifact, pointer=text, message="drive-letter path refused"))
     if _is_unc(str(raw)):
         problems.append(issue("PATH_UNC", artifact=artifact, pointer=text, message="UNC path refused"))
     parts = [p for p in text.split("/") if p not in ("", ".")]
     if any(p == ".." for p in parts):
         problems.append(issue("PATH_ESCAPE", artifact=artifact, pointer=text, message="parent traversal '..' refused"))
+    if not is_windows_drive and any(":" in part for part in parts):
+        problems.append(
+            issue(
+                "PATH_ESCAPE",
+                artifact=artifact,
+                pointer=text,
+                message="colon path components and Windows alternate data streams are refused",
+            )
+        )
     return problems
 
 
@@ -259,6 +269,7 @@ ALLOWLIST_NAMES = frozenset(
         "LICENSE",
         "package.json",
         "pyproject.toml",
+        "uv.lock",
         "aleph.config.json",
     }
 )
@@ -273,6 +284,7 @@ ALLOWLIST_DIRS = frozenset(
         "schemas",
         "packs",
         "tests",
+        ".github",
     }
 )
 ALLOWLIST_SUFFIXES = frozenset(

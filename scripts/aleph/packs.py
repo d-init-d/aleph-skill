@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import math
 import os
 import re
@@ -18,7 +17,7 @@ from .engine import (
     run_deterministic,
     run_monte_carlo,
 )
-from .io import canonical_hash, sha256_file
+from .io import canonical_hash, load_json_secure, sha256_file
 from .issues import Issue, issue
 
 PACK_NAMES = ("economics", "policy", "history", "climate", "healthcare", "technology", "geopolitics")
@@ -32,11 +31,9 @@ def discover_pack_roots(
 ) -> list[Path]:
     roots: list[Path] = list(explicit or [])
     if config_path and config_path.is_file():
-        try:
-            config = json.loads(config_path.read_text(encoding="utf-8"))
+        config, config_issues = load_json_secure(config_path)
+        if not config_issues and isinstance(config, dict):
             roots.extend(Path(value) for value in config.get("domain_packs", []) if isinstance(value, str))
-        except (OSError, json.JSONDecodeError):
-            pass
     roots.extend(Path(value) for value in os.environ.get("ALEPH_DOMAIN_PACKS", "").split(os.pathsep) if value.strip())
     if skill_root and (skill_root / "packs").is_dir():
         roots.append(skill_root / "packs")
@@ -49,11 +46,11 @@ def discover_pack_roots(
 
 
 def _json(path: Path, issues: list[Issue]) -> Any | None:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        issues.append(issue("INVALID_ARTIFACT", artifact=path.name, message=str(exc)))
+    data, problems = load_json_secure(path)
+    if problems:
+        issues.extend(problems)
         return None
+    return data
 
 
 def _validate_variables(data: Any, name: str, issues: list[Issue]) -> set[str]:

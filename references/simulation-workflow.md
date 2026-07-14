@@ -39,7 +39,7 @@ Read `references/adaptive-research-workflow.md`. Reassess complexity when new do
 
 ## Phase 3: Research in waves
 
-Use D Research to:
+Use compatible D Research, or the limited host-native fallback in `references/d-research-integration.md`, to:
 
 1. map primary and authoritative sources,
 2. fan out queries,
@@ -49,7 +49,9 @@ Use D Research to:
 6. search contradictions,
 7. expand unresolved frontiers.
 
-Write findings and artifacts after every wave so long runs survive context resets. Continue until all critical questions are covered and additional sources stop changing material claims, mechanisms, actors, thresholds, branches, or probabilities.
+Write findings and artifacts after every wave so long runs survive context resets. Continue until all critical questions are covered and additional sources stop changing material claims, mechanisms, actors, thresholds, branches, branch rankings, or—only for a gate-authorized calibrated run—probabilities.
+
+If the host reaches a context, token, wall-clock, or tool budget first, persist work in `execution.research_control.next_wave_queue` and all required manifest counters, set `saturation_reached: false`, record `stop_reason` as `host_limit:<specific-limit>`, list every unresolved critical gap, and set `execution.research_quality: limited`. Return a resumable unsaturated handoff with no final assurance tier, then resume from that checkpoint in a later execution.
 
 ## Phase 4: Construct and link
 
@@ -61,7 +63,7 @@ Use `references/node-builder.md` and `references/causal-edge-protocol.md`.
 
 For every material actor:
 
-1. dispatch the D Research public-role track,
+1. dispatch a dedicated public-role research track using compatible D Research or the limited host-native fallback,
 2. freeze the dossier and knowledge cutoff,
 3. dispatch a different roleplay track without browsing authority,
 4. adjudicate at least two normalized actions,
@@ -84,7 +86,7 @@ Before synthesis:
 - backtest against observed analogues where possible,
 - verify temporal knowledge boundaries,
 - test high-sensitivity assumptions,
-- redistribute relative weights or calibrated probability mass when edges fail,
+- redistribute `relative_weight` when edges fail, or redistribute `calibrated_probability` only if every calibration and validation gate remains satisfied,
 - launch another research wave for any critical gap.
 
 ## Phase 8: Saturation gate
@@ -98,7 +100,7 @@ Do not declare completion until:
 - no critical evidence gap remains,
 - the manifest records the stop reason and research waves completed.
 
-There is no time, source-count, or repair-cycle limit. Evidence saturation—not impatience—is the stopping rule.
+The protocol has no fixed time, source-count, or repair-cycle limit. Evidence saturation is the completion rule. A host execution limit may require the resumable unsaturated handoff defined in Phase 3; that handoff is not completion.
 
 ## Phase 9: Validate and report
 

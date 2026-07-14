@@ -1,6 +1,6 @@
 # Adaptive research workflow
 
-Use D Research as the evidence engine and this protocol as the causal-simulation outer loop. Depth is determined by the event, not by a user-selected speed mode.
+Use compatible D Research as the preferred evidence engine and this protocol as the causal-simulation outer loop. If D Research is unavailable, use the limited host-native workflow in `references/d-research-integration.md`. Depth is determined by the event, not by a user-selected speed mode.
 
 ## 1. Frame the investigation
 
@@ -58,7 +58,7 @@ Map likely primary and authoritative sources for each subquestion:
 - public-role speeches, testimony, decisions, and memoirs for human actors,
 - contradiction sources and alternative interpretations.
 
-Use D Research's browser-first/tool-priority rules. Never bypass access controls.
+With compatible D Research, follow its browser-first/tool-priority rules. In limited fallback mode, use only the host's declared lawful research capabilities and record the retrieval method for every source. Never bypass access controls.
 
 ## 5. Generate query fanout
 
@@ -78,9 +78,11 @@ Run research in waves and write findings immediately:
 6. prospective indicators and disconfirming evidence,
 7. frontier expansion for remaining critical gaps.
 
-Small, local, well-documented changes may saturate in one or two waves. Large, long-horizon, multi-domain, high-stakes, or weak-evidence changes should continue across as many waves and specialized subagents as necessary. There is no source-count or elapsed-time ceiling.
+Small, local, well-documented changes may saturate in one or two waves. Large, long-horizon, multi-domain, high-stakes, or weak-evidence changes should continue across as many waves and specialized subagents as necessary. The protocol imposes no source-count or elapsed-time ceiling.
 
-For long-horizon work that may cross context windows, use D Research's research-plan protocol and persist plans, ledgers, findings, and partial artifacts in the simulation workspace.
+After every wave, persist the research plan, completed subquestions, sources examined, atomic claims, contradictions, unresolved frontiers, complexity reassessment, and next-wave queue in the simulation workspace. Store resumable work items in `execution.research_control.next_wave_queue`. Update `research_waves_completed`, `sources_examined`, checkpoint flags, and `unresolved_critical_gaps` before dispatching more work. When D Research is available, preserve its plan and ledger too.
+
+A host context, token, wall-clock, or tool budget may interrupt one execution even though it is not a protocol stopping rule. Before yielding, write a resumable checkpoint. If critical gaps remain, set `saturation_reached: false`, record a precise `stop_reason` beginning with `host_limit:`, keep unresolved gaps explicit, populate `execution.research_control.next_wave_queue`, and set `execution.research_quality: limited`. This is an unsaturated partial handoff, so it has no final assurance tier. A later execution resumes from the persisted frontier; it does not restart or relabel the partial result as complete. Only a later saturated, finalized fallback run may receive the `limited` assurance tier.
 
 ## 7. Maintain the evidence ledger
 
@@ -90,7 +92,7 @@ Search snippets are discovery aids, not strong evidence. Prefer opened primary/a
 
 ## 8. Run human tracks
 
-For each material actor, complete the dedicated D Research public-role dossier before dispatching the separate roleplay track. Freeze the dossier and simulated-time knowledge cutoff. Roleplay cannot browse or add evidence.
+For each material actor, complete a dedicated public-role research dossier with compatible D Research or the limited host-native fallback before dispatching the separate roleplay track. Freeze the dossier and simulated-time knowledge cutoff. Roleplay cannot browse, call research tools, inspect the evidence map, or add evidence.
 
 ## 9. Construct and challenge the causal graph
 
@@ -114,10 +116,10 @@ Set `saturation_reached: true` only when:
 - primary/authoritative sources support the main mechanisms,
 - contradiction searches no longer materially change claim confidence,
 - additional sources no longer add material actors, mechanisms, thresholds, or branches,
-- branch relative weights (or calibrated probabilities) and sensitivity rankings stabilize,
+- branch `relative_weight` rankings stabilize, or—only after every calibration and validation gate passes—`calibrated_probability` and sensitivity rankings stabilize,
 - no unresolved critical evidence gap remains.
 
-Do not stop because the run is long. Do not continue merely to accumulate duplicate sources after saturation.
+Do not treat run length as evidence saturation. Do not continue merely to accumulate duplicate sources after saturation. If the host interrupts before this gate passes, use the resumable partial handoff above rather than claiming completion.
 
 ## 12. Professional synthesis
 

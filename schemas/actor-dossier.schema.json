@@ -1,16 +1,164 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://aleph.local/schemas/2.0/actor-dossier.schema.json",
-  "type": "object", "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aleph.local/schemas/2.0/actor-dossier.schema.json",
+  "type": "object",
+  "additionalProperties": false,
   "required": ["id", "person_node", "public_role", "scope_note", "materiality", "subject_class", "evidence_ids"],
   "properties": {
-    "id": {"type": "string", "pattern": "^actor:"}, "person_node": {"type": "string", "pattern": "^entity:"},
-    "public_role": {"type": "string"}, "scope_note": {"type": "string"}, "materiality": {"enum": ["material", "non_material"]},
-    "subject_class": {"enum": ["public_role_person", "private_person", "minor", "unknown"]}, "living_status": {"type": "string"},
-    "evidence_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^evidence:"}},
-    "research_track": {"type": "object"}, "roleplay_track": {"type": "object"}, "adjudication": {"type": "object"},
-    "decision_graph": {"anyOf": [{"type": "object"}, {"type": "array"}]}, "decision_patterns": {"type": "array"},
-    "predicted_responses": {"type": "array"}, "biographical_foundation": {"type": "object"}, "stated_beliefs": {"type": "array"},
-    "institutional_constraints": {"type": "array"}, "relationships": {"type": "array"}, "crisis_behavior": {"type": "object"},
-    "uncertainty_factors": {"type": "array"}
+    "id": {"type": "string", "pattern": "^actor:"},
+    "person_node": {"type": "string", "pattern": "^entity:"},
+    "public_role": {"type": "string", "minLength": 1},
+    "scope_note": {"type": "string", "minLength": 1},
+    "materiality": {"enum": ["material", "non_material"]},
+    "subject_class": {"enum": ["public_role_person", "private_person", "minor", "unknown"]},
+    "living_status": {"type": "string"},
+    "evidence_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^evidence:"}},
+    "research_track": {"$ref": "#/$defs/research_track"},
+    "roleplay_track": {"$ref": "#/$defs/roleplay_track"},
+    "adjudication": {"$ref": "#/$defs/adjudication"},
+    "decision_graph": {"$ref": "#/$defs/decision_graph"},
+    "decision_patterns": {"type": "array"},
+    "predicted_responses": {"type": "array", "items": {"$ref": "#/$defs/predicted_response"}},
+    "biographical_foundation": {"type": "object"},
+    "stated_beliefs": {"type": "array"},
+    "institutional_constraints": {"type": "array", "items": {"type": "string"}},
+    "relationships": {"type": "array"},
+    "crisis_behavior": {"type": "object"},
+    "uncertainty_factors": {"type": "array", "items": {"type": "string"}}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"materiality": {"const": "material"}}, "required": ["materiality"]},
+      "then": {"required": ["research_track", "roleplay_track", "adjudication", "decision_graph"]}
+    }
+  ],
+  "$defs": {
+    "decision_graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowed_actions": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "actions": {"type": "array", "minItems": 1, "items": {"anyOf": [{"type": "string", "minLength": 1}, {"type": "object", "additionalProperties": false, "required": ["action"], "properties": {"action": {"type": "string", "minLength": 1}}}]}}
+      },
+      "anyOf": [{"required": ["allowed_actions"]}, {"required": ["actions"]}]
+    },
+    "research_claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "claim", "evidence_ids", "confidence", "available_at", "access_basis"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^claim:"},
+        "claim": {"type": "string", "minLength": 1},
+        "evidence_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^evidence:"}},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "available_at": {"type": "string", "minLength": 1},
+        "access_basis": {"type": "string", "minLength": 1}
+      }
+    },
+    "research_track": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "execution_mode", "agent_ref", "execution_id", "started_at", "completed_at", "artifact", "claims"],
+      "properties": {
+        "status": {"type": "string", "minLength": 1},
+        "execution_mode": {"type": "string", "minLength": 1},
+        "agent_ref": {"type": "string", "minLength": 1},
+        "execution_id": {"type": "string", "minLength": 1},
+        "started_at": {"type": "string", "minLength": 1},
+        "completed_at": {"type": "string", "minLength": 1},
+        "artifact": {"type": "string", "minLength": 1},
+        "notes": {"type": "string"},
+        "isolation_note": {"type": "string"},
+        "preferred_tool": {"type": "string"},
+        "claims": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/research_claim"}}
+      }
+    },
+    "roleplay_hypothesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "action", "reasoning", "status", "evidence_ids"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^hypothesis:"},
+        "action": {"type": "string", "minLength": 1},
+        "reasoning": {"type": "string", "minLength": 1},
+        "status": {"const": "simulation"},
+        "evidence_ids": {"type": "array", "maxItems": 0},
+        "constraints_applied": {"type": "array", "items": {"type": "string"}},
+        "triggers": {"type": "array", "items": {"type": "string"}},
+        "known_unknowns": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "roleplay_track": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "execution_mode", "agent_ref", "execution_id", "started_at", "completed_at", "artifact", "knowledge_cutoff", "packet_hash", "hypotheses"],
+      "properties": {
+        "status": {"type": "string", "minLength": 1},
+        "execution_mode": {"type": "string", "minLength": 1},
+        "agent_ref": {"type": "string", "minLength": 1},
+        "execution_id": {"type": "string", "minLength": 1},
+        "started_at": {"type": "string", "minLength": 1},
+        "completed_at": {"type": "string", "minLength": 1},
+        "artifact": {"type": "string", "minLength": 1},
+        "notes": {"type": "string"},
+        "isolation_note": {"type": "string"},
+        "knowledge_cutoff": {"type": "string", "minLength": 1},
+        "dossier_evidence_ids": {"type": "array", "items": {"type": "string", "pattern": "^evidence:"}},
+        "packet_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "hypotheses": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/roleplay_hypothesis"}}
+      }
+    },
+    "adjudication_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "action": {"type": "string", "minLength": 1},
+        "hypothesis_ref": {"type": "string", "pattern": "^hypothesis:"},
+        "likelihood_mode": {"enum": ["deterministic", "relative_weight", "calibrated_probability"]},
+        "relative_weight": {"type": "number", "exclusiveMinimum": 0},
+        "probability": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "method": {"type": "string", "minLength": 1},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}},
+        "base_rate_refs": {"type": "array", "items": {"type": "string"}},
+        "sample_count": {"type": "integer", "minimum": 1},
+        "interval": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number", "minimum": 0, "maximum": 1}},
+        "calibration_policy_ref": {"type": "string", "minLength": 1}
+      },
+      "anyOf": [{"required": ["action"]}, {"required": ["hypothesis_ref"]}]
+    },
+    "adjudication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "calibrated", "results"],
+      "properties": {
+        "method": {"type": "string", "minLength": 1},
+        "calibrated": {"type": "boolean"},
+        "results": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/adjudication_result"}},
+        "owner": {"type": "string"},
+        "accepted_hypotheses": {"type": "array", "items": {"type": "string", "pattern": "^hypothesis:"}},
+        "rejected_hypotheses": {"type": "array", "items": {"type": "string", "pattern": "^hypothesis:"}},
+        "confidence_cap": {"type": "number", "minimum": 0, "maximum": 1},
+        "rule": {"type": "string"},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}},
+        "base_rate_refs": {"type": "array", "items": {"type": "string"}},
+        "sample_count": {"type": "integer", "minimum": 1},
+        "interval": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number", "minimum": 0, "maximum": 1}},
+        "calibration_policy_ref": {"type": "string"},
+        "disagreement_log": {"type": "array"}
+      }
+    },
+    "predicted_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "status"],
+      "properties": {
+        "action": {"type": "string", "minLength": 1},
+        "probability": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "relative_weight": {"type": "number", "exclusiveMinimum": 0},
+        "reasoning": {"type": "string"},
+        "status": {"const": "simulation"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    }
   }
 }

@@ -64,6 +64,7 @@ ID_PREFIXES = {
     "evidence": ("evidence:",),
     "assumption": ("assumption:",),
     "packet": ("packet:",),
+    "hypothesis": ("hypothesis:",),
     "receipt": ("receipt:",),
 }
 
@@ -418,6 +419,7 @@ RESEARCH_CONTROL_FIELDS = frozenset(
         "consecutive_no_new_material_claims",
         "stop_reason",
         "unresolved_critical_gaps",
+        "next_wave_queue",
     }
 )
 D_RESEARCH_FIELDS = frozenset({"status", "invoked", "path", "package_major", "ledger_ref"})
@@ -484,6 +486,21 @@ ADJUDICATION_FIELDS = frozenset(
         "interval",
         "calibration_policy_ref",
         "disagreement_log",
+    }
+)
+ADJUDICATION_RESULT_FIELDS = frozenset(
+    {
+        "action",
+        "hypothesis_ref",
+        "likelihood_mode",
+        "relative_weight",
+        "probability",
+        "method",
+        "evidence_refs",
+        "base_rate_refs",
+        "sample_count",
+        "interval",
+        "calibration_policy_ref",
     }
 )
 RESEARCH_CLAIM_FIELDS = frozenset(
@@ -657,8 +674,8 @@ def ensure_list(value: Any) -> list[Any]:
 
 
 def schema_is_current(version: Any) -> bool:
-    return version == SCHEMA_VERSION
+    return isinstance(version, str) and version == SCHEMA_VERSION
 
 
 def schema_is_legacy(version: Any) -> bool:
-    return version in {"1.2.0", "1.1.0"}
+    return isinstance(version, str) and version in {"1.2.0", "1.1.0"}

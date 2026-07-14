@@ -24,7 +24,7 @@ Edge causal:rate-to-gap decreases the output gap with fixed lag and open-economy
 
 Three scenario views: sustained tightening, external offset, and a stress view with null probability.
 
-## Future monitoring and probability updates
+## Future monitoring and likelihood updates
 
 Watch policy rate and output gap over P90D-P180D windows; disconfirm if credit accelerates after the hike.
 

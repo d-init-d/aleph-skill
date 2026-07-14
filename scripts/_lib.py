@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import datetime as dt
 import json
 import re
@@ -16,9 +15,13 @@ if str(_SCRIPTS) not in sys.path:
 
 from aleph.discovery import discover_d_research  # noqa: E402
 from aleph.installer import install as safe_install  # noqa: E402
-from aleph.io import write_json_atomic  # noqa: E402
+from aleph.io import load_json_secure, stream_csv_rows, write_json_atomic  # noqa: E402
 
 SKILL_NAME = "aleph-skill"
+
+
+class ArtifactLoadError(ValueError):
+    """A bounded artifact read failed strict JSON validation."""
 
 
 def skill_root() -> Path:
@@ -39,8 +42,11 @@ def write_text(path: Path, text: str) -> None:
 
 
 def load_json(path: Path) -> Any:
-    with path.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
+    data, problems = load_json_secure(path)
+    if problems:
+        details = "; ".join(problem.legacy_string() for problem in problems)
+        raise ArtifactLoadError(f"invalid JSON artifact {path}: {details}")
+    return data
 
 
 def write_json(path: Path, data: Any) -> None:
@@ -48,8 +54,11 @@ def write_json(path: Path, data: Any) -> None:
 
 
 def load_csv_rows(path: Path) -> list[dict[str, str]]:
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        return list(csv.DictReader(handle))
+    rows, problems = stream_csv_rows(path)
+    if problems:
+        details = "; ".join(problem.legacy_string() for problem in problems)
+        raise ArtifactLoadError(f"invalid CSV artifact {path}: {details}")
+    return rows
 
 
 def run_command(args: list[str], cwd: Path | None = None, timeout: int = 20) -> dict[str, Any]:
@@ -114,7 +123,7 @@ def load_optional_yaml(path: Path) -> Any:
 
     if importlib.util.find_spec("yaml") is None:
         raise RuntimeError("PyYAML is not installed; use JSON or install PyYAML explicitly")
-    import yaml
+    import yaml  # type: ignore[import-untyped]
 
     with path.open("r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)

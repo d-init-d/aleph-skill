@@ -53,14 +53,18 @@ def _load_json(path: Path) -> object:
 
 
 def _verified_adapter_source(root: Path, *, secret: bool = False) -> Path:
-    adapter = root / "adapters" / "generated" / "cursor.md"
+    adapter = root / "adapters" / "generated" / "continue.md"
     adapter.parent.mkdir(parents=True)
     (root / "scripts").mkdir()
     (root / "SKILL.md").write_text(
         "---\nname: aleph-skill\ndescription: test\n---\n", encoding="utf-8"
     )
     (root / "scripts" / "preflight.py").write_text("print('ok')\n", encoding="utf-8")
-    content = "api_key=ABCDEFGHIJKLMNOPQRSTUV\n" if secret else generate_instruction_adapter("cursor", root)
+    content = (
+        "api_key=ABCDEFGHIJKLMNOPQRSTUV\n"
+        if secret
+        else generate_instruction_adapter("continue", root)
+    )
     adapter.write_text(content, encoding="utf-8")
     write_json_atomic(root / MANIFEST_NAME, build_distribution_manifest(root))
     return adapter
@@ -166,6 +170,7 @@ class PublishedSchemaContractTests(unittest.TestCase):
             d_research = execution["d_research"]
             assert isinstance(d_research, dict)
             d_research["status"] = "verified"
+            d_research["ledger_ref"] = "research-ledger.csv"
             missing = validate_paths(manifest, workspace)
             self.assertEqual(missing.status, "fail")
 
@@ -173,8 +178,16 @@ class PublishedSchemaContractTests(unittest.TestCase):
             assert isinstance(artifact_paths, dict)
             artifact_paths["research_import_receipt"] = "research-import-receipt.json"
             write_json_atomic(workspace / "research-import-receipt.json", {"status": "verified"})
+            receipt_only = validate_paths(manifest, workspace)
+            self.assertEqual(receipt_only.status, "fail")
+
+            (workspace / "research-ledger.csv").write_text("id,claim\n1,test\n", encoding="utf-8")
             resolved = validate_paths(manifest, workspace)
             self.assertEqual(resolved.status, "pass", [item.to_dict() for item in resolved.issues])
+
+            d_research["status"] = "imported"
+            imported = validate_paths(manifest, workspace)
+            self.assertEqual(imported.status, "pass", [item.to_dict() for item in imported.issues])
 
 
 class InstallerAttestationTests(unittest.TestCase):
@@ -510,9 +523,11 @@ class PortableAdapterBundleTests(unittest.TestCase):
         )
 
     def test_generated_adapters_bind_stable_verified_core(self) -> None:
-        instruction = generate_instruction_adapter("cursor", ROOT)
+        instruction = generate_instruction_adapter("continue", ROOT)
         profile = generate_external_profile("grok-build")
-        self.assertIn(f"python {PORTABLE_CORE_PATH}/scripts/preflight.py --json", instruction)
+        self.assertIn(f"<ABSOLUTE_PROJECT_ROOT>/{PORTABLE_CORE_PATH}", instruction)
+        self.assertIn('python "$ALEPH_SKILL_ROOT/scripts/preflight.py" --json', instruction)
+        self.assertNotIn(f"python {PORTABLE_CORE_PATH}/", instruction)
         self.assertEqual(profile["core_path"], PORTABLE_CORE_PATH)
 
     def test_invalid_portable_mode_is_refused_without_any_write(self) -> None:
