@@ -621,7 +621,7 @@ class InstallerTransactionCoverageTests(unittest.TestCase):
                 *,
                 target_is_directory: bool,
             ) -> None:
-                self.assertEqual(Path(target), source)
+                self.assertEqual(Path(target), source.resolve())
                 self.assertEqual(Path(link), destination)
                 self.assertTrue(target_is_directory)
                 destination.mkdir()
