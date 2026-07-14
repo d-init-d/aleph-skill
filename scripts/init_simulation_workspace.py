@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import argparse
 import calendar
+import csv
 import datetime as dt
+import io
 import json
 import re
 from pathlib import Path
 
 from _lib import load_json, skill_root, utc_now, write_json
-
+from aleph.io import canonical_hash
 
 ISO_DURATION = re.compile(r"^P(?:(?P<years>\d+)Y)?(?:(?P<months>\d+)M)?(?:(?P<days>\d+)D)?$")
 
@@ -66,9 +68,13 @@ def build_workspace(args: argparse.Namespace) -> Path:
     timeline_mode = infer_timeline_mode(change_date, cutoff_date, simulation_end)
 
     manifest = load_json(templates / "simulation-manifest.json")
+    manifest["schema_version"] = "2.0.0"
     manifest["simulation_id"] = f"sim-{slug}"
     manifest["created_at"] = utc_now()
     manifest["status"] = "draft"
+    manifest["likelihood_mode"] = "relative_weight"
+    manifest["simulation_mode"] = "qualitative"
+    manifest["assurance_tier"] = None
     manifest["change_point"]["description"] = args.change_point
     manifest["change_point"]["time"] = change_date.isoformat()
     manifest["change_point"]["location"] = args.geography
@@ -131,22 +137,93 @@ def build_workspace(args: argparse.Namespace) -> Path:
 
     node = load_json(templates / "timeline-node.json")
     node["time"] = change_date.isoformat()
+    entity = json.loads(json.dumps(node))
+    entity.update(
+        {
+            "id": "entity:example",
+            "type": "entity",
+            "name": "Example Public-Role Actor",
+            "status": "fact",
+            "timeline": "observed_baseline",
+            "probability": 1.0,
+            "confidence": 0.5,
+            "time": cutoff_date.isoformat(),
+            "description": "A public-role entity placeholder linked coherently to the draft actor dossier.",
+            "state_before": {"summary": "Public role exists at the observation cutoff."},
+            "trigger": {"kind": "context", "description": "Institutional baseline."},
+            "mechanism": "The entity participates only through its declared public institutional role.",
+            "state_after": {"summary": "Public-role participation remains available to the scenario."},
+            "lag": "P0D",
+            "role": "endogenous",
+            "baseline": 0.0,
+        }
+    )
+    entity.pop("assumption_ref", None)
+    target = json.loads(json.dumps(node))
+    target.update(
+        {
+            "id": "factor:target",
+            "name": "Example Target Factor",
+            "description": "A coherent target node for the initialized example causal edge.",
+            "state_before": {"summary": "Target factor at its declared baseline.", "value": 0.0},
+            "trigger": {"kind": "factor_change", "description": "Transmission from factor:example."},
+            "mechanism": "The source perturbation changes the target through a declared transmission channel whose direction, magnitude, timing, evidence, and contextual multiplier are recorded in the causal edge.",
+            "state_after": {"summary": "Target factor changes in the simulated branch.", "value": 0.16},
+            "baseline": 0.0,
+        }
+    )
+    context = json.loads(json.dumps(entity))
+    context.update(
+        {
+            "id": "context:baseline",
+            "type": "context",
+            "name": "Baseline Context",
+            "description": "Neutral context modifier for the initialized causal edge.",
+            "state_before": {"summary": "Baseline context is active."},
+            "trigger": {"kind": "context", "description": "Scenario baseline."},
+            "mechanism": "The neutral baseline context leaves the example edge multiplier at one.",
+            "state_after": {"summary": "Baseline context remains active."},
+            "role": "exogenous",
+            "baseline": 1.0,
+        }
+    )
     edge = load_json(templates / "causal-edge.json")
-    actor = load_json(templates / "actor-dossier.json")
-    actor["roleplay_track"]["knowledge_cutoff"] = f"{change_date.isoformat()}T00:00:00Z"
+    actor = {
+        "id": "actor:example",
+        "person_node": "entity:example",
+        "public_role": "public decision maker",
+        "scope_note": "Draft non-material actor; promote to material only after sealed research and roleplay tracks exist.",
+        "materiality": "non_material",
+        "subject_class": "public_role_person",
+        "evidence_ids": ["evidence:example"],
+    }
     branches = load_json(templates / "branch-ledger.json")
     for branch in branches["branches"]:
         branch["end_state"]["time"] = simulation_end.isoformat()
 
     write_json(workspace / "simulation-manifest.json", manifest)
-    write_json(workspace / "nodes.json", [node])
+    write_json(workspace / "nodes.json", [entity, node, target, context])
     write_json(workspace / "edges.json", [edge])
     write_json(workspace / "actors.json", [actor])
-    (workspace / "evidence-map.csv").write_text((templates / "evidence-map.csv").read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+    evidence_text = (templates / "evidence-map.csv").read_text(encoding="utf-8")
+    reader = csv.DictReader(io.StringIO(evidence_text))
+    evidence_rows = list(reader)
+    for evidence_row in evidence_rows:
+        evidence_row["date"] = cutoff_date.isoformat()
+        evidence_row["retrieved_at"] = f"{cutoff_date.isoformat()}T00:00:00Z"
+    evidence_buffer = io.StringIO(newline="")
+    writer = csv.DictWriter(evidence_buffer, fieldnames=reader.fieldnames or [])
+    writer.writeheader()
+    writer.writerows(evidence_rows)
+    (workspace / "evidence-map.csv").write_text(
+        evidence_buffer.getvalue(), encoding="utf-8", newline="\n"
+    )
     trace = json.loads((templates / "propagation-trace.jsonl").read_text(encoding="utf-8").strip())
     trace["time"] = change_date.isoformat()
+    trace.pop("hash_chain", None)
+    trace["hash_chain"] = canonical_hash({"previous_hash": None, "row": trace})
     (workspace / "propagation-trace.jsonl").write_text(json.dumps(trace, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
-    (workspace / "human-track-ledger.jsonl").write_text((templates / "human-track-ledger.jsonl").read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+    (workspace / "human-track-ledger.jsonl").write_text("", encoding="utf-8", newline="\n")
     write_json(workspace / "branch-ledger.json", branches)
     validation_report = load_json(templates / "validation-report.json")
     validation_report.update(

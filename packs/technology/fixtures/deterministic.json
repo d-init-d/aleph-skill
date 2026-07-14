@@ -1,0 +1,52 @@
+{
+  "schema_version": "2.0.0",
+  "mode": "deterministic",
+  "ticks": 1,
+  "model": {
+    "nodes": [
+      {
+        "id": "technology:source",
+        "role": "exogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 1,
+        "bounds": [
+          0,
+          10
+        ]
+      },
+      {
+        "id": "technology:outcome",
+        "role": "endogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 0,
+        "bounds": [
+          -10,
+          10
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge:technology:fixture",
+        "from": "technology:source",
+        "to": "technology:outcome",
+        "sign": 1,
+        "base_strength": 0.5,
+        "lag_ticks": 0,
+        "transform": "linear"
+      }
+    ],
+    "interventions": []
+  },
+  "config": {
+    "seed": "technology-fixture",
+    "mode": "deterministic"
+  },
+  "expected_final_state": {
+    "technology:source": 1,
+    "technology:outcome": 0.5
+  },
+  "tolerance": 1e-9
+}

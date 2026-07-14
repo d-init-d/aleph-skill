@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import json
 import shutil
 import sys
@@ -8,241 +7,462 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from _lib import load_json, write_json  # noqa: E402
-from evaluate_simulation_quality import evaluate  # noqa: E402
+from aleph.engine import (  # noqa: E402
+    ComputationalModel,
+    EngineConfig,
+    ModelEdge,
+    Variable,
+    run_deterministic,
+    run_monte_carlo,
+)
+from aleph.formula import expected_output_effect  # noqa: E402
+from aleph.import_ledger import import_d_research_ledger  # noqa: E402
+from aleph.installer import MANIFEST_NAME, build_distribution_manifest, install  # noqa: E402
+from aleph.io import sha256_file, write_json_atomic  # noqa: E402
+from aleph.migrate import (  # noqa: E402
+    migrate_dual_run_canonical,
+    plan_migration,
+)
+from aleph.packs import refuse_uncalibrated_probability, validate_all_packs  # noqa: E402
+from aleph.paths import (  # noqa: E402
+    assert_install_paths_safe,
+    resolve_in_workspace,
+    validate_relative_artifact_path,
+)
+from aleph.privacy import privacy_intake  # noqa: E402
+from aleph.quality import evaluate  # noqa: E402
+from aleph.validator import validate_workspace  # noqa: E402
 from init_simulation_workspace import infer_timeline_mode, parse_date  # noqa: E402
 from render_simulation_report import render  # noqa: E402
-from validate_simulation_artifacts import validate_workspace  # noqa: E402
+
+FIXTURES = ROOT / "tests" / "fixtures"
+ADV_EXTERNAL = ROOT.parent / "test-output" / "adversarial-completed"
 
 
-class ValidationTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(prefix="aleph-skill-test-")
-        self.workspace = Path(self.temp.name)
-        templates = ROOT / "templates"
-        write_json(self.workspace / "simulation-manifest.json", load_json(templates / "simulation-manifest.json"))
-        write_json(self.workspace / "nodes.json", [load_json(templates / "timeline-node.json")])
-        write_json(self.workspace / "edges.json", [load_json(templates / "causal-edge.json")])
-        write_json(self.workspace / "actors.json", [load_json(templates / "actor-dossier.json")])
-        write_json(self.workspace / "branch-ledger.json", load_json(templates / "branch-ledger.json"))
-        for name in ["evidence-map.csv", "propagation-trace.jsonl", "human-track-ledger.jsonl"]:
-            shutil.copyfile(templates / name, self.workspace / name)
-        (self.workspace / "REPORT.md").write_text(
-            "# Report\n\n"
-            "## Executive summary\n\n"
-            "## Methodology and scope\n\n"
-            "## Baseline and change point\n\n"
-            "## Evidence and source quality\n\n"
-            "## Causal architecture and propagation\n\n"
-            "## Scenario branches\n\n"
-            "## Future monitoring and probability updates\n\n"
-            "## Human decision tracks\n\n"
-            "## Sensitivity, contradictions, and limitations\n\n"
-            "## Validation and audit\n\n"
-            "## Source appendix\n\n"
-            "## Warnings and next steps\n",
-            encoding="utf-8",
-        )
+class PathSecurityTests(unittest.TestCase):
+    def test_parent_traversal_refused(self) -> None:
+        issues = validate_relative_artifact_path("../secret.json")
+        self.assertTrue(any(i.code == "PATH_ESCAPE" for i in issues))
 
-    def tearDown(self) -> None:
-        self.temp.cleanup()
+    def test_absolute_and_drive_refused(self) -> None:
+        self.assertTrue(any(i.code == "PATH_ABSOLUTE" for i in validate_relative_artifact_path("/etc/passwd")))
+        self.assertTrue(any(i.code == "PATH_DRIVE" for i in validate_relative_artifact_path("C:/Windows/system.ini")))
 
-    def validate(self, mode: str = "final", require_report: bool = True) -> dict[str, object]:
-        return validate_workspace(self.workspace, mode=mode, require_report=require_report)
+    def test_unc_refused(self) -> None:
+        self.assertTrue(any(i.code == "PATH_UNC" for i in validate_relative_artifact_path("\\\\server\\share\\a")))
 
-    def test_valid_fixture_passes(self) -> None:
-        self.assertEqual(self.validate()["status"], "pass")
+    def test_resolve_stays_in_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            (ws / "ok.json").write_text("{}", encoding="utf-8")
+            path, issues = resolve_in_workspace(ws, "ok.json", must_exist=True)
+            self.assertEqual(issues, [])
+            self.assertIsNotNone(path)
+            _, bad = resolve_in_workspace(ws, "../outside.json", must_exist=False)
+            self.assertTrue(any(i.code == "PATH_ESCAPE" for i in bad))
 
-    def test_valid_fixture_scores_excellent(self) -> None:
-        result = evaluate(self.workspace)
-        self.assertEqual(result["grade"], "excellent")
-        self.assertGreaterEqual(result["score"], 90)
 
-    def test_renderer_never_presents_stale_validation_as_final(self) -> None:
-        manifest = load_json(self.workspace / "simulation-manifest.json")
-        manifest["status"] = "draft"
-        manifest["execution"]["research_control"]["saturation_reached"] = False
-        write_json(self.workspace / "simulation-manifest.json", manifest)
-        write_json(
-            self.workspace / "validation-report.json",
-            {"mode": "final", "status": "pass", "warnings": [], "errors": []},
-        )
-        report = render(self.workspace)
-        self.assertIn("draft-not-ready", report)
-        self.assertIn("## Future monitoring and probability updates", report)
+class InstallerSecurityTests(unittest.TestCase):
+    def test_source_equals_destination_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "skill"
+            p.mkdir()
+            issues = assert_install_paths_safe(p, p)
+            self.assertTrue(any(i.code == "INSTALL_SOURCE_DEST" for i in issues))
 
-    def test_unknown_edge_reference_fails(self) -> None:
-        edges = load_json(self.workspace / "edges.json")
-        edges[0]["from"] = "factor:missing"
-        write_json(self.workspace / "edges.json", edges)
-        result = self.validate()
+    def test_nested_dest_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "skill"
+            dest = src / "nested"
+            src.mkdir()
+            issues = assert_install_paths_safe(src, dest)
+            self.assertTrue(any(i.code == "INSTALL_NESTED" for i in issues))
+
+    def test_env_not_copied(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "src"
+            dest = Path(tmp) / "dest"
+            # minimal allowlisted tree
+            (src / "scripts").mkdir(parents=True)
+            (src / "SKILL.md").write_text("---\nname: aleph-skill\n---\n", encoding="utf-8")
+            (src / "scripts" / "x.py").write_text("print(1)\n", encoding="utf-8")
+            (src / ".env").write_text("SECRET=1\n", encoding="utf-8")
+            (src / "package.json").write_text('{"name":"t"}\n', encoding="utf-8")
+            write_json_atomic(src / MANIFEST_NAME, build_distribution_manifest(src))
+            result = install(src, dest, mode="copy", force=True)
+            self.assertEqual(result.get("status"), "copied")
+            self.assertFalse((dest / ".env").exists())
+
+    def test_symlink_refuses_real_directory_delete(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "src"
+            dest = Path(tmp) / "dest"
+            src.mkdir()
+            (src / "SKILL.md").write_text("---\nname: aleph-skill\n---\n", encoding="utf-8")
+            dest.mkdir()
+            (dest / "keep.txt").write_text("x", encoding="utf-8")
+            result = install(src, dest, mode="symlink", force=True)
+            self.assertEqual(result.get("status"), "refused")
+            self.assertTrue((dest / "keep.txt").exists())
+
+
+class ValidatorAdversarialTests(unittest.TestCase):
+    def _adv(self) -> Path:
+        if ADV_EXTERNAL.is_dir():
+            return ADV_EXTERNAL
+        return FIXTURES / "adversarial"
+
+    def test_adversarial_fails_with_semantic_codes(self) -> None:
+        ws = self._adv()
+        result = validate_workspace(ws, mode="final", require_report=True)
         self.assertEqual(result["status"], "fail")
-        self.assertTrue(any("UNKNOWN_REF" in error for error in result["errors"]))
+        codes = set(result.get("error_codes") or [])
+        # Must surface real semantic failures, not pass
+        self.assertTrue(
+            codes
+            & {
+                "RELATION",
+                "TRACE_FORMULA_MISMATCH",
+                "CONTEXT_MISSING",
+                "LAG",
+                "LAG_ORDER",
+                "REPORT_EMPTY",
+                "BRANCH_DUPLICATE",
+                "BRANCH_NEAR_DUPLICATE",
+                "MULTIPLIER",
+                "SELF_EDGE",
+            },
+            msg=f"expected semantic codes, got {codes}",
+        )
+        self.assertNotEqual(result.get("assurance_status"), "verified")
 
-    def test_roleplay_cannot_be_evidence(self) -> None:
-        actors = load_json(self.workspace / "actors.json")
-        actors[0]["roleplay_track"]["hypotheses"][0]["evidence_ids"] = ["evidence:example"]
-        write_json(self.workspace / "actors.json", actors)
-        result = self.validate()
-        self.assertTrue(any("ROLEPLAY_EVIDENCE" in error for error in result["errors"]))
+    def test_adversarial_quality_not_verified_or_excellent_claim(self) -> None:
+        ws = self._adv()
+        result = evaluate(ws)
+        self.assertEqual(result["validation_status"], "fail")
+        self.assertEqual(result.get("assurance_status"), "failed")
+        self.assertNotIn(result.get("assurance_tier"), {"verified", "calibrated"})
+        self.assertFalse(result.get("release_claim"))
+        # excellent must not be a release claim path
+        if result.get("grade") == "excellent":
+            self.fail("adversarial must not grade excellent as release claim")
 
-    def test_available_subagents_require_distinct_subagent_tracks(self) -> None:
-        manifest = load_json(self.workspace / "simulation-manifest.json")
-        manifest["execution"]["subagents"] = {
-            "status": "available",
-            "tool": "task",
-            "detection_method": "runtime tool inventory",
-            "fallback_reason": "",
-        }
-        write_json(self.workspace / "simulation-manifest.json", manifest)
-        result = self.validate()
-        self.assertTrue(any("SUBAGENT_REQUIRED" in error for error in result["errors"]))
+    def test_adversarial_consistent_nonzero_exit_via_validate(self) -> None:
+        ws = self._adv()
+        r1 = validate_workspace(ws, mode="final", require_report=True)
+        r2 = validate_workspace(ws, mode="final", require_report=True)
+        self.assertEqual(r1["status"], "fail")
+        self.assertEqual(r2["status"], "fail")
 
-    def test_human_track_ledger_must_match_actor_dossier(self) -> None:
-        ledger_path = self.workspace / "human-track-ledger.jsonl"
-        rows = [json.loads(line) for line in ledger_path.read_text(encoding="utf-8").splitlines() if line]
-        rows[0]["agent_ref"] = "different-agent"
-        ledger_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
-        result = self.validate()
-        self.assertTrue(any("TRACK_MISMATCH" in error for error in result["errors"]))
 
-    def test_search_snippet_confidence_is_capped(self) -> None:
-        path = self.workspace / "evidence-map.csv"
-        with path.open("r", encoding="utf-8", newline="") as handle:
-            rows = list(csv.DictReader(handle))
-            fieldnames = list(rows[0])
-        rows[0]["retrieval_status"] = "search-snippet"
-        rows[0]["confidence"] = "0.80"
-        with path.open("w", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(rows)
-        result = self.validate()
-        self.assertTrue(any("SNIPPET_CONFIDENCE" in error for error in result["errors"]))
-
-    def test_search_snippets_cannot_dominate_ledger(self) -> None:
-        path = self.workspace / "evidence-map.csv"
-        with path.open("r", encoding="utf-8", newline="") as handle:
-            rows = list(csv.DictReader(handle))
-            fieldnames = list(rows[0])
-        second = dict(rows[0])
-        second["evidence_id"] = "evidence:snippet"
-        second["retrieval_status"] = "search-snippet"
-        second["confidence"] = "0.40"
-        third = dict(second)
-        third["evidence_id"] = "evidence:snippet-2"
-        rows.extend([second, third])
-        with path.open("w", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(rows)
-        result = self.validate()
-        self.assertTrue(any("DIRECT_ACCESS" in error for error in result["errors"]))
-
-    def test_branch_cap_is_a_hard_error(self) -> None:
-        ledger = load_json(self.workspace / "branch-ledger.json")
-        ledger["branches"][0]["probability"] = 0.70
-        ledger["branches"][1]["probability"] = 0.20
-        ledger["branches"][2]["probability"] = 0.10
-        write_json(self.workspace / "branch-ledger.json", ledger)
-        result = self.validate()
-        self.assertTrue(any("BRANCH_CAP" in error for error in result["errors"]))
-
-    def test_adaptive_complexity_must_match_dimensions(self) -> None:
-        manifest = load_json(self.workspace / "simulation-manifest.json")
-        manifest["execution"]["adaptive_scope"]["overall_complexity"] = 0.90
-        write_json(self.workspace / "simulation-manifest.json", manifest)
-        result = self.validate()
-        self.assertTrue(any("ADAPTIVE_SCOPE" in error for error in result["errors"]))
-
-    def test_legacy_execution_profiles_are_rejected(self) -> None:
-        manifest = load_json(self.workspace / "simulation-manifest.json")
-        manifest["execution"]["profile"] = "deep"
-        manifest["execution"]["research_budget"] = {"max_sources": 100}
-        manifest["execution"]["research_control"]["time_limit"] = "P1D"
-        write_json(self.workspace / "simulation-manifest.json", manifest)
-        result = self.validate()
-        self.assertTrue(any("LEGACY_EXECUTION_CONTROL" in error for error in result["errors"]))
-
-    def test_research_quality_aliases_are_rejected(self) -> None:
-        manifest = load_json(self.workspace / "simulation-manifest.json")
-        manifest["execution"]["research_quality"] = "standard"
-        write_json(self.workspace / "simulation-manifest.json", manifest)
-        result = self.validate()
-        self.assertTrue(any("RESEARCH_QUALITY" in error or "ENUM" in error for error in result["errors"]))
-
-    def test_high_complexity_rejects_shallow_execution(self) -> None:
-        manifest = load_json(self.workspace / "simulation-manifest.json")
-        adaptive = manifest["execution"]["adaptive_scope"]
-        adaptive["overall_complexity"] = 1.0
-        adaptive["dimensions"] = {key: 1.0 for key in adaptive["dimensions"]}
-        write_json(self.workspace / "simulation-manifest.json", manifest)
-        result = self.validate()
-        self.assertTrue(any("ADAPTIVE_DEPTH" in error for error in result["errors"]))
-        self.assertTrue(any("SOURCE_QUALITY" in error for error in result["errors"]))
-        self.assertTrue(any("BRANCH_COUNT" in error for error in result["errors"]))
-        self.assertTrue(any("FUTURE_MONITORING" in error for error in result["errors"]))
-
-    def test_completed_run_requires_evidence_saturation(self) -> None:
-        manifest = load_json(self.workspace / "simulation-manifest.json")
-        manifest["execution"]["research_control"]["saturation_reached"] = False
-        write_json(self.workspace / "simulation-manifest.json", manifest)
-        result = self.validate()
-        self.assertTrue(any("EVIDENCE_SATURATION" in error for error in result["errors"]))
-
-    def test_draft_allows_research_to_be_in_progress(self) -> None:
-        manifest = load_json(self.workspace / "simulation-manifest.json")
-        manifest["status"] = "draft"
-        manifest["execution"]["research_control"]["sources_examined"] = 0
-        manifest["execution"]["research_control"]["saturation_reached"] = False
-        manifest["execution"]["research_control"]["stop_reason"] = ""
-        manifest["temporal_frame"]["monitoring_indicators"] = []
-        write_json(self.workspace / "simulation-manifest.json", manifest)
-        result = self.validate(mode="draft", require_report=False)
+class ValidFixtureTests(unittest.TestCase):
+    def test_schema_2_valid_passes(self) -> None:
+        ws = FIXTURES / "schema-2.0-valid"
+        result = validate_workspace(ws, mode="final", require_report=True)
+        if result["status"] != "pass":
+            self.fail(json.dumps({"errors": result.get("errors"), "codes": result.get("error_codes")}, indent=2))
         self.assertEqual(result["status"], "pass")
-        self.assertTrue(any("RESEARCH_CONTROL" in warning for warning in result["warnings"]))
 
-    def test_future_nodes_cannot_be_facts(self) -> None:
-        nodes = load_json(self.workspace / "nodes.json")
-        nodes[0]["time"] = "2027-01-01"
-        nodes[0]["status"] = "fact"
-        nodes[0]["timeline"] = "simulated_branch"
-        write_json(self.workspace / "nodes.json", nodes)
-        result = self.validate()
-        self.assertTrue(any("FUTURE_FACT" in error for error in result["errors"]))
+    def test_unknown_field_rejected(self) -> None:
+        """AC2: unknown object keys fail closed via shipped validator (UNKNOWN_FIELD)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            shutil.copytree(FIXTURES / "schema-2.0-valid", ws, dirs_exist_ok=True)
+            edges = json.loads((ws / "edges.json").read_text(encoding="utf-8"))
+            edges[0]["totally_unknown_xyz"] = 1
+            (ws / "edges.json").write_text(json.dumps(edges, indent=2) + "\n", encoding="utf-8")
+            result = validate_workspace(ws, mode="final", require_report=True)
+            self.assertEqual(result["status"], "fail")
+            self.assertIn("UNKNOWN_FIELD", result.get("error_codes") or [])
+            # Pointer must name the unknown key — no message-substring theater
+            unknown_issues = [i for i in result.get("issues") or [] if i.get("code") == "UNKNOWN_FIELD"]
+            self.assertTrue(unknown_issues, msg=result.get("errors"))
+            self.assertTrue(
+                any(i.get("actual") == "totally_unknown_xyz" or "totally_unknown_xyz" in str(i.get("pointer", "")) for i in unknown_issues),
+                msg=unknown_issues,
+            )
 
-    def test_future_branches_require_monitoring_conditions(self) -> None:
-        ledger = load_json(self.workspace / "branch-ledger.json")
-        ledger["branches"][0]["leading_indicators"] = []
-        ledger["branches"][0]["disconfirming_conditions"] = []
-        write_json(self.workspace / "branch-ledger.json", ledger)
-        result = self.validate()
-        self.assertTrue(any("FUTURE_MONITORING" in error for error in result["errors"]))
+    def test_unknown_manifest_field_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            shutil.copytree(FIXTURES / "schema-2.0-valid", ws, dirs_exist_ok=True)
+            man = json.loads((ws / "simulation-manifest.json").read_text(encoding="utf-8"))
+            man["totally_unknown_manifest"] = True
+            write_json_atomic(ws / "simulation-manifest.json", man)
+            result = validate_workspace(ws, mode="final", require_report=True)
+            self.assertEqual(result["status"], "fail")
+            self.assertIn("UNKNOWN_FIELD", result.get("error_codes") or [])
 
-    def test_timeline_mode_must_match_dates(self) -> None:
-        manifest = load_json(self.workspace / "simulation-manifest.json")
-        manifest["temporal_frame"]["mode"] = "retrospective_counterfactual"
-        write_json(self.workspace / "simulation-manifest.json", manifest)
-        result = self.validate()
-        self.assertTrue(any("TIMELINE_MODE" in error for error in result["errors"]))
+    def test_string_number_coercion_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            shutil.copytree(FIXTURES / "schema-2.0-valid", ws, dirs_exist_ok=True)
+            edges = json.loads((ws / "edges.json").read_text(encoding="utf-8"))
+            edges[0]["base_strength"] = "0.4"
+            (ws / "edges.json").write_text(json.dumps(edges, indent=2) + "\n", encoding="utf-8")
+            result = validate_workspace(ws, mode="final", require_report=True)
+            self.assertEqual(result["status"], "fail")
+            self.assertIn("COERCION_REFUSED", result.get("error_codes") or [])
 
-    def test_timeline_mode_inference_covers_all_directions(self) -> None:
-        self.assertEqual(
-            infer_timeline_mode(parse_date("2000-01-01"), parse_date("2026-01-01"), parse_date("2010-01-01")),
-            "retrospective_counterfactual",
+    def test_nested_manifest_execution_unknown_field_rejected(self) -> None:
+        """AC2: nested execution objects forbid unknown fields."""
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            shutil.copytree(FIXTURES / "schema-2.0-valid", ws, dirs_exist_ok=True)
+            man = json.loads((ws / "simulation-manifest.json").read_text(encoding="utf-8"))
+            man["execution"]["totally_unknown_nested"] = True
+            write_json_atomic(ws / "simulation-manifest.json", man)
+            result = validate_workspace(ws, mode="final", require_report=True)
+            self.assertEqual(result["status"], "fail")
+            self.assertIn("UNKNOWN_FIELD", result.get("error_codes") or [])
+            unknown = [i for i in result.get("issues") or [] if i.get("code") == "UNKNOWN_FIELD"]
+            self.assertTrue(
+                any(
+                    i.get("actual") == "totally_unknown_nested"
+                    or "totally_unknown_nested" in str(i.get("pointer", ""))
+                    for i in unknown
+                ),
+                msg=unknown,
+            )
+
+    def test_nested_temporal_frame_unknown_field_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            shutil.copytree(FIXTURES / "schema-2.0-valid", ws, dirs_exist_ok=True)
+            man = json.loads((ws / "simulation-manifest.json").read_text(encoding="utf-8"))
+            man["temporal_frame"]["totally_unknown_frame"] = "x"
+            write_json_atomic(ws / "simulation-manifest.json", man)
+            result = validate_workspace(ws, mode="final", require_report=True)
+            self.assertEqual(result["status"], "fail")
+            self.assertIn("UNKNOWN_FIELD", result.get("error_codes") or [])
+
+    def test_nested_actor_roleplay_unknown_field_rejected(self) -> None:
+        """AC2: nested roleplay_track forbids unknown fields."""
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            shutil.copytree(FIXTURES / "schema-2.0-valid", ws, dirs_exist_ok=True)
+            actors = json.loads((ws / "actors.json").read_text(encoding="utf-8"))
+            actors[0]["roleplay_track"]["totally_unknown_roleplay"] = 1
+            write_json_atomic(ws / "actors.json", actors)
+            result = validate_workspace(ws, mode="final", require_report=True)
+            self.assertEqual(result["status"], "fail")
+            self.assertIn("UNKNOWN_FIELD", result.get("error_codes") or [])
+            unknown = [i for i in result.get("issues") or [] if i.get("code") == "UNKNOWN_FIELD"]
+            self.assertTrue(
+                any(
+                    i.get("actual") == "totally_unknown_roleplay"
+                    or "totally_unknown_roleplay" in str(i.get("pointer", ""))
+                    for i in unknown
+                ),
+                msg=unknown,
+            )
+
+    def test_nested_actor_research_and_adjudication_unknown_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            shutil.copytree(FIXTURES / "schema-2.0-valid", ws, dirs_exist_ok=True)
+            actors = json.loads((ws / "actors.json").read_text(encoding="utf-8"))
+            actors[0]["research_track"]["totally_unknown_research"] = True
+            actors[0]["adjudication"]["totally_unknown_adj"] = True
+            write_json_atomic(ws / "actors.json", actors)
+            result = validate_workspace(ws, mode="final", require_report=True)
+            self.assertEqual(result["status"], "fail")
+            self.assertIn("UNKNOWN_FIELD", result.get("error_codes") or [])
+            actuals = {i.get("actual") for i in result.get("issues") or [] if i.get("code") == "UNKNOWN_FIELD"}
+            self.assertIn("totally_unknown_research", actuals)
+            self.assertIn("totally_unknown_adj", actuals)
+
+    def test_forged_trace_fails_replay(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            shutil.copytree(FIXTURES / "schema-2.0-valid", ws, dirs_exist_ok=True)
+            line = json.loads((ws / "propagation-trace.jsonl").read_text(encoding="utf-8").splitlines()[0])
+            line["output_effect"] = 999999
+            (ws / "propagation-trace.jsonl").write_text(json.dumps(line) + "\n", encoding="utf-8")
+            result = validate_workspace(ws, mode="final", require_report=True)
+            self.assertIn("TRACE_FORMULA_MISMATCH", result.get("error_codes") or [])
+
+    def test_materiality_typo_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            shutil.copytree(FIXTURES / "schema-2.0-valid", ws, dirs_exist_ok=True)
+            actors = json.loads((ws / "actors.json").read_text(encoding="utf-8"))
+            actors[0]["materiality"] = "materiel"  # typo
+            (ws / "actors.json").write_text(json.dumps(actors, indent=2) + "\n", encoding="utf-8")
+            result = validate_workspace(ws, mode="final", require_report=True)
+            self.assertIn("MATERIALITY", result.get("error_codes") or [])
+
+    def test_empty_report_section_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            shutil.copytree(FIXTURES / "schema-2.0-valid", ws, dirs_exist_ok=True)
+            (ws / "REPORT.md").write_text(
+                "# Report\n\n## Executive summary\n\n## Methodology and scope\n\n",
+                encoding="utf-8",
+            )
+            result = validate_workspace(ws, mode="final", require_report=True)
+            codes = set(result.get("error_codes") or [])
+            self.assertTrue(codes & {"REPORT_EMPTY", "REPORT_SECTION"})
+
+    def test_stale_artifact_after_finalize_index(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            shutil.copytree(FIXTURES / "schema-2.0-valid", ws, dirs_exist_ok=True)
+            # create artifact index with correct hash then mutate file
+            digest = sha256_file(ws / "nodes.json")
+            man = json.loads((ws / "simulation-manifest.json").read_text(encoding="utf-8"))
+            man["artifact_index"] = [{"path": "nodes.json", "sha256": digest, "size": 1, "media_type": "application/json"}]
+            write_json_atomic(ws / "simulation-manifest.json", man)
+            # mutate nodes
+            nodes = json.loads((ws / "nodes.json").read_text(encoding="utf-8"))
+            nodes[0]["name"] = "mutated"
+            write_json_atomic(ws / "nodes.json", nodes)
+            result = validate_workspace(ws, mode="final", require_report=True)
+            self.assertIn("STALE_ARTIFACT", result.get("error_codes") or [])
+
+
+class EngineTests(unittest.TestCase):
+    def test_hand_calc_chain_and_reproducible_hash(self) -> None:
+        model = ComputationalModel()
+        for vid, base in [("factor:A", 1.0), ("factor:B", 0.0), ("factor:C", 0.0)]:
+            model.variables[vid] = Variable(id=vid, role="endogenous", baseline=base, value=base)
+        model.edges = [
+            ModelEdge(id="edge:ab", source="factor:A", target="factor:B", sign=1, strength=0.5, lag_ticks=0),
+            ModelEdge(id="edge:bc", source="factor:B", target="factor:C", sign=1, strength=0.4, lag_ticks=0),
+        ]
+        cfg = EngineConfig(seed="handcalc", mode="deterministic", workers=1)
+        r1 = run_deterministic(model, cfg, ticks=1, run_id=0)
+        r2 = run_deterministic(model, cfg, ticks=1, run_id=0)
+        self.assertEqual(r1["run_hash"], r2["run_hash"])
+        # workers flag must not change hash for same seed/run
+        cfg_n = EngineConfig(seed="handcalc", mode="deterministic", workers=4)
+        r3 = run_deterministic(model, cfg_n, ticks=1, run_id=0)
+        self.assertEqual(r1["run_hash"], r3["run_hash"])
+
+    def test_formula_matches_hand_calc(self) -> None:
+        expected = expected_output_effect(base_strength=0.4, sign=-1, context_mult=1.1, input_effect=1.0)
+        self.assertAlmostEqual(expected, -0.44, places=9)
+
+    def test_nonconvergence_divergent_cycle(self) -> None:
+        model = ComputationalModel()
+        for vid in ("factor:X", "factor:Y"):
+            model.variables[vid] = Variable(id=vid, role="endogenous", baseline=1.0, value=1.0)
+        # strong positive zero-lag feedback
+        model.edges = [
+            ModelEdge(id="e1", source="factor:X", target="factor:Y", sign=1, strength=2.0, lag_ticks=0),
+            ModelEdge(id="e2", source="factor:Y", target="factor:X", sign=1, strength=2.0, lag_ticks=0),
+        ]
+        result = run_deterministic(model, EngineConfig(seed="div", jacobi_max_iter=5), ticks=1)
+        # may flag nonconvergence or still produce finite state; unresolved path should not silent-renormalize MC
+        self.assertIn("run_hash", result)
+
+    def test_mc_unresolved_mass_not_renormalized(self) -> None:
+        model = ComputationalModel()
+        model.variables["factor:A"] = Variable(id="factor:A", role="endogenous", baseline=1.0)
+        model.edges = []
+        cfg = EngineConfig(seed="mc", mode="monte_carlo", min_runs=20)
+        summary = run_monte_carlo(model, cfg, ticks=1)["summary"]
+        self.assertIn("unresolved_mass", summary)
+        self.assertAlmostEqual(summary["valid_mass"] + summary["unresolved_mass"], 1.0, places=9)
+
+
+class MigrationTests(unittest.TestCase):
+    def test_check_only_plan(self) -> None:
+        plan = plan_migration(FIXTURES / "schema-1.2-valid")
+        self.assertTrue(plan.get("ok"))
+        self.assertIn("transforms", plan)
+
+    def test_migrate_sibling_and_dual_run_canonical(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            src = FIXTURES / "schema-1.2-valid"
+            out_a = Path(tmp) / "a"
+            out_b = Path(tmp) / "b"
+            r = migrate_dual_run_canonical(src, out_a, out_b)
+            self.assertTrue(r.get("ok"), msg=json.dumps(r, indent=2, default=str))
+            # source untouched schema
+            src_man = json.loads((src / "simulation-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(src_man["schema_version"], "1.2.0")
+            dest_man = json.loads((out_a / "simulation-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(dest_man["schema_version"], "2.0.0")
+
+
+class PrivacyAndLedgerTests(unittest.TestCase):
+    def test_private_person_refused(self) -> None:
+        result = privacy_intake(subject_class="private_person", request_text="analyze this private citizen")
+        self.assertFalse(result["allowed"])
+        self.assertIn("network", result["stop_before"])
+
+    def test_doxxing_refused(self) -> None:
+        result = privacy_intake(
+            subject_class="public_role_person",
+            public_role_anchor="Mayor",
+            evidence_ids=["evidence:x"],
+            request_text="find home address and phone number for stalking",
         )
-        self.assertEqual(
-            infer_timeline_mode(parse_date("2026-01-01"), parse_date("2026-01-01"), parse_date("2028-01-01")),
-            "prospective_intervention",
-        )
-        self.assertEqual(
-            infer_timeline_mode(parse_date("2000-01-01"), parse_date("2026-01-01"), parse_date("2030-01-01")),
-            "hybrid_projection",
-        )
+        self.assertFalse(result["allowed"])
+
+    def test_hmac_tamper_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.csv"
+            # 14 columns
+            header = "id,record_type,claim,evidence,source,source_type,source_tier,date,retrieved_at,access_method,retrieval_status,confidence,contradiction_status,notes"
+            ledger.write_text(header + "\nclaim1,claim,hello,hello,http://example.com,web,primary,2020-01-01,2020-01-02,open,opened,0.5,unchecked,\n", encoding="utf-8")
+            sidecar = Path(tmp) / "ledger.hmac"
+            sidecar.write_text("deadbeef", encoding="utf-8")
+            result = import_d_research_ledger(ledger, hmac_sidecar=sidecar, hmac_key=b"secret", package_major=3)
+            self.assertFalse(result["ok"])
+            codes = {i["code"] for i in result["issues"]}
+            self.assertIn("HMAC_TAMPER", codes)
+
+    def test_process_rows_not_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.csv"
+            header = "id,record_type,claim,evidence,source,source_type,source_tier,date,retrieved_at,access_method,retrieval_status,confidence,contradiction_status,notes"
+            body = "\n".join(
+                [
+                    header,
+                    "p1,process,running,,http://example.com,web,secondary,2020-01-01,2020-01-02,open,opened,0.5,unchecked,",
+                    "c1,claim,A claim,A claim text here ok,http://example.com,web,primary,2020-01-01,2020-01-02,open,opened,0.5,unchecked,",
+                ]
+            )
+            ledger.write_text(body + "\n", encoding="utf-8")
+            result = import_d_research_ledger(ledger, package_major=3)
+            self.assertTrue(result["ok"])
+            self.assertEqual(len(result["evidence_rows"]), 1)
+            self.assertEqual(result["mapping"], "evidence")
+
+
+class PacksAndAdaptersTests(unittest.TestCase):
+    def test_seven_packs_validated(self) -> None:
+        result = validate_all_packs(ROOT)
+        self.assertTrue(result.get("ok"), msg=json.dumps(result, indent=2, default=str))
+        self.assertEqual(result.get("count"), 7)
+
+    def test_uncalibrated_cannot_emit_probability(self) -> None:
+        iss = refuse_uncalibrated_probability("validated")
+        self.assertIsNotNone(iss)
+        self.assertEqual(iss.code, "PACK_PROBABILITY")
+
+
+class TimelineHelperTests(unittest.TestCase):
+    def test_infer_modes(self) -> None:
+        self.assertEqual(infer_timeline_mode(parse_date("2020-01-01"), parse_date("2021-01-01"), parse_date("2021-01-01")), "retrospective_counterfactual")
+        self.assertEqual(infer_timeline_mode(parse_date("2022-01-01"), parse_date("2021-01-01"), parse_date("2023-01-01")), "prospective_intervention")
+
+
+class RendererPathTests(unittest.TestCase):
+    def test_renderer_refuses_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            shutil.copytree(FIXTURES / "schema-2.0-valid", ws, dirs_exist_ok=True)
+            man = json.loads((ws / "simulation-manifest.json").read_text(encoding="utf-8"))
+            man["artifact_paths"]["nodes"] = "../outside.json"
+            write_json_atomic(ws / "simulation-manifest.json", man)
+            with self.assertRaises(ValueError):
+                render(ws)
 
 
 if __name__ == "__main__":

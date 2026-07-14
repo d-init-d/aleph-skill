@@ -33,7 +33,7 @@ Before admitting an edge, answer:
 1. What is the transmission channel?
 2. How does the change physically, socially, institutionally, financially, or psychologically reach the target?
 3. Why is the relation causal rather than merely correlated?
-4. When does the effect arrive and fade?
+4. When does the effect arrive? If fade or stock dynamics matter, is a level-model limitation declared?
 5. Which contexts amplify or dampen it?
 
 If any answer is missing, mark the edge `incomplete` and do not use it as a strong propagation path.
@@ -82,7 +82,9 @@ Use:
 - `fixed` for accounting or immediate institutional effects,
 - `triangular` when timing has a plausible minimum/mode/maximum,
 - `uniform` when timing is uncertain within a range,
-- `exponential` for decaying hazard-like effects.
+- `truncated_exponential` for uncertain hazard-like arrival time bounded by the declared range.
+
+Aleph 2.0 samples arrival lag; it does not implement post-arrival decay kernels or stock/flow integration. Declare that limitation when it is material.
 
 ## Admission decision
 

@@ -1,0 +1,104 @@
+{
+  "schema_version": "1.2.0",
+  "branches": [
+    {
+      "id": "branch:tightening",
+      "name": "Sustained tightening",
+      "summary": "Rate hike cools demand and gap turns negative.",
+      "causal_trace": [
+        "causal:rate-to-gap"
+      ],
+      "key_decision_points": [
+        "actor:governor"
+      ],
+      "end_state": {
+        "time": "2027-01-01",
+        "summary": "Tighter conditions, softer activity."
+      },
+      "leading_indicators": [
+        {
+          "node": "factor:policy-rate",
+          "direction": "up",
+          "window": "P90D",
+          "predicate": "rate_above_baseline"
+        }
+      ],
+      "disconfirming_conditions": [
+        "Credit growth accelerates after hike."
+      ],
+      "evidence_ids": [
+        "evidence:macro-series"
+      ],
+      "confidence": 0.5,
+      "warnings": [],
+      "probability": 0.45
+    },
+    {
+      "id": "branch:offset",
+      "name": "External offset",
+      "summary": "External demand offsets domestic tightening.",
+      "causal_trace": [
+        "causal:rate-to-gap"
+      ],
+      "key_decision_points": [
+        "actor:governor"
+      ],
+      "end_state": {
+        "time": "2027-01-01",
+        "summary": "Gap near zero despite hike."
+      },
+      "leading_indicators": [
+        {
+          "node": "factor:output-gap",
+          "direction": "stable",
+          "window": "P180D",
+          "predicate": "gap_near_zero"
+        }
+      ],
+      "disconfirming_conditions": [
+        "Export orders collapse."
+      ],
+      "evidence_ids": [
+        "evidence:macro-series"
+      ],
+      "confidence": 0.45,
+      "warnings": [],
+      "probability": 0.35
+    },
+    {
+      "id": "branch:stress",
+      "name": "Financial stress",
+      "probability": 0.2,
+      "stress": true,
+      "summary": "Stress amplifies transmission beyond baseline.",
+      "causal_trace": [
+        "causal:rate-to-gap"
+      ],
+      "key_decision_points": [
+        "actor:governor"
+      ],
+      "end_state": {
+        "time": "2027-01-01",
+        "summary": "Sharp activity drop under stress."
+      },
+      "leading_indicators": [
+        {
+          "node": "factor:output-gap",
+          "direction": "down",
+          "window": "P90D",
+          "predicate": "gap_deep_negative"
+        }
+      ],
+      "disconfirming_conditions": [
+        "Interbank spreads remain stable."
+      ],
+      "evidence_ids": [
+        "evidence:macro-series"
+      ],
+      "confidence": 0.3,
+      "warnings": [
+        "stress scenario"
+      ]
+    }
+  ]
+}

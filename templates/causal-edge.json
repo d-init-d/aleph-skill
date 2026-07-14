@@ -1,27 +1,31 @@
 {
   "id": "causal:example-increases-target",
   "from": "factor:example",
-  "to": "factor:example",
+  "to": "factor:target",
   "relation": "increases",
   "sign": 1,
   "base_strength": 0.4,
+  "evidence_confidence": 0.45,
   "confidence": 0.45,
   "mechanism": "The source factor increases the target factor through a documented transmission channel. The channel should describe what moves, who reacts, when the effect arrives, and why this is causal rather than correlation.",
   "lag_distribution": {
-    "type": "triangular",
-    "min": "P1M",
-    "mode": "P3M",
-    "max": "P12M"
+    "type": "fixed",
+    "fixed": "P0D"
   },
   "context_modifiers": [
     {
       "context": "context:baseline",
       "multiplier": 1.0,
-      "rationale": "Baseline context does not alter the edge."
+      "rationale": "Baseline context does not alter the example edge."
     }
   ],
   "evidence": [
     "evidence:example"
   ],
-  "status": "inference"
+  "status": "admitted",
+  "transform": "linear",
+  "effect_parameter": {
+    "kind": "draft_reference",
+    "reference_value": 0.4
+  }
 }

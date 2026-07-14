@@ -1,0 +1,10 @@
+{
+  "templates": [
+    {
+      "id": "mech:climate:pass_through",
+      "relation": "increases",
+      "sign": 1,
+      "description": "Core climate transmission mechanism template for validated packs."
+    }
+  ]
+}

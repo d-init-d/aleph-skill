@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://aleph.local/schemas/2.0/causal-edge.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["id", "from", "to", "relation", "sign", "base_strength", "evidence_confidence", "mechanism", "lag_distribution", "context_modifiers", "status", "transform", "effect_parameter"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^(causal|edge):"}, "from": {"type": "string"}, "to": {"type": "string"},
+    "relation": {"enum": ["increases", "decreases", "enables", "inhibits", "causes", "prevents", "mediates", "moderates", "triggers", "amplifies", "dampens", "feedback", "autoregressive"]},
+    "sign": {"enum": [-1, 1]}, "base_strength": {"type": "number"}, "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "evidence_confidence": {"type": "number", "minimum": 0, "maximum": 1}, "mechanism": {"type": "string"},
+    "lag_distribution": {
+      "type": "object", "additionalProperties": false, "required": ["type"],
+      "properties": {
+        "type": {"enum": ["fixed", "uniform", "triangular", "truncated_exponential"]},
+        "fixed": {"type": "string"}, "min": {"type": "string"}, "mode": {"type": "string"}, "max": {"type": "string"},
+        "rate": {"type": "number", "exclusiveMinimum": 0}, "mean": {"type": "string"}
+      }
+    },
+    "context_modifiers": {
+      "type": "array", "minItems": 1,
+      "items": {"type": "object", "additionalProperties": false, "required": ["context", "multiplier", "rationale"], "properties": {"context": {"type": "string", "pattern": "^context:"}, "multiplier": {"type": "number", "exclusiveMinimum": 0}, "rationale": {"type": "string"}, "active": {"type": "boolean"}}}
+    },
+    "evidence": {"type": "array", "items": {"type": "string", "pattern": "^evidence:"}}, "assumption_ref": {"type": "string"},
+    "status": {"enum": ["proposed", "admitted", "incomplete", "rejected", "deprecated"]},
+    "transform": {"enum": ["linear", "elasticity"]},
+    "effect_parameter": {
+      "type": "object", "additionalProperties": false, "required": ["kind"],
+      "properties": {"kind": {"type": "string"}, "reference_value": {"type": "number"}, "distribution": {"type": "string"}, "parameters": {"type": "array"}, "unit": {"type": "string"}, "source_ref": {"type": "string"}, "lower": {"type": "number"}, "upper": {"type": "number"}}
+    },
+    "existence_prob": {"type": "number", "minimum": 0, "maximum": 1},
+    "feedback_policy": {"type": "object", "additionalProperties": false, "properties": {"method": {"type": "string"}, "max_iterations": {"type": "integer", "minimum": 1}, "tolerance": {"type": "number", "exclusiveMinimum": 0}}},
+    "saturation": {"type": "number", "exclusiveMinimum": 0}, "effect_size": {"type": "number"}
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "templates": [
+    {
+      "id": "mech:economics:pass_through",
+      "relation": "increases",
+      "sign": 1,
+      "description": "Core economics transmission mechanism template for validated packs."
+    }
+  ]
+}

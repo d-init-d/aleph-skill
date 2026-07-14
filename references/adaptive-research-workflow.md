@@ -114,11 +114,11 @@ Set `saturation_reached: true` only when:
 - primary/authoritative sources support the main mechanisms,
 - contradiction searches no longer materially change claim confidence,
 - additional sources no longer add material actors, mechanisms, thresholds, or branches,
-- branch probabilities and sensitivity rankings stabilize,
+- branch relative weights (or calibrated probabilities) and sensitivity rankings stabilize,
 - no unresolved critical evidence gap remains.
 
 Do not stop because the run is long. Do not continue merely to accumulate duplicate sources after saturation.
 
 ## 12. Professional synthesis
 
-Produce a decision-grade report with executive summary, methodology, temporal framing, baseline, evidence quality, causal architecture, propagation, branch probabilities, human decision tracks, sensitivity, contradictions, future indicators, audit results, limitations, and source appendix.
+Produce a decision-grade report with executive summary, methodology, temporal framing, baseline, evidence quality, causal architecture, propagation, declared likelihood mode, human decision tracks, sensitivity, contradictions, future indicators, audit results, limitations, and source appendix.

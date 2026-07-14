@@ -1,0 +1,52 @@
+{
+  "schema_version": "2.0.0",
+  "mode": "deterministic",
+  "ticks": 1,
+  "model": {
+    "nodes": [
+      {
+        "id": "policy:source",
+        "role": "exogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 1,
+        "bounds": [
+          0,
+          10
+        ]
+      },
+      {
+        "id": "policy:outcome",
+        "role": "endogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 0,
+        "bounds": [
+          -10,
+          10
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge:policy:fixture",
+        "from": "policy:source",
+        "to": "policy:outcome",
+        "sign": 1,
+        "base_strength": 0.5,
+        "lag_ticks": 0,
+        "transform": "linear"
+      }
+    ],
+    "interventions": []
+  },
+  "config": {
+    "seed": "policy-fixture",
+    "mode": "deterministic"
+  },
+  "expected_final_state": {
+    "policy:source": 1,
+    "policy:outcome": 0.5
+  },
+  "tolerance": 1e-9
+}

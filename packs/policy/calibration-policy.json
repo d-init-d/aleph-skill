@@ -1,0 +1,14 @@
+{
+  "policy_id": "cal:policy:v1",
+  "precommitted": true,
+  "commitment_version": "aleph-hindcast-commitment-v2",
+  "case_commitments": {
+    "hindcast:policy:synthetic-001": "5317526788b782246f4c8544fe6129e161003969006afdd8e754ee810045d660"
+  },
+  "min_oos_cases": 30,
+  "metrics": [
+    "mae",
+    "rmse"
+  ],
+  "maturity_gate": "validated"
+}

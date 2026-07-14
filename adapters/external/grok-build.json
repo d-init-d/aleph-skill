@@ -1,0 +1,40 @@
+{
+  "schema_version": "2.0.0",
+  "profile_id": "grok-build",
+  "package_version": "2.0.0",
+  "executable": "grok",
+  "shell": false,
+  "prompt_transport": "stdin",
+  "working_directory": "workspace",
+  "core_path": ".aleph/core/aleph-skill",
+  "preflight": [
+    "python",
+    ".aleph/core/aleph-skill/scripts/preflight.py",
+    "--json"
+  ],
+  "version_probe": [
+    "grok",
+    "--version"
+  ],
+  "network_policy": {
+    "research": "host-declared",
+    "roleplay": "deny"
+  },
+  "tool_policy": {
+    "research": "host-declared",
+    "roleplay": "deny"
+  },
+  "required_receipt_fields": [
+    "execution_id",
+    "runtime_id",
+    "adapter_id",
+    "started_at",
+    "completed_at",
+    "inputs",
+    "outputs",
+    "capability_snapshot_hash",
+    "receipt_hash",
+    "hmac"
+  ],
+  "notes": "Do not interpolate prompts into a shell command. The caller must probe capabilities and hash all inputs/outputs."
+}

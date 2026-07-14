@@ -1,0 +1,62 @@
+{
+  "schema_version": "2.0.0",
+  "case_id": "hindcast:healthcare:synthetic-001",
+  "cutoff": "2020-01-01",
+  "evidence_snapshot_hash": "4c198787fef17962011015449306dbe911e88f74be18f5e8c5fa689cf0d43bad",
+  "model": {
+    "nodes": [
+      {
+        "id": "healthcare:source",
+        "role": "exogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 1,
+        "bounds": [
+          0,
+          10
+        ]
+      },
+      {
+        "id": "healthcare:outcome",
+        "role": "endogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 0,
+        "bounds": [
+          -10,
+          10
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge:healthcare:hindcast",
+        "from": "healthcare:source",
+        "to": "healthcare:outcome",
+        "sign": 1,
+        "base_strength": 0.5,
+        "lag_ticks": 0,
+        "transform": "linear"
+      }
+    ],
+    "interventions": []
+  },
+  "config": {
+    "seed": "healthcare-hindcast",
+    "mode": "deterministic"
+  },
+  "ticks": 1,
+  "observations": {
+    "healthcare:outcome": 0.45
+  },
+  "baselines": {
+    "healthcare:outcome": 0
+  },
+  "evidence": [
+    {
+      "id": "evidence:healthcare:synthetic-precutoff",
+      "available_at": "2019-01-01"
+    }
+  ],
+  "provenance": "synthetic regression case; not empirical calibration evidence"
+}

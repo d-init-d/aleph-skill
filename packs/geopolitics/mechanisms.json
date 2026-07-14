@@ -1,0 +1,10 @@
+{
+  "templates": [
+    {
+      "id": "mech:geopolitics:pass_through",
+      "relation": "increases",
+      "sign": 1,
+      "description": "Core geopolitics transmission mechanism template for validated packs."
+    }
+  ]
+}

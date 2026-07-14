@@ -1,5 +1,72 @@
 # Changelog
 
+## v2.0.0 - 2026-07-14
+
+### Breaking
+
+- Schema writes are `2.0.0` only; `1.2.0` workspaces migrate via `sim:migrate` (default sibling output).
+- Assurance tiers are `experimental | limited | verified | calibrated`; diagnostic score cannot override hard gates; `excellent` is legacy display only.
+- Uncalibrated branches use `relative_weight` (not bare `probability`); calibrated probability requires method, sample count, interval, and policy ref.
+- Trace rows are recomputed (formula, lag/context, amplification); forged effects fail closed.
+- Installer uses distribution allowlist, refuses `source==destination`/nested paths, and never deletes real trees for symlink mode.
+
+### Added
+
+- Exact machine-readable portability vocabulary so CLI/IDE adapters do not paraphrase temporal, roleplay, engine-limit, assurance, or D Research compatibility values.
+- Secure shared path resolver and streaming loader (size/depth limits).
+- Typed check results with stable public issue codes.
+- Atomic finalization + `STALE_ARTIFACT` detection.
+- D Research discovery (no hardcoded developer paths) and claim-only ledger import with HMAC hard-fail.
+- Privacy intake, knowledge packets, sealed roleplay rules, receipt chain helpers.
+- Deterministic / Monte Carlo engine with counter-based RNG; sensitivity (OAT/Morris; optional Sobol).
+- Seven data-only domain packs with semantic validation and model-backed hindcast fixtures.
+- Portable adapter registry + generated instruction adapters; drift check.
+- npm script surface aligned with Upgrade plan (`sim:*`, `research:import`, `packs:validate`, `acceptance`, etc.).
+- Full portable lifecycle acceptance: initialize, compile, run, replay, sensitivity, hindcast, finalize, and strict revalidation.
+- Published JSON Schema contracts for manifests, nodes, edges, branches, roleplay receipts, and research imports.
+- Run contracts bind a non-empty propagation trace by declared path, raw SHA-256, row count, and semantic replay.
+- Project-scoped IDE/external-CLI adapters install the same verified core and emit one bundle receipt.
+- Numerical trace execution binding independently matches source/target states, ticks, sampled strengths, interventions, and run identity to a reconstructed engine trajectory.
+- Numerical branch ledgers explicitly distinguish analyst-authored scenarios from engine-derived deterministic or Monte Carlo clusters.
+
+### Correctness
+
+- Engine uses discrete level equations, explicit intervention release, SCC convergence gates, context multipliers, saturation, and deterministic or sampled lag distributions.
+- Counter RNG uses typed length-prefixed framing so distinct counter tuples cannot alias.
+- Monte Carlo preserves invalid/unresolved mass and cannot silently renormalize failed runs.
+- Migrator records a complete 1.x source digest, materializes declared assumptions, writes the canonical 2.0 migration contract, and refuses overlapping or ambiguous trees.
+- Every published JSON schema is parsed in the release suite, and schema/template/fixture assumption contracts are regression-tested.
+- Strict sensitivity inputs reject booleans, strings, non-finite values, and malformed bounds.
+- SCC convergence uses the unrelaxed fixed-point residual; day-based lags honor timestep in deterministic and Monte Carlo modes.
+- Effect distributions fail compilation on unknown, incomplete, unordered, or non-finite parameters instead of falling back silently.
+- Hindcast calibration commitments bind cutoff, model/config/ticks, evidence snapshot, targets, and baselines; OAT stays inside declared bounds.
+- Knowledge packets and roleplay outputs are closed and recursively scanned; offline execution flags are mandatory.
+- Run and replay honor manifest-declared nodes, edges, model, ledger, report, and trace paths; aliased output paths fail closed.
+- Replay rejects malformed contracts, mode/config drift, changed saved results, and worker-only metadata drift; run/replay/compile entry points use bounded secure JSON loading.
+- Numerical branch validation binds deterministic output or every Monte Carlo cluster exactly; analyst-authored branches cannot claim engine metadata.
+- Extreme timestep, lag, numeric, and run-reference inputs fail with typed issues instead of coercion, overflow, or traceback.
+- Model and run artifacts stage as one exception-safe pair and restore both targets when staging or promotion fails.
+- Workspace initialization emits a coherent draft with no fabricated completed human-track receipts.
+
+### Security
+
+- Path traversal / UNC / drive / symlink escape blocked for artifacts.
+- `.env`, credential-like files, coverage output, caches, and generated package metadata are excluded from install distribution.
+- Secret scanning streams complete files, including files larger than 2 MiB.
+- Symlink installation requires a fully attested clean tree and refuses any unmanifested exposure.
+- Adapter writes use exclusive randomized temporary files, flush to disk, verify digests, and roll back on failure.
+- Copy installs and single-file adapters require a current distribution manifest; unverified or secret-bearing sources fail closed.
+- D Research verified assurance requires a signed preserved ledger, a hashed import receipt, exact regenerated evidence CSV, and a reverified compatible 3.x package identity.
+- Roleplay Tier A requires referenced HMAC receipt bodies; self-attested receipt strings cannot support verified assurance.
+- Distribution-manifest parsing and hashing use the same bounded byte buffer; installer commits recheck reparse-point parents and roll back copy, symlink, adapter, and combined bundle mutations on receipt failure.
+- Successful install transactions discard rollback backups only after their receipt or combined bundle receipt is durable, preventing duplicate hidden skills from contaminating host discovery.
+
+### Verification
+
+- Python 3.10-3.13 and Linux/macOS/Windows CI matrix declared.
+- 100+ regression tests, Ruff, strict mypy, package validation, adapter drift, deterministic replay, adversarial rejection, and end-to-end acceptance are release gates.
+- Domain packs remain `experimental`; probability output stays disabled until real calibration and hindcast evidence satisfy the calibrated gate.
+
 ## v1.2.0 - 2026-07-02
 
 ### Changed

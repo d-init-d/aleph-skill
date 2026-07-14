@@ -1,0 +1,14 @@
+{
+  "policy_id": "cal:economics:v1",
+  "precommitted": true,
+  "commitment_version": "aleph-hindcast-commitment-v2",
+  "case_commitments": {
+    "hindcast:economics:synthetic-001": "30a4d0a459cfd0cdc52c56861a3456637beacb83e4167888b072f038686fb593"
+  },
+  "min_oos_cases": 30,
+  "metrics": [
+    "mae",
+    "rmse"
+  ],
+  "maturity_gate": "validated"
+}

@@ -1,10 +1,16 @@
 {
-  "schema_version": "1.2.0",
+  "schema_version": "2.0.0",
+  "validator_version": "2.0.0",
   "validated_at": "2026-07-01T00:00:00Z",
   "mode": "final",
   "status": "pass",
+  "assurance_status": "experimental",
   "checks": {},
+  "check_results": {},
   "metrics": {},
   "warnings": [],
-  "errors": []
+  "errors": [],
+  "issues": [],
+  "error_codes": [],
+  "formula_version": "2.0.0"
 }

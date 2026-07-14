@@ -1,53 +1,72 @@
 {
-  "schema_version": "1.2.0",
+  "schema_version": "2.0.0",
+  "likelihood_mode": "relative_weight",
+  "calibrated": false,
   "branches": [
     {
       "id": "branch:most-likely",
       "name": "Most likely branch",
-      "probability": 0.45,
+      "relative_weight": 0.45,
       "summary": "Primary branch under current assumptions.",
       "causal_trace": ["causal:example-increases-target"],
       "key_decision_points": ["actor:example"],
       "end_state": {"time": "2028-07-01", "summary": "End state for this branch."},
-      "leading_indicators": ["Observe factor:example for movement consistent with this branch."],
-      "disconfirming_conditions": ["The expected factor movement does not appear within the modeled lag window."],
-      "evidence_ids": [
-        "evidence:example"
+      "leading_indicators": [
+        {
+          "node": "factor:example",
+          "direction": "up",
+          "window": "P90D",
+          "predicate": "factor_moves_with_branch"
+        }
       ],
+      "disconfirming_conditions": ["The expected factor movement does not appear within the modeled lag window."],
+      "evidence_ids": ["evidence:example"],
       "confidence": 0.5,
       "warnings": ["Template branch; replace before production use."]
     },
     {
       "id": "branch:alternative",
       "name": "Alternative branch",
-      "probability": 0.35,
-      "summary": "Plausible alternative branch.",
+      "relative_weight": 0.35,
+      "summary": "Plausible alternative branch with a distinct causal story.",
       "causal_trace": ["causal:example-increases-target"],
       "key_decision_points": ["actor:example"],
-      "end_state": {"time": "2028-07-01", "summary": "End state for this branch."},
-      "leading_indicators": ["Observe factor:example for movement consistent with this branch."],
-      "disconfirming_conditions": ["The expected factor movement does not appear within the modeled lag window."],
-      "evidence_ids": [
-        "evidence:example"
+      "end_state": {"time": "2028-07-01", "summary": "Alternate end state for this branch."},
+      "leading_indicators": [
+        {
+          "node": "factor:example",
+          "direction": "stable",
+          "window": "P90D",
+          "predicate": "factor_stable"
+        }
       ],
+      "disconfirming_conditions": ["The alternative path is contradicted by early indicators."],
+      "evidence_ids": ["evidence:example"],
       "confidence": 0.4,
       "warnings": ["Template branch; replace before production use."]
     },
     {
       "id": "branch:stress",
       "name": "Stress branch",
-      "probability": 0.2,
-      "summary": "Lower-probability stress branch.",
+      "relative_weight": 0.2,
+      "probability": null,
+      "stress": true,
+      "summary": "Lower-weight stress branch; probability remains null until calibrated.",
       "causal_trace": ["causal:example-increases-target"],
       "key_decision_points": ["actor:example"],
-      "end_state": {"time": "2028-07-01", "summary": "End state for this branch."},
-      "leading_indicators": ["Observe factor:example for movement consistent with this branch."],
-      "disconfirming_conditions": ["The expected factor movement does not appear within the modeled lag window."],
-      "evidence_ids": [
-        "evidence:example"
+      "end_state": {"time": "2028-07-01", "summary": "Stress end state."},
+      "leading_indicators": [
+        {
+          "node": "factor:example",
+          "direction": "down",
+          "window": "P30D",
+          "predicate": "stress_signal"
+        }
       ],
-      "confidence": 0.35,
-      "warnings": ["Template branch; replace before production use."]
+      "disconfirming_conditions": ["Stress indicators remain quiet through the monitoring window."],
+      "evidence_ids": ["evidence:example"],
+      "confidence": 0.3,
+      "warnings": ["Stress scenario — not a calibrated probability."]
     }
   ]
 }

@@ -84,7 +84,7 @@ Before synthesis:
 - backtest against observed analogues where possible,
 - verify temporal knowledge boundaries,
 - test high-sensitivity assumptions,
-- redistribute branch probabilities when edges fail,
+- redistribute relative weights or calibrated probability mass when edges fail,
 - launch another research wave for any critical gap.
 
 ## Phase 8: Saturation gate

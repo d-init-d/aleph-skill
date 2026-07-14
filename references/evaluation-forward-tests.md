@@ -19,7 +19,7 @@ Pass conditions:
 - Separates public-role actor research from any roleplay hypothesis for material decision makers.
 - Reports weak edges such as moral hazard timing.
 - Records two distinct human-track executions per material actor when a subagent tool is exposed.
-- Passes final validation with report required and scores at least 90 (`excellent`).
+- Passes final validation, replay, integrity, privacy, and assurance gates. A diagnostic score cannot override those gates.
 
 ## Test 2: 2026 oil shock
 

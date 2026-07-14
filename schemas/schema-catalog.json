@@ -1,0 +1,21 @@
+{
+  "schema_version": "2.0.0",
+  "dialect": "https://json-schema.org/draft/2020-12/schema",
+  "supported_keywords": [
+    "$schema", "$id", "$ref", "$defs", "type", "properties", "required",
+    "additionalProperties", "items", "minItems", "uniqueItems", "enum", "const",
+    "pattern", "format", "minLength", "maxLength", "minItems", "maxItems", "minimum", "maximum", "exclusiveMinimum", "anyOf", "oneOf", "allOf",
+    "description"
+  ],
+  "artifacts": {
+    "simulation_manifest": "simulation-manifest.schema.json",
+    "timeline_node": "timeline-node.schema.json",
+    "causal_edge": "causal-edge.schema.json",
+    "actor_dossier": "actor-dossier.schema.json",
+    "branch_ledger": "branch-ledger.schema.json",
+    "propagation_trace_row": "propagation-trace-row.schema.json",
+    "numerical_propagation_trace_row": "numerical-propagation-trace-row.schema.json",
+    "run_ledger": "run-ledger.schema.json",
+    "finalization_receipts": "finalization-receipts.schema.json"
+  }
+}

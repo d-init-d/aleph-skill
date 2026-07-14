@@ -5,7 +5,7 @@ Codex can consume the portable `SKILL.md` core directly.
 ## Recommended locations
 
 - User skill: `~/.codex/skills/aleph-skill`
-- Development workspace: keep this repository at `D:\Downloads\aleth-skill\aleph-skill` and copy or symlink after validation.
+- Development workspace: keep the repository anywhere outside the installed target and copy or symlink only after validation.
 
 ## Install command
 
@@ -23,10 +23,10 @@ python scripts\install_adapters.py --target codex --scope user --copy
 
 ## Validation
 
-Use the Codex skill validator:
+Use Aleph's portable package validator:
 
 ```powershell
-python C:\Users\dmn05\.codex\skills\.system\skill-creator\scripts\quick_validate.py D:\Downloads\aleth-skill\aleph-skill
+python scripts\validate_skill_package.py .
 ```
 
 Keep `agents/openai.yaml`; it provides Codex UI metadata and does not affect other platforms.

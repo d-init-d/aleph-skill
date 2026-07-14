@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 from _lib import load_csv_rows, load_json, utc_now, write_text
+from aleph.paths import resolve_in_workspace
+from aleph.validator import validate_workspace
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -23,17 +26,45 @@ def table_row(values: list[Any]) -> str:
     return "| " + " | ".join(cell(value) for value in values) + " |"
 
 
+def _safe_load(workspace: Path, relative: str, kind: str = "json") -> Any:
+    path, issues = resolve_in_workspace(workspace, relative, must_exist=True, require_file=True)
+    if issues or path is None:
+        codes = ",".join(i.code for i in issues)
+        raise ValueError(f"artifact path refused ({codes}): {relative}")
+    if kind == "json":
+        return load_json(path)
+    if kind == "csv":
+        return load_csv_rows(path)
+    if kind == "jsonl":
+        return read_jsonl(path)
+    if kind == "text":
+        return path.read_text(encoding="utf-8")
+    raise ValueError(kind)
+
+
 def render(workspace: Path) -> str:
+    gate = validate_workspace(workspace, mode="draft", require_report=False, verify_integrity=False)
+    if gate.get("status") != "pass":
+        raise ValueError(
+            "report inputs failed validation: "
+            + ",".join(str(code) for code in gate.get("error_codes", []))
+        )
     manifest = load_json(workspace / "simulation-manifest.json")
     artifacts = manifest.get("artifact_paths", {})
-    branches = load_json(workspace / artifacts.get("branch_ledger", "branch-ledger.json")).get("branches", [])
-    nodes = load_json(workspace / artifacts.get("nodes", "nodes.json"))
-    edges = load_json(workspace / artifacts.get("edges", "edges.json"))
-    actors = load_json(workspace / artifacts.get("actors", "actors.json"))
-    trace = read_jsonl(workspace / artifacts.get("propagation_trace", "propagation-trace.jsonl"))
-    evidence_rows = load_csv_rows(workspace / artifacts.get("evidence_map", "evidence-map.csv"))
-    validation_path = workspace / artifacts.get("validation_report", "validation-report.json")
-    validation = load_json(validation_path) if validation_path.exists() else {"status": "not-run", "warnings": [], "errors": []}
+    for key, rel in list(artifacts.items()):
+        if isinstance(rel, str):
+            _, issues = resolve_in_workspace(workspace, rel, must_exist=False, require_file=False)
+            if issues:
+                raise ValueError(f"artifact_paths.{key} escapes workspace: {[i.code for i in issues]}")
+    branches = _safe_load(workspace, str(artifacts.get("branch_ledger", "branch-ledger.json"))).get("branches", [])
+    nodes = _safe_load(workspace, str(artifacts.get("nodes", "nodes.json")))
+    edges = _safe_load(workspace, str(artifacts.get("edges", "edges.json")))
+    actors = _safe_load(workspace, str(artifacts.get("actors", "actors.json")))
+    trace = _safe_load(workspace, str(artifacts.get("propagation_trace", "propagation-trace.jsonl")), kind="jsonl")
+    evidence_rows = _safe_load(workspace, str(artifacts.get("evidence_map", "evidence-map.csv")), kind="csv")
+    validation_path_rel = str(artifacts.get("validation_report", "validation-report.json"))
+    vpath, viss = resolve_in_workspace(workspace, validation_path_rel, must_exist=False)
+    validation = load_json(vpath) if vpath and vpath.exists() else {"status": "not-run", "warnings": [], "errors": []}
 
     change = manifest.get("change_point", {})
     frame = manifest.get("temporal_frame", {})
@@ -51,13 +82,25 @@ def render(workspace: Path) -> str:
     )
     tier_counts = Counter(row.get("source_tier", "unknown") for row in evidence_rows)
     contradiction_rows = [row for row in evidence_rows if row.get("contradiction_status") in {"contested", "contradicted"}]
-    ranked_branches = sorted(branches, key=lambda item: float(item.get("probability", 0)), reverse=True)
+    def branch_weight(item: dict[str, Any]) -> float:
+        if item.get("relative_weight") is not None:
+            try:
+                return float(item.get("relative_weight") or 0)
+            except (TypeError, ValueError):
+                return 0.0
+        try:
+            return float(item.get("probability") or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    ranked_branches = sorted(branches, key=branch_weight, reverse=True)
     top_branch = ranked_branches[0] if ranked_branches else None
     report_ready = (
         manifest.get("status") in {"complete", "completed"}
         and control.get("saturation_reached") is True
         and validation.get("mode") == "final"
         and validation.get("status") == "pass"
+        and validation.get("assurance_status") != "failed"
     )
     effective_validation_status = "final-pass" if report_ready else "draft-not-ready"
 
@@ -73,8 +116,12 @@ def render(workspace: Path) -> str:
         f"This report evaluates the intervention **{change.get('description', '')}** from `{change.get('time', '')}` through `{frame.get('simulation_end', '')}` using `{frame.get('mode', 'unknown')}` temporal framing.",
     ]
     if top_branch:
+        mode = top_branch.get("likelihood_mode") or manifest.get("likelihood_mode") or "relative_weight"
+        weight = branch_weight(top_branch)
+        label = "relative_weight" if mode != "calibrated_probability" else "calibrated_probability"
         lines.append(
-            f"The highest-probability branch is **{top_branch.get('name', top_branch.get('id'))}** at `{float(top_branch.get('probability', 0)):.2f}`. This is a conditional estimate, not a prediction of certainty."
+            f"The leading branch is **{top_branch.get('name', top_branch.get('id'))}** with `{label}={weight:.4f}`. "
+            "This is a conditional model estimate, not certainty."
         )
     lines.extend(
         [
@@ -146,7 +193,7 @@ def render(workspace: Path) -> str:
             "",
             "## Scenario branches",
             "",
-            table_row(["Branch", "Probability", "Confidence", "End time", "End state"]),
+            table_row(["Branch", "Likelihood value", "Confidence", "End time", "End state"]),
             table_row(["---", "---:", "---:", "---", "---"]),
         ]
     )
@@ -155,7 +202,7 @@ def render(workspace: Path) -> str:
             table_row(
                 [
                     branch.get("name", branch.get("id", "")),
-                    f"{float(branch.get('probability', 0)):.2f}",
+                    f"{branch_weight(branch):.2f}",
                     f"{float(branch.get('confidence', 0)):.2f}",
                     branch.get("end_state", {}).get("time", ""),
                     branch.get("end_state", {}).get("summary", ""),
@@ -169,7 +216,12 @@ def render(workspace: Path) -> str:
             lines.append(f"### {branch.get('name', branch.get('id', 'Branch'))}")
             lines.append("")
             for indicator in branch.get("leading_indicators", []):
-                lines.append(f"- Leading indicator: {indicator}")
+                if isinstance(indicator, dict):
+                    lines.append(
+                        "- Leading indicator: "
+                        f"`{indicator.get('node')}` {indicator.get('direction')} within "
+                        f"`{indicator.get('window')}` when `{indicator.get('predicate')}`."
+                    )
             for condition in branch.get("disconfirming_conditions", []):
                 lines.append(f"- Disconfirming condition: {condition}")
             lines.append("")
@@ -257,7 +309,12 @@ def main() -> None:
     args = parser.parse_args()
     workspace = Path(args.workspace).resolve()
     output = Path(args.out).resolve() if args.out else workspace / "REPORT.md"
-    write_text(output, render(workspace))
+    try:
+        rendered = render(workspace)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        print(json.dumps({"status": "fail", "code": "VALIDATION_FAILED", "message": str(exc)}), file=sys.stderr)
+        raise SystemExit(1) from exc
+    write_text(output, rendered)
     print(str(output))
 
 

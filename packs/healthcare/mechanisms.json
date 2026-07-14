@@ -1,0 +1,10 @@
+{
+  "templates": [
+    {
+      "id": "mech:healthcare:pass_through",
+      "relation": "increases",
+      "sign": 1,
+      "description": "Core healthcare transmission mechanism template for validated packs."
+    }
+  ]
+}

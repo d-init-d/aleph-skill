@@ -1,0 +1,27 @@
+{
+  "pack": "policy",
+  "variables": [
+    {
+      "id": "policy:var_primary",
+      "unit": "index",
+      "role": "endogenous",
+      "datatype": "continuous",
+      "baseline": 0.0,
+      "bounds": [
+        -100,
+        100
+      ]
+    },
+    {
+      "id": "policy:var_exog",
+      "unit": "index",
+      "role": "exogenous",
+      "datatype": "continuous",
+      "baseline": 1.0,
+      "bounds": [
+        0,
+        10
+      ]
+    }
+  ]
+}

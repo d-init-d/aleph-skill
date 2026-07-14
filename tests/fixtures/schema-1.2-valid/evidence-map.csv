@@ -1,0 +1,3 @@
+evidence_id,claim,source,source_type,source_tier,date,retrieved_at,access_method,retrieval_status,quote_or_value,confidence,contradiction_status,notes
+evidence:policy-statute,Statute defines committee rate-setting mandate.,user-provided,statute,user-provided,2024-01-01,2026-07-01,local,user-provided,The committee sets the policy rate under the published price-stability mandate.,0.9,no-conflict-found,
+evidence:macro-series,Rate hikes historically cool interest-sensitive demand.,user-provided,series,user-provided,2025-01-01,2026-07-01,local,user-provided,Historical episodes show multi-quarter lag from policy rate to output gap.,0.7,no-conflict-found,

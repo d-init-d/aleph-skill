@@ -1,0 +1,52 @@
+{
+  "schema_version": "2.0.0",
+  "mode": "deterministic",
+  "ticks": 1,
+  "model": {
+    "nodes": [
+      {
+        "id": "geopolitics:source",
+        "role": "exogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 1,
+        "bounds": [
+          0,
+          10
+        ]
+      },
+      {
+        "id": "geopolitics:outcome",
+        "role": "endogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 0,
+        "bounds": [
+          -10,
+          10
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge:geopolitics:fixture",
+        "from": "geopolitics:source",
+        "to": "geopolitics:outcome",
+        "sign": 1,
+        "base_strength": 0.5,
+        "lag_ticks": 0,
+        "transform": "linear"
+      }
+    ],
+    "interventions": []
+  },
+  "config": {
+    "seed": "geopolitics-fixture",
+    "mode": "deterministic"
+  },
+  "expected_final_state": {
+    "geopolitics:source": 1,
+    "geopolitics:outcome": 0.5
+  },
+  "tolerance": 1e-9
+}

@@ -4,27 +4,29 @@ Use this skill when the user asks for counterfactual history, causal timeline si
 
 Core behavior:
 
-1. Treat every result as probabilistic. Do not present a single future as definitive.
-2. Separate fact, inference, simulation, and counterfactual content.
-3. Use D Research for source discovery, evidence ledgers, contradiction checks, and public-role actor research when available.
-4. If D Research is missing, ask the user once per task whether they want to install or enable it; if they decline, continue in limited mode and lower confidence.
-5. Refuse or narrow requests that require private personal data, doxxing, stalking, minors, private accounts, access-control bypass, captcha evasion, or paywall bypass.
-6. Build causal edges only when the mechanism, evidence, lag, context modifiers, strength, and confidence are explicit.
-7. For material person nodes, inspect the host tools. If a task/subagent/agent tool exists, dispatch distinct research and roleplay subagents for every material actor; research must finish before roleplay starts. Otherwise record the unavailable capability and run isolated passes. Treat roleplay as hypothesis generation, never evidence.
-8. Record both human tracks in `human-track-ledger.jsonl`; prose claims of separation are insufficient.
-9. Initialize artifacts before research, assess complexity adaptively, research in D Research-style waves until evidence saturation, and checkpoint progress in the manifest. Never impose a speed profile, source cap, or repair cap.
-10. Always run draft validation, render the report, run final validation with `--require-report`, and enforce an excellent quality score of at least 90 when creating artifacts.
+1. Treat every result as uncertain. Prefer `relative_weight` until a domain/decision model is calibrated; never invent bare probability.
+2. Separate fact, inference, simulation, assumption, and counterfactual content.
+3. Discover D Research via explicit flag → `D_RESEARCH_SKILL` → capability file → conventional skill paths (never hardcoded developer paths). Import only `record_type=claim` via the `evidence` field.
+4. If D Research is missing, ask once whether to install it; if declined, continue limited and do not claim `verified`.
+5. Run privacy intake before research/roleplay. Refuse private persons, minors, unknown subjects, doxxing, stalking, and re-identification.
+6. Build causal edges only with mechanism, evidence/assumption, lag, context modifiers, and effect parameters. Keep effect size separate from evidence confidence.
+7. For material actors: freeze dossier → temporal knowledge packet → sealed roleplay → adjudicator. Distinct execution IDs and receipt chain required. Roleplay never emits probability or new evidence.
+8. Record human tracks and receipts; prose claims of separation are insufficient.
+9. Initialize schema `2.0.0` artifacts before research; migrate legacy `1.2.0` with `sim:migrate`. No speed profiles or source caps.
+10. Validate with formula replay, finalize atomically, and score with assurance tiers (`experimental|limited|verified|calibrated`). Diagnostic score cannot override hard gates. `excellent` is legacy display only.
 
 Useful commands:
 
-- `python scripts/preflight.py --d-research <path>`
-- `python scripts/init_simulation_workspace.py --slug <slug> --change-point "<description>" --time <date> --horizon <duration> --observation-cutoff <date>`
-- `python scripts/validate_skill_package.py .`
-- `python scripts/validate_simulation_artifacts.py --workspace <run-dir> --mode final --require-report --write-report`
-- `python scripts/render_simulation_report.py --workspace <run-dir> --out <report.md>`
-- `python scripts/evaluate_simulation_quality.py --workspace <run-dir> --threshold 90 --enforce`
+- `python scripts/preflight.py --json`
+- `python scripts/init_simulation_workspace.py --slug <slug> --change-point "..." --time <date> --horizon <duration> --observation-cutoff <date> --out-dir <user-workspace>`
+- `python scripts/migrate_workspace.py --source <1.2-dir> --out <sibling-v2>`
+- `python scripts/validate_simulation_artifacts.py --workspace <run-dir> --mode final --require-report`
+- `python scripts/run_simulation.py --workspace <run-dir> --mode deterministic --seed <seed>`
+- `python scripts/evaluate_simulation_quality.py --workspace <run-dir>`
+- `python scripts/validate_domain_packs.py`
+- `python scripts/check_adapters.py`
 
 Output standards:
 
-- Include assumptions, branch probabilities, mechanism highlights, evidence quality, sensitivity points, warnings, and next steps.
-- Do not claim completeness unless all relevant gates passed.
+- Include assumptions, relative weights or calibrated probabilities (never mixed), mechanisms, evidence quality, sensitivity, warnings, and next steps.
+- Do not claim `verified`/`calibrated` unless hard gates and receipts pass.

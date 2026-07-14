@@ -1,0 +1,52 @@
+{
+  "schema_version": "2.0.0",
+  "mode": "deterministic",
+  "ticks": 1,
+  "model": {
+    "nodes": [
+      {
+        "id": "healthcare:source",
+        "role": "exogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 1,
+        "bounds": [
+          0,
+          10
+        ]
+      },
+      {
+        "id": "healthcare:outcome",
+        "role": "endogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 0,
+        "bounds": [
+          -10,
+          10
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge:healthcare:fixture",
+        "from": "healthcare:source",
+        "to": "healthcare:outcome",
+        "sign": 1,
+        "base_strength": 0.5,
+        "lag_ticks": 0,
+        "transform": "linear"
+      }
+    ],
+    "interventions": []
+  },
+  "config": {
+    "seed": "healthcare-fixture",
+    "mode": "deterministic"
+  },
+  "expected_final_state": {
+    "healthcare:source": 1,
+    "healthcare:outcome": 0.5
+  },
+  "tolerance": 1e-9
+}

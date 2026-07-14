@@ -9,8 +9,8 @@ Use this structure for final simulation reports.
 3. Baseline world state and change point.
 4. Evidence and source-quality assessment.
 5. Causal architecture and propagation.
-6. Timeline branch distribution.
-7. Future monitoring and probability updates for prospective/hybrid work.
+6. Timeline branch distribution and likelihood mode.
+7. Future monitoring and likelihood updates for prospective/hybrid work.
 8. Human decision points, including research/roleplay separation.
 9. Sensitivity, contradictions, and limitations.
 10. Validation and audit.
@@ -21,10 +21,10 @@ Use this structure for final simulation reports.
 
 Include:
 
-| Branch | Probability | Summary | Key divergence | Confidence |
+| Branch | Relative weight / calibrated probability | Summary | Key divergence | Evidence confidence |
 |---|---:|---|---|---:|
 
-Probabilities must sum to `1.0`. If they do not, fix the branch ledger before reporting.
+Name the likelihood mode. Uncalibrated weights must be labeled `relative_weight`, never probability. Calibrated probabilities must cite the calibration policy, hindcast report, sample count, interval, model hash, and config hash.
 
 ## Mechanism excerpts
 
@@ -58,7 +58,8 @@ Report:
 
 Use cautious wording:
 
-- "This branch is estimated at..."
+- "Under the relative-weight model, this branch receives..."
+- "Under the cited calibration policy, this branch is estimated at..."
 - "Under these assumptions..."
 - "The strongest mechanism is..."
 - "The weakest link is..."
@@ -81,4 +82,4 @@ When writing artifacts, include paths to:
 - validation report,
 - final report.
 
-Before calling the report complete, run final validation with `--require-report` and run `scripts/evaluate_simulation_quality.py --threshold 90 --enforce`. A validator pass confirms structural/audit gates; the quality score additionally checks evidence strength, human-track execution, and adaptive coverage. Do not publish a completed report below the `excellent` grade.
+Before calling the report complete, run final validation with `--require-report`, replay, finalization, receipt verification, and assurance evaluation. A diagnostic score is informative only and cannot override a failed hard gate or elevate `experimental|limited` output to `verified|calibrated`.

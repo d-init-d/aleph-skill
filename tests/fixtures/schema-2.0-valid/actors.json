@@ -1,0 +1,107 @@
+[
+  {
+    "id": "actor:governor",
+    "person_node": "entity:central-bank",
+    "public_role": "Central bank governor (public institutional role)",
+    "scope_note": "Model only public institutional behavior.",
+    "materiality": "material",
+    "subject_class": "public_role_person",
+    "living_status": "living",
+    "evidence_ids": [
+      "evidence:policy-statute"
+    ],
+    "decision_graph": {
+      "allowed_actions": [
+        "hike_25bp",
+        "hold"
+      ]
+    },
+    "research_track": {
+      "status": "completed",
+      "execution_mode": "isolated-pass",
+      "agent_ref": "research-agent-1",
+      "execution_id": "execution:research-governor",
+      "started_at": "2026-07-01T10:00:00Z",
+      "completed_at": "2026-07-01T11:00:00Z",
+      "artifact": "research-governor.md",
+      "notes": "Public role research only",
+      "isolation_note": "no subagents",
+      "claims": [
+        {
+          "id": "claim:governor-mandate",
+          "claim": "Governor chairs the policy committee under a published mandate.",
+          "evidence_ids": [
+            "evidence:policy-statute"
+          ],
+          "confidence": 0.9,
+          "available_at": "2024-01-01",
+          "access_basis": "public_role"
+        }
+      ]
+    },
+    "roleplay_track": {
+      "status": "completed",
+      "execution_mode": "isolated-pass",
+      "agent_ref": "roleplay-agent-2",
+      "execution_id": "execution:roleplay-governor",
+      "started_at": "2026-07-01T12:00:00Z",
+      "completed_at": "2026-07-01T13:00:00Z",
+      "artifact": "roleplay-governor.md",
+      "notes": "Sealed packet roleplay",
+      "isolation_note": "no subagents",
+      "knowledge_cutoff": "2026-01-01",
+      "packet_hash": "7a8051a29b2e0bf7c8253e8990175dff3b256d63c3701d31a75f0562ff9967f4",
+      "dossier_evidence_ids": [
+        "evidence:policy-statute"
+      ],
+      "hypotheses": [
+        {
+          "id": "hypothesis:hike",
+          "action": "hike_25bp",
+          "reasoning": "Inflation above target with stable growth.",
+          "status": "simulation",
+          "evidence_ids": []
+        },
+        {
+          "id": "hypothesis:hold",
+          "action": "hold",
+          "reasoning": "Data-dependent pause after prior hikes.",
+          "status": "simulation",
+          "evidence_ids": []
+        }
+      ]
+    },
+    "adjudication": {
+      "method": "structured_judgment",
+      "calibrated": false,
+      "results": [
+        {
+          "action": "hike_25bp",
+          "relative_weight": 0.55,
+          "probability": null
+        },
+        {
+          "action": "hold",
+          "relative_weight": 0.45,
+          "probability": null
+        }
+      ]
+    },
+    "decision_patterns": [
+      "committee vote",
+      "mandate-focused communication"
+    ],
+    "predicted_responses": [
+      {
+        "action": "hike_25bp",
+        "relative_weight": 0.55,
+        "status": "simulation"
+      },
+      {
+        "action": "hold",
+        "relative_weight": 0.45,
+        "status": "simulation"
+      }
+    ]
+  }
+]

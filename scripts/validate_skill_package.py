@@ -6,11 +6,16 @@ import re
 from pathlib import Path
 
 from _lib import SKILL_NAME, is_skill_name, load_json, parse_frontmatter, read_text
-
+from aleph.adapters_registry import check_adapter_drift
+from aleph.installer import (
+    MANIFEST_NAME,
+    build_distribution_manifest,
+    scan_secret_like_files,
+    verify_distribution_manifest,
+)
+from aleph.io import write_json_atomic
 
 REQUIRED_FILES = [
-    ".gitattributes",
-    ".gitignore",
     "SKILL.md",
     "AGENTS.md",
     "README.md",
@@ -20,6 +25,7 @@ REQUIRED_FILES = [
     "agents/openai.yaml",
     "package.json",
     "pyproject.toml",
+    "distribution-manifest.json",
     "references/simulation-workflow.md",
     "references/adaptive-research-workflow.md",
     "references/temporal-modes.md",
@@ -44,10 +50,15 @@ REQUIRED_FILES = [
     "templates/validation-report.json",
     "templates/subagent-research-prompt.md",
     "templates/subagent-roleplay-prompt.md",
+    "schemas/run-ledger.schema.json",
     "adapters/codex.md",
     "adapters/claude-code.md",
     "adapters/opencode.md",
     "adapters/agents.md",
+    "adapters/registry.json",
+    "adapters/external/grok-build.json",
+    "adapters/external/aider.json",
+    "adapters/external/generic-cli.json",
     "scripts/preflight.py",
     "scripts/init_simulation_workspace.py",
     "scripts/validate_skill_package.py",
@@ -56,6 +67,14 @@ REQUIRED_FILES = [
     "scripts/score_butterfly.py",
     "scripts/render_simulation_report.py",
     "scripts/install_adapters.py",
+    "scripts/migrate_workspace.py",
+    "scripts/run_simulation.py",
+    "scripts/aleph/__init__.py",
+    "scripts/aleph/validator.py",
+    "scripts/aleph/paths.py",
+    "scripts/aleph/engine.py",
+    "packs/economics/pack-manifest.json",
+    "packs/geopolitics/pack-manifest.json",
 ]
 
 FORBIDDEN_PUBLIC_REFERENCES = [
@@ -127,6 +146,18 @@ def validate(root: Path) -> dict[str, object]:
             except json.JSONDecodeError as exc:
                 errors.append(f"{rel} is invalid JSON: {exc}")
 
+    adapter_result = check_adapter_drift(root)
+    for adapter_issue in adapter_result.get("issues", []):
+        errors.append(f"adapter drift: {adapter_issue}")
+
+    distribution = verify_distribution_manifest(root, require=True)
+    if not distribution.get("ok"):
+        for manifest_issue in distribution.get("issues", []):
+            errors.append(f"distribution manifest: {manifest_issue}")
+
+    for finding in scan_secret_like_files(root):
+        errors.append(f"secret-like package content refused: {finding['path']} ({finding['reason']})")
+
     text_file_suffixes = {".md", ".py", ".json", ".toml", ".yaml", ".yml", ".csv"}
     for path in root.rglob("*"):
         if ".git" in path.parts or path.is_dir() or path.suffix.lower() not in text_file_suffixes:
@@ -145,8 +176,15 @@ def validate(root: Path) -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate the Aleph Skill package.")
     parser.add_argument("root", nargs="?", default=".", help="Skill root directory.")
+    parser.add_argument(
+        "--generate-manifest",
+        action="store_true",
+        help="Release-maintainer operation: regenerate the deterministic distribution manifest before validation.",
+    )
     args = parser.parse_args()
     root = Path(args.root).resolve()
+    if args.generate_manifest:
+        write_json_atomic(root / MANIFEST_NAME, build_distribution_manifest(root))
     result = validate(root)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     if result["status"] != "pass":

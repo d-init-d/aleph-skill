@@ -1,0 +1,62 @@
+{
+  "schema_version": "2.0.0",
+  "case_id": "hindcast:climate:synthetic-001",
+  "cutoff": "2020-01-01",
+  "evidence_snapshot_hash": "8c18b941538cce4d2c0827edde28e0a0aec648d483962d4e40958ca85e0081dc",
+  "model": {
+    "nodes": [
+      {
+        "id": "climate:source",
+        "role": "exogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 1,
+        "bounds": [
+          0,
+          10
+        ]
+      },
+      {
+        "id": "climate:outcome",
+        "role": "endogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 0,
+        "bounds": [
+          -10,
+          10
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge:climate:hindcast",
+        "from": "climate:source",
+        "to": "climate:outcome",
+        "sign": 1,
+        "base_strength": 0.5,
+        "lag_ticks": 0,
+        "transform": "linear"
+      }
+    ],
+    "interventions": []
+  },
+  "config": {
+    "seed": "climate-hindcast",
+    "mode": "deterministic"
+  },
+  "ticks": 1,
+  "observations": {
+    "climate:outcome": 0.45
+  },
+  "baselines": {
+    "climate:outcome": 0
+  },
+  "evidence": [
+    {
+      "id": "evidence:climate:synthetic-precutoff",
+      "available_at": "2019-01-01"
+    }
+  ],
+  "provenance": "synthetic regression case; not empirical calibration evidence"
+}

@@ -1,0 +1,10 @@
+{
+  "parameters": [
+    {
+      "id": "prior:technology:strength",
+      "distribution": "uniform",
+      "min": 0.1,
+      "max": 0.9
+    }
+  ]
+}

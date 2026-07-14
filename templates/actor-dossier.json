@@ -1,24 +1,36 @@
 {
   "id": "actor:example",
-  "person_node": "factor:example",
+  "person_node": "entity:example",
   "public_role": "public decision maker",
   "scope_note": "Public-role behavior only; private personal data is out of scope.",
   "materiality": "material",
+  "subject_class": "public_role_person",
+  "living_status": "living",
   "evidence_ids": ["evidence:example"],
+  "decision_graph": {
+    "allowed_actions": [
+      "Follow the institutionally constrained action.",
+      "Delay or delegate the decision."
+    ]
+  },
   "research_track": {
     "status": "completed",
     "execution_mode": "isolated-pass",
     "agent_ref": "main:research:actor-example",
+    "execution_id": "execution:research:actor-example",
     "started_at": "2026-07-01T00:00:00Z",
     "completed_at": "2026-07-01T00:01:00Z",
     "preferred_tool": "d-research",
     "artifact": "actors.json#actor:example/research_track",
-    "notes": "Research track gathers evidence only and must not roleplay.",
+    "notes": "Research gathers public-role evidence only and never roleplays.",
     "claims": [
       {
+        "id": "claim:actor-example-process",
         "claim": "The actor operates under a documented institutional process.",
         "evidence_ids": ["evidence:example"],
-        "confidence": 0.5
+        "confidence": 0.5,
+        "available_at": "2026-06-01T00:00:00Z",
+        "access_basis": "public_role"
       }
     ]
   },
@@ -26,25 +38,31 @@
     "status": "completed",
     "execution_mode": "isolated-pass",
     "agent_ref": "main:roleplay:actor-example",
+    "execution_id": "execution:roleplay:actor-example",
     "started_at": "2026-07-01T00:01:01Z",
     "completed_at": "2026-07-01T00:02:00Z",
     "artifact": "actors.json#actor:example/roleplay_track",
     "knowledge_cutoff": "2026-06-01T00:00:00Z",
     "dossier_evidence_ids": ["evidence:example"],
-    "notes": "Roleplay track uses the completed dossier only; it is simulation, not evidence.",
-    "isolation_note": "Template fixture uses two explicitly separated main-context passes.",
+    "packet_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+    "notes": "Offline roleplay consumes only the sealed packet and emits hypotheses, never evidence or probability.",
+    "isolation_note": "Template uses distinct research and roleplay executions.",
     "hypotheses": [
       {
+        "id": "hypothesis:follow-process",
         "action": "Follow the institutionally constrained action.",
-        "probability": 0.6,
-        "reasoning": "The dossier supports procedural behavior under the stated constraints.",
+        "reasoning": "The public-role packet identifies a binding institutional process.",
+        "constraints_applied": ["Documented institutional process"],
+        "known_unknowns": ["How the actor weighs delay against immediate action"],
         "status": "simulation",
         "evidence_ids": []
       },
       {
+        "id": "hypothesis:delay-delegate",
         "action": "Delay or delegate the decision.",
-        "probability": 0.4,
-        "reasoning": "Uncertainty could make delay preferable.",
+        "reasoning": "The available packet leaves material procedural uncertainty.",
+        "constraints_applied": ["Documented institutional process"],
+        "known_unknowns": ["Whether delegation is institutionally available"],
         "status": "simulation",
         "evidence_ids": []
       }
@@ -52,10 +70,16 @@
   },
   "adjudication": {
     "owner": "main simulator",
-    "accepted_hypotheses": ["Follow the institutionally constrained action."],
+    "method": "evidence-constrained-relative-weight",
+    "calibrated": false,
+    "results": [
+      {"hypothesis_ref": "hypothesis:follow-process", "relative_weight": 0.6},
+      {"hypothesis_ref": "hypothesis:delay-delegate", "relative_weight": 0.4}
+    ],
+    "accepted_hypotheses": ["hypothesis:follow-process", "hypothesis:delay-delegate"],
     "rejected_hypotheses": [],
     "confidence_cap": 0.65,
-    "rule": "Compare roleplay hypotheses against the dossier, preserve alternatives, and assign conservative probabilities."
+    "rule": "The adjudicator, never roleplay, assigns relative weights from evidence and preserves alternatives."
   },
   "biographical_foundation": {"summary": "Public career facts relevant to the simulation."},
   "decision_patterns": [
@@ -73,14 +97,14 @@
   "predicted_responses": [
     {
       "action": "Follow the institutionally constrained action.",
-      "probability": 0.6,
-      "reasoning": "Supported by the public-role dossier and bounded roleplay hypothesis.",
+      "relative_weight": 0.6,
+      "reasoning": "Adjudicator-owned weight based on the public-role dossier.",
       "status": "simulation"
     },
     {
       "action": "Delay or delegate the decision.",
-      "probability": 0.4,
-      "reasoning": "Preserved as a plausible alternative under uncertainty.",
+      "relative_weight": 0.4,
+      "reasoning": "Alternative retained under unresolved uncertainty.",
       "status": "simulation"
     }
   ]

@@ -5,21 +5,21 @@
 [![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
 [![Release](https://img.shields.io/github/v/release/d-init-d/aleph-skill?sort=semver)](https://github.com/d-init-d/aleph-skill/releases)
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skill-portable-6f42c1)](https://agentskills.io/)
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![Self-test](https://img.shields.io/badge/self--test-npm%20run%20self--test-brightgreen)](#verification)
 
 Vietnamese overview: [README.vi.md](README.vi.md)
 
-> Aleph Skill turns a “what if?” into an auditable scenario model: sources become evidence, evidence becomes nodes, nodes become causal edges, and causal edges unfold into probabilistic timelines with explicit uncertainty.
+> Aleph Skill turns a “what if?” into an auditable scenario model: evidence becomes typed causal structure, executable traces, and alternative timelines with explicit uncertainty and calibrated likelihood only when justified.
 
-It is built for Codex, OpenCode, Claude Code, and generic Agent Skills runtimes.
+It has one host-neutral core for Codex, OpenCode, Claude Code, Agent Skills, Gemini CLI, Copilot CLI, Cursor, VS Code, Windsurf, Cline, Roo Code, Continue, JetBrains, Grok Build, Aider, and generic CLIs.
 
 ## At a glance
 
 | Area | What Aleph Skill provides |
 |---|---|
 | Primary use | Counterfactual history, present-day intervention analysis, hybrid past-to-future timelines, and butterfly-effect scenario trees. |
-| Simulation model | Evidence-backed nodes, mechanism-tested causal edges, propagation traces, branch probabilities, and uncertainty labels. |
+| Simulation model | Evidence-backed nodes, mechanism-tested edges, executable traces, relative branch weights, calibrated probabilities, and unresolved mass. |
 | Human decisions | Public-role actor dossiers separated from simulated decision hypotheses, so roleplay never becomes evidence. |
 | Research depth | Adaptive expansion based on temporal span, domain breadth, geography, actor density, causal depth, evidence uncertainty, and stakes. |
 | Outputs | Professional scenario reports, evidence maps, causal graphs, branch ledgers, propagation traces, validation reports, and audit metadata. |
@@ -42,9 +42,9 @@ Do not use it to claim one future is certain, profile private people, deanonymiz
 
 ## Product scope
 
-This repository is a portable Agent Skill package, not a hosted forecasting service, Python package, API server, crawler, or benchmark leaderboard.
+This repository is a portable Agent Skill package, not a hosted forecasting service, public Python API, API server, crawler, or benchmark leaderboard. Its installable Python module is an internal, versioned execution helper rather than a stable third-party library surface.
 
-An agent reads `SKILL.md` as the entry point, then loads only the reference files and templates needed for the scenario. The helper scripts are deliberately small and local: they initialize workspaces, validate artifacts, score butterfly amplification, render reports, and check package integrity. They support the workflow; they do not replace the agent’s reasoning.
+An agent reads `SKILL.md` as the entry point, then loads only the reference files and templates needed for the scenario. The local helpers initialize and migrate workspaces, import signed research, compile/run/replay models, execute sensitivity and hindcast checks, validate domain packs and artifacts, render reports, finalize receipts, and verify the distributable package. They support the workflow; they do not replace the agent’s reasoning.
 
 For the strongest evidence layer, pair Aleph Skill with [D Research](https://github.com/d-init-d/d-research-skill), a companion skill for browser-first research and auditable evidence workflows. Aleph remains the causal simulation layer; D Research is recommended rather than bundled, so the skill stays portable.
 
@@ -56,8 +56,8 @@ For the strongest evidence layer, pair Aleph Skill with [D Research](https://git
 | 1. Research | Build the baseline, source map, evidence map, contradiction notes, and uncertainty register. | `evidence-map.csv` |
 | 2. Construct | Create entity, event, factor, context, indicator, claim, source, and actor nodes. | `timeline-node.json`, `actor-dossier.json` |
 | 3. Link | Admit only causal edges with a concrete mechanism, lag, context modifier, evidence, strength, and confidence. | `causal-edge.json` |
-| 4. Propagate | Trace effects through thresholds, feedback loops, amplification paths, and decay. | `propagation-trace.jsonl` |
-| 5. Branch | Produce multiple plausible timelines with probabilities that sum to 1.0. | `branch-ledger.json` |
+| 4. Propagate | Trace lagged/contextual effects, bounded feedback, saturation, thresholds, and amplification paths. The 2.0 level engine does not imply stock/flow integration or decay. | `propagation-trace.jsonl` |
+| 5. Branch | Produce distinct timelines using relative weights unless calibration gates authorize probability. | `branch-ledger.json` |
 | 6. Human decisions | Keep sourced public-role research separate from simulated decision hypotheses. | `human-track-ledger.jsonl` |
 | 7. Report and audit | Render a professional scenario report and validate readiness before delivery. | `validation-report.json`, final Markdown report |
 
@@ -70,7 +70,7 @@ For the strongest evidence layer, pair Aleph Skill with [D Research](https://git
 5. **Mechanism-first causality** — reject edges that lack a plausible transmission channel, lag, context, and evidence.
 6. **Human-node discipline** — use public-role information for actor dossiers and label all roleplay as simulation.
 7. **Future monitoring** — attach leading indicators and disconfirming conditions to prospective branches.
-8. **Professional reporting** — produce executive summaries, methodology notes, evidence quality, causal architecture, branch probabilities, sensitivity analysis, limitations, and audit appendices.
+8. **Professional reporting** — report likelihood mode, evidence quality, causal architecture, sensitivity, unresolved mass, limitations, and audit receipts.
 9. **Portable validation** — enforce referential integrity across evidence, nodes, edges, actors, branches, traces, and reports.
 
 ## Repository layout
@@ -110,6 +110,21 @@ python scripts\install_adapters.py --target opencode --scope user --dry-run
 python scripts\install_adapters.py --target agents --scope user --dry-run
 ```
 
+Gemini CLI uses its native Agent Skills directories:
+
+```powershell
+python scripts\install_adapters.py --target gemini-cli --scope user --copy
+```
+
+Thin IDE and external-CLI adapters are project-scoped. Their installer copies
+the selected rule/profile and the same verified core to
+`.aleph/core/aleph-skill`, then writes one combined receipt:
+
+```powershell
+python scripts\install_adapters.py --target cursor --scope project --project-dir <project> --copy --receipt <project>\.aleph\install-receipt.json
+python scripts\install_adapters.py --target grok-build --scope project --project-dir <project> --copy --receipt <project>\.aleph\install-receipt.json
+```
+
 Supported skill locations:
 
 | Runtime | User / global path | Project path |
@@ -117,6 +132,8 @@ Supported skill locations:
 | Codex | `~/.codex/skills/aleph-skill` | runtime-dependent |
 | Claude Code | `~/.claude/skills/aleph-skill` | `.claude/skills/aleph-skill` |
 | OpenCode | `~/.config/opencode/skills/aleph-skill` | `.opencode/skills/aleph-skill` |
+| Gemini CLI | `~/.gemini/skills/aleph-skill` | `.gemini/skills/aleph-skill` |
+| GitHub Copilot CLI | `~/.copilot/skills/aleph-skill` | `.copilot/skills/aleph-skill` |
 | Generic Agent Skills | `~/.agents/skills/aleph-skill` | `.agents/skills/aleph-skill` |
 
 ## Verification
@@ -145,7 +162,7 @@ python scripts\evaluate_simulation_quality.py --workspace <run-dir> --threshold 
 Use $aleph-skill to simulate an oil price +40% shock starting June 2026.
 Focus on inflation, central-bank reaction, growth, shipping, and emerging markets over 24 months.
 Use D Research where available for the evidence layer, keep sourced actor dossiers separate from simulated decisions,
-and produce at least three branches with probabilities, indicators, contradictions, and uncertainty warnings.
+and produce at least three branches with relative weights, indicators, contradictions, and uncertainty warnings.
 ```
 
 ## Safety boundary

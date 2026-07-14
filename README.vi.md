@@ -1,23 +1,23 @@
 # Aleph Skill
 
-**Agent Skill mô phỏng dòng thời gian dựa trên chứng cứ: từ một điểm thay đổi, dựng lại các nhánh quá khứ phản thực, hiện tại thay thế và tương lai xác suất — với cơ chế nhân quả, nguồn chứng cứ và độ bất định luôn được ghi rõ.**
+**Bộ mô phỏng dòng thời gian dựa trên chứng cứ cho mọi AI CLI/IDE: từ một điểm thay đổi, dựng quá khứ phản thực, hiện tại thay thế và các tương lai có định lượng bất định.**
 
 [![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
 [![Release](https://img.shields.io/github/v/release/d-init-d/aleph-skill?sort=semver)](https://github.com/d-init-d/aleph-skill/releases)
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skill-portable-6f42c1)](https://agentskills.io/)
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![Self-test](https://img.shields.io/badge/self--test-npm%20run%20self--test-brightgreen)](README.md#verification)
 
-Aleph Skill biến câu hỏi “nếu như?” thành một mô hình kịch bản có thể kiểm toán: nguồn tạo thành chứng cứ, chứng cứ tạo thành node, node nối thành cạnh nhân quả, rồi các cạnh đó lan truyền thành nhiều timeline xác suất.
+Aleph Skill biến câu hỏi “nếu như?” thành mô hình có thể kiểm toán: chứng cứ tạo thành cấu trúc nhân quả có kiểu, trace có thể replay và nhiều timeline với chế độ likelihood được khai báo rõ.
 
-Skill được thiết kế cho Codex, OpenCode, Claude Code và các runtime Agent Skills tương thích.
+Core dùng chung hoạt động với Codex, OpenCode, Claude Code, Agent Skills, Gemini/Copilot CLI, Cursor, VS Code, Windsurf, Cline, Roo Code, Continue, JetBrains, Grok Build, Aider và CLI tùy biến.
 
 ## Tổng quan
 
 | Hạng mục | Aleph Skill cung cấp |
 |---|---|
 | Mục đích chính | Lịch sử phản thực, can thiệp ở hiện tại, timeline lai quá khứ–hiện tại–tương lai, và mô phỏng hiệu ứng cánh bướm. |
-| Mô hình mô phỏng | Node có chứng cứ, cạnh nhân quả có cơ chế, propagation trace, xác suất nhánh và nhãn bất định. |
+| Mô hình mô phỏng | Node có chứng cứ, cạnh có cơ chế, trace replay được, relative weight, calibrated probability và unresolved mass. |
 | Yếu tố con người | Hồ sơ public-role được tách khỏi giả thuyết nhập vai; roleplay không bao giờ được xem là chứng cứ. |
 | Độ sâu nghiên cứu | Tự mở rộng theo quy mô sự kiện, địa lý, số tác nhân, độ sâu nhân quả, mức bất định và hệ trọng. |
 | Đầu ra | Báo cáo chuyên nghiệp, evidence map, causal graph, branch ledger, propagation trace, validation report và audit metadata. |
@@ -40,9 +40,9 @@ Không dùng skill để tuyên bố một tương lai là chắc chắn, profil
 
 ## Phạm vi sản phẩm
 
-Đây là một Agent Skill portable, không phải dịch vụ dự báo, Python package, API server, crawler hay bảng xếp hạng benchmark.
+Đây là một Agent Skill portable, không phải dịch vụ dự báo, public Python API, API server, crawler hay bảng xếp hạng benchmark. Module Python cài kèm là helper thực thi nội bộ có version, không phải bề mặt thư viện ổn định cho phần mềm bên thứ ba.
 
-Agent đọc `SKILL.md` làm điểm vào, sau đó chỉ tải các reference và template cần cho kịch bản. Các script đi kèm có chủ đích nhỏ, cục bộ và dễ kiểm tra: khởi tạo workspace, validate artifact, chấm butterfly amplification, render báo cáo và kiểm tra package.
+Agent đọc `SKILL.md` làm điểm vào, sau đó chỉ tải các reference và template cần cho kịch bản. Helper cục bộ đảm nhiệm khởi tạo/migrate workspace, import research đã ký, compile/run/replay mô hình, sensitivity, hindcast, validate domain pack/artifact, render báo cáo, finalize receipt và kiểm tra package phân phối.
 
 Để có lớp chứng cứ mạnh nhất, nên dùng cùng [D Research](https://github.com/d-init-d/d-research-skill), companion skill cho nghiên cứu bằng trình duyệt và evidence workflow có thể kiểm toán. Aleph Skill giữ vai trò mô phỏng nhân quả; D Research được khuyến nghị chứ không bundle kèm, để skill vẫn portable.
 
@@ -54,8 +54,8 @@ Agent đọc `SKILL.md` làm điểm vào, sau đó chỉ tải các reference v
 | 1. Research | Dựng baseline, source map, evidence map, contradiction notes và uncertainty register. | `evidence-map.csv` |
 | 2. Construct | Tạo entity, event, factor, context, indicator, claim, source và actor nodes. | `timeline-node.json`, `actor-dossier.json` |
 | 3. Link | Chỉ nhận cạnh nhân quả có cơ chế, độ trễ, bối cảnh, chứng cứ, strength và confidence. | `causal-edge.json` |
-| 4. Propagate | Lan truyền tác động qua threshold, feedback loop, amplification path và decay. | `propagation-trace.jsonl` |
-| 5. Branch | Tạo nhiều timeline khả dĩ với tổng xác suất bằng 1.0. | `branch-ledger.json` |
+| 4. Propagate | Lan truyền tác động có lag/bối cảnh qua feedback có chặn, saturation, threshold và amplification path. Engine level 2.0 không mặc định stock/flow hay decay. | `propagation-trace.jsonl` |
+| 5. Branch | Tạo timeline khác biệt bằng relative weight; chỉ dùng xác suất khi calibration gate cho phép. | `branch-ledger.json` |
 | 6. Human decisions | Tách nghiên cứu public-role khỏi giả thuyết quyết định mô phỏng. | `human-track-ledger.jsonl` |
 | 7. Report & audit | Render báo cáo chuyên nghiệp và validate trước khi bàn giao. | `validation-report.json`, final Markdown report |
 
@@ -68,7 +68,7 @@ Agent đọc `SKILL.md` làm điểm vào, sau đó chỉ tải các reference v
 5. **Mechanism-first causality** — loại bỏ cạnh nhân quả thiếu kênh truyền, lag, bối cảnh hoặc chứng cứ.
 6. **Human-node discipline** — actor dossier dựa trên public-role; giả thuyết nhập vai luôn được gắn nhãn simulation.
 7. **Future monitoring** — mỗi nhánh tương lai có leading indicators và điều kiện bác bỏ.
-8. **Professional reporting** — báo cáo có executive summary, methodology, evidence quality, causal architecture, branch probabilities, sensitivity, limitations và audit appendix.
+8. **Professional reporting** — báo cáo likelihood mode, evidence quality, causal architecture, sensitivity, unresolved mass, giới hạn và receipt kiểm toán.
 9. **Portable validation** — kiểm tra liên kết giữa evidence, node, edge, actor, branch, trace và report.
 
 ## Cấu trúc repo
@@ -106,6 +106,21 @@ python scripts\install_adapters.py --target opencode --scope user --dry-run
 python scripts\install_adapters.py --target agents --scope user --dry-run
 ```
 
+Gemini CLI dùng trực tiếp thư mục Agent Skills chuẩn:
+
+```powershell
+python scripts\install_adapters.py --target gemini-cli --scope user --copy
+```
+
+Adapter mỏng cho IDE và CLI ngoài chỉ cài ở scope project. Installer sẽ chép
+rule/profile cùng core đã xác minh vào `.aleph/core/aleph-skill`, sau đó ghi
+một receipt chung:
+
+```powershell
+python scripts\install_adapters.py --target cursor --scope project --project-dir <project> --copy --receipt <project>\.aleph\install-receipt.json
+python scripts\install_adapters.py --target grok-build --scope project --project-dir <project> --copy --receipt <project>\.aleph\install-receipt.json
+```
+
 Đường dẫn skill phổ biến:
 
 | Runtime | User / global path | Project path |
@@ -113,6 +128,8 @@ python scripts\install_adapters.py --target agents --scope user --dry-run
 | Codex | `~/.codex/skills/aleph-skill` | tùy runtime |
 | Claude Code | `~/.claude/skills/aleph-skill` | `.claude/skills/aleph-skill` |
 | OpenCode | `~/.config/opencode/skills/aleph-skill` | `.opencode/skills/aleph-skill` |
+| Gemini CLI | `~/.gemini/skills/aleph-skill` | `.gemini/skills/aleph-skill` |
+| GitHub Copilot CLI | `~/.copilot/skills/aleph-skill` | `.copilot/skills/aleph-skill` |
 | Generic Agent Skills | `~/.agents/skills/aleph-skill` | `.agents/skills/aleph-skill` |
 
 ## Kiểm tra
@@ -139,7 +156,7 @@ python scripts\evaluate_simulation_quality.py --workspace <run-dir> --threshold 
 Use $aleph-skill to simulate an oil price +40% shock starting June 2026.
 Focus on inflation, central-bank reaction, growth, shipping, and emerging markets over 24 months.
 Use D Research where available for the evidence layer, keep sourced actor dossiers separate from simulated decisions,
-and produce at least three branches with probabilities, indicators, contradictions, and uncertainty warnings.
+and produce at least three branches with relative weights, indicators, contradictions, and uncertainty warnings.
 ```
 
 ## Giới hạn an toàn

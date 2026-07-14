@@ -1,0 +1,93 @@
+{
+  "schema_version": "2.0.0",
+  "model_version": "aleph-engine-2.0",
+  "model_hash": "f93f7681d96b0a5e66cc5e2ee0b1014613cb1665e9c5582f2544c1bebf092f4f",
+  "variables": {
+    "context:open-economy": {
+      "id": "context:open-economy",
+      "role": "exogenous",
+      "datatype": "continuous",
+      "unit": "",
+      "scale": "level",
+      "baseline": 1.0,
+      "bounds": [
+        null,
+        null
+      ]
+    },
+    "entity:central-bank": {
+      "id": "entity:central-bank",
+      "role": "endogenous",
+      "datatype": "continuous",
+      "unit": "",
+      "scale": "level",
+      "baseline": 0.0,
+      "bounds": [
+        null,
+        null
+      ]
+    },
+    "factor:output-gap": {
+      "id": "factor:output-gap",
+      "role": "endogenous",
+      "datatype": "continuous",
+      "unit": "",
+      "scale": "level",
+      "baseline": 0.0,
+      "bounds": [
+        null,
+        null
+      ]
+    },
+    "factor:policy-rate": {
+      "id": "factor:policy-rate",
+      "role": "endogenous",
+      "datatype": "continuous",
+      "unit": "",
+      "scale": "level",
+      "baseline": 4.0,
+      "bounds": [
+        null,
+        null
+      ]
+    }
+  },
+  "edges": [
+    {
+      "id": "causal:rate-to-gap",
+      "source": "factor:policy-rate",
+      "target": "factor:output-gap",
+      "sign": -1,
+      "strength": 0.4,
+      "lag_ticks": 180,
+      "lag_unit": "days",
+      "transform": "linear",
+      "existence_prob": 1.0,
+      "effect_distribution": null,
+      "lag_distribution": {
+        "type": "fixed",
+        "fixed": 180,
+        "min": 90,
+        "max": 270
+      },
+      "context_multiplier": 1.1,
+      "saturation": null
+    }
+  ],
+  "interventions": [
+    {
+      "id": "intervention:change-point",
+      "target": "factor:policy-rate",
+      "op": "add",
+      "value": 0.25,
+      "start_tick": 0,
+      "end_tick": null
+    }
+  ],
+  "source_hashes": {
+    "nodes.json": "581be03cb6d2b1b543e4ce5cef0e097f30277d718fe15f9ec8689b23a733ea1a",
+    "edges.json": "204b0121edfa9244bee6a158f060b175d7860248cd77e37deac784a7c2bc78ba",
+    "simulation-manifest.json": "fa6ac431190facb39141ab7a6863330cd8596262004b9d82721487c516163a29"
+  },
+  "source_set_hash": "5fde36b5e2e664559556a5d383c57d6cc52fd98d6b1dfb4343bdf4e633ab129c"
+}

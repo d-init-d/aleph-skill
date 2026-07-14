@@ -1,0 +1,157 @@
+[
+  {
+    "id": "entity:central-bank",
+    "type": "entity",
+    "name": "Central Bank",
+    "description": "Public institution setting policy rates.",
+    "time": "2024-01-01",
+    "state_before": {
+      "summary": "Neutral policy stance."
+    },
+    "trigger": {
+      "kind": "policy",
+      "description": "Rate decision process."
+    },
+    "mechanism": "The central bank sets the policy rate through a committee process that transmits to market yields via announced target corridors and open market operations.",
+    "state_after": {
+      "summary": "Active decision maker.",
+      "value": 0.0
+    },
+    "lag": "P0D",
+    "evidence_ids": [
+      "evidence:policy-statute"
+    ],
+    "status": "fact",
+    "timeline": "observed_baseline",
+    "probability": 1.0,
+    "confidence": 0.9,
+    "alternative_explanations": [
+      "Fiscal dominance could constrain autonomy."
+    ],
+    "sensitivity": {
+      "level": "medium",
+      "drivers": [
+        "mandate clarity"
+      ]
+    },
+    "role": "endogenous",
+    "baseline": 0.0
+  },
+  {
+    "id": "factor:policy-rate",
+    "type": "factor",
+    "name": "Policy Rate",
+    "description": "Short-term policy interest rate.",
+    "time": "2026-01-01",
+    "state_before": {
+      "summary": "Rate at baseline.",
+      "value": 4.0
+    },
+    "trigger": {
+      "kind": "intervention",
+      "description": "25bp hike."
+    },
+    "mechanism": "A policy rate increase raises the opportunity cost of funds and tightens financial conditions through money-market arbitrage and bank funding costs within one decision cycle.",
+    "state_after": {
+      "summary": "Rate higher by 25bp.",
+      "value": 4.25
+    },
+    "lag": "P0D",
+    "evidence_ids": [
+      "evidence:policy-statute"
+    ],
+    "status": "simulation",
+    "timeline": "simulated_branch",
+    "probability": 1.0,
+    "confidence": 0.7,
+    "assumption_ref": "assumption:change-point",
+    "alternative_explanations": [
+      "Market pricing may front-run the hike."
+    ],
+    "sensitivity": {
+      "level": "high",
+      "drivers": [
+        "forward guidance"
+      ]
+    },
+    "role": "endogenous",
+    "baseline": 4.0
+  },
+  {
+    "id": "factor:output-gap",
+    "type": "factor",
+    "name": "Output Gap",
+    "description": "Real activity relative to potential.",
+    "time": "2026-07-01",
+    "state_before": {
+      "summary": "Gap near zero.",
+      "value": 0.0
+    },
+    "trigger": {
+      "kind": "factor_change",
+      "description": "Tighter financial conditions."
+    },
+    "mechanism": "Higher policy rates reduce interest-sensitive demand, lowering the output gap through investment and durable consumption channels with multi-quarter lag.",
+    "state_after": {
+      "summary": "Mildly negative gap.",
+      "value": -0.2
+    },
+    "lag": "P180D",
+    "evidence_ids": [
+      "evidence:macro-series"
+    ],
+    "status": "simulation",
+    "timeline": "simulated_branch",
+    "probability": 0.7,
+    "confidence": 0.55,
+    "assumption_ref": "assumption:change-point",
+    "alternative_explanations": [
+      "External demand could offset tightening."
+    ],
+    "sensitivity": {
+      "level": "high",
+      "drivers": [
+        "export cycle"
+      ]
+    },
+    "role": "endogenous",
+    "baseline": 0.0
+  },
+  {
+    "id": "context:open-economy",
+    "type": "context",
+    "name": "Open Economy",
+    "description": "Trade and capital openness regime.",
+    "time": "2024-01-01",
+    "state_before": {
+      "summary": "Open capital account."
+    },
+    "trigger": {
+      "kind": "context",
+      "description": "Structural openness."
+    },
+    "mechanism": "Openness modulates monetary transmission via exchange-rate and capital-flow channels that alter domestic financial conditions when policy rates move.",
+    "state_after": {
+      "summary": "Open regime active."
+    },
+    "lag": "P0D",
+    "evidence_ids": [
+      "evidence:macro-series"
+    ],
+    "status": "fact",
+    "timeline": "shared_baseline",
+    "probability": 1.0,
+    "confidence": 0.85,
+    "alternative_explanations": [
+      "Capital controls could close the channel."
+    ],
+    "sensitivity": {
+      "level": "low",
+      "drivers": [
+        "FX regime"
+      ]
+    },
+    "role": "exogenous",
+    "baseline": 1.0
+  }
+]

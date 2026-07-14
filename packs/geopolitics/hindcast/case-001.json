@@ -1,0 +1,62 @@
+{
+  "schema_version": "2.0.0",
+  "case_id": "hindcast:geopolitics:synthetic-001",
+  "cutoff": "2020-01-01",
+  "evidence_snapshot_hash": "6c4b81ed988f7ee8aa2754f1958d20fc19ba4a9b5861bbeecaba81ac35eb2226",
+  "model": {
+    "nodes": [
+      {
+        "id": "geopolitics:source",
+        "role": "exogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 1,
+        "bounds": [
+          0,
+          10
+        ]
+      },
+      {
+        "id": "geopolitics:outcome",
+        "role": "endogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 0,
+        "bounds": [
+          -10,
+          10
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge:geopolitics:hindcast",
+        "from": "geopolitics:source",
+        "to": "geopolitics:outcome",
+        "sign": 1,
+        "base_strength": 0.5,
+        "lag_ticks": 0,
+        "transform": "linear"
+      }
+    ],
+    "interventions": []
+  },
+  "config": {
+    "seed": "geopolitics-hindcast",
+    "mode": "deterministic"
+  },
+  "ticks": 1,
+  "observations": {
+    "geopolitics:outcome": 0.45
+  },
+  "baselines": {
+    "geopolitics:outcome": 0
+  },
+  "evidence": [
+    {
+      "id": "evidence:geopolitics:synthetic-precutoff",
+      "available_at": "2019-01-01"
+    }
+  ],
+  "provenance": "synthetic regression case; not empirical calibration evidence"
+}

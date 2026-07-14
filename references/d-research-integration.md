@@ -1,96 +1,46 @@
-# D Research integration
+# D Research 3.x integration
 
-D Research is the recommended companion skill for evidence collection. Aleph Skill can run without it, but simulations produced without D Research must mark `research_quality: limited` and use more conservative confidence.
+Aleph uses D Research for lawful public evidence collection. Integration is optional, but verified research requires exact D Research identity and a compatible major.
 
-## Discovery order
+## Discovery
 
-Check for D Research in:
+Check in this order:
 
-- explicit `--d-research <path>`,
-- `D_RESEARCH_SKILL` environment variable,
-- `~/.codex/skills/d-research`,
-- `~/.agents/skills/d-research`,
-- `~/.claude/skills/d-research`,
-- `~/.config/opencode/skills/d-research`,
-- `D:\Downloads\aleph-qweb 3.7\d-research-skill`,
-- installed skill metadata available to the current agent.
+1. explicit `--d-research <path>`;
+2. `D_RESEARCH_SKILL`;
+3. a host capability file;
+4. conventional user skill locations for Codex, Agent Skills, Claude Code, OpenCode, and Grok.
 
-If absent, ask the user once per task whether they want to install or enable `d-research-skill`. Do not install automatically. If the user declines, continue in limited mode and do not repeat the prompt during the same task.
+Accept only a directory whose `SKILL.md` frontmatter name is exactly `d-research`, whose package identity is recognized, whose major is `3`, and which contains `scripts/evidence_ledger.py`. An explicit incompatible candidate is a hard preflight failure. Do not silently select another installation or hardcode a developer path.
 
-## What to delegate
+## Ledger contract
 
-Use D Research for:
+Accept the exact ordered D Research CSV headers:
 
-- baseline world-state research,
-- source discovery,
-- public-role person aggregation,
-- evidence ledgers,
-- contradiction passes,
-- source quality scoring,
-- blocked-source reports,
-- historical, technical, market, and policy research.
+- legacy 14 columns;
+- social 19 columns;
+- provenance 22 columns;
+- record-type 23 columns.
 
-## Evidence mapping
+Verify the sidecar format `d-research-skill/hmac-sha256/v1 <digest>` using `D_RESEARCH_LEDGER_KEY`. The digest covers D Research canonical CSV bytes: ordered headers, trimmed values, RFC 4180 quoting, UTF-8, and LF line endings. If a sidecar exists, a missing key, malformed signature, or mismatch is a hard failure.
 
-Map D Research ledger rows into simulation artifacts:
+Preserve the raw ledger bytes before transformation, the verified sidecar, raw SHA-256, canonical SHA-256, every source field, and a hash of every raw row. Import only `record_type=claim` as evidence; keep `process` and `blocker` rows in the audit stream. The importer refuses any source, evidence, raw-preservation, receipt, or sidecar paths that alias one another.
 
-| D Research field | Simulation use |
+Every successful import emits a separate import-receipt JSON artifact that binds the discovered D Research package identity, mapping contract, raw and canonical ledger digests, evidence-map digest, preserved-ledger reference, sidecar reference, and HMAC-verification result. Store that artifact under `artifact_paths.research_import_receipt` in the simulation manifest.
+
+`verified` assurance does not trust `d_research.status` or arbitrary ledger files. During quality evaluation Aleph reloads the import receipt, verifies its own hash and all referenced digests, rediscovers the compatible D Research package, and repeats the ledger import contract with `D_RESEARCH_LEDGER_KEY`. A missing key, missing receipt, self-asserted status, changed artifact, or unverifiable sidecar can never support `verified` output.
+
+| D Research | Aleph evidence map |
 |---|---|
-| claim | node description, edge mechanism, or evidence note |
-| source_url | source node URL |
-| source_type | source reliability |
-| extracted_evidence | short quote, paraphrase, or numeric value |
-| access_method | provenance method |
-| confidence | node/claim confidence input |
-| contradiction_status | warning or contested claim |
+| `claim_id` | stable `evidence_id` |
+| `claim` | atomic claim |
+| `source_url` | source |
+| `source_type` | source type and conservative tier |
+| `date_published` | date |
+| `date_accessed` | retrieved_at |
+| `access_method` | access method and retrieval status |
+| `evidence`, `quote_or_anchor` | quote_or_value |
+| `contradiction` | contradiction_status |
+| `confidence` | preserved label plus explicit evidence-confidence mapping; never event probability |
 
-## Adaptive source-quality gate
-
-Every evidence row must declare:
-
-- `source_tier`: `primary`, `authoritative-secondary`, `secondary`, `tertiary`, or `user-provided`;
-- `retrieval_status`: `opened`, `downloaded`, `api`, `local-file`, `user-provided`, `search-snippet`, or `blocked`;
-- a concrete excerpt/value, retrieval time, confidence, and contradiction status.
-
-The number of required directly accessed primary/authoritative sources and the direct-access ratio rise with adaptive complexity. A blocked source cannot support a claim. A search snippet is only provisional and its confidence cannot exceed `0.45`; tertiary evidence cannot exceed `0.60`. `best-available` output cannot leave contradiction status unchecked.
-
-Source count is not source quality. Continue research while new sources change critical claims, mechanisms, actors, thresholds, or branch probabilities. Stop at evidence saturation, not at a predefined count, and do not pad the ledger with weak duplicates after saturation.
-
-## Prompt pattern
-
-Use a narrow research prompt:
-
-```text
-Use D Research to build an evidence ledger for [topic] at [timeframe].
-Focus on facts needed for a causal timeline simulation:
-1. baseline state,
-2. actors and institutions,
-3. measurable factors,
-4. causal mechanisms,
-5. contradictions and source quality.
-Return claims with source URLs, dates, short quotes or extracted values, access method, and confidence.
-Do not collect private personal data or bypass access controls.
-```
-
-## Person/public-role prompt
-
-```text
-Use D Research person aggregation for [person] in their public role as [role].
-Collect only public-role information relevant to a causal simulation:
-biography, role constraints, public decisions, stated beliefs, public relationships, crisis behavior, and uncertainty.
-Exclude private contact details, family/private life, private accounts, health speculation, whereabouts, and doxxing material.
-```
-
-For material human decision nodes, D Research feeds only the Human Research track. The roleplay track receives the finished dossier and simulated-time situation, not raw browsing authority.
-
-When a subagent tool exists, the Human Research subagent must invoke or follow D Research itself and return structured claims. The main simulator then freezes the dossier before dispatching a different Roleplay subagent.
-
-## Fallback mode
-
-When D Research is unavailable:
-
-- use primary/public sources available to the current agent,
-- keep evidence ledgers manually in `templates/evidence-map.csv`,
-- reduce confidence on edges and actor predictions,
-- flag missing contradiction checks,
-- report `research_quality: limited`.
+Blocked/process rows never support causal claims. Search snippets remain provisional. D Research only feeds the Human Research track; the Roleplay track has no browser or ledger access.

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aleph.local/schemas/2.0/timeline-node.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["id", "type", "name", "description", "time", "state_before", "trigger", "mechanism", "state_after", "lag", "evidence_ids", "status", "timeline", "confidence"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^(entity|event|factor|context|indicator|claim|source):"},
+    "type": {"enum": ["entity", "event", "factor", "context", "indicator", "claim", "source"]},
+    "name": {"type": "string"}, "description": {"type": "string"}, "time": {"type": "string"},
+    "state_before": {"$ref": "#/$defs/state"}, "trigger": {"$ref": "#/$defs/trigger"},
+    "mechanism": {"type": "string"}, "state_after": {"$ref": "#/$defs/state"}, "lag": {"type": "string"},
+    "evidence_ids": {"type": "array", "items": {"type": "string", "pattern": "^evidence:"}},
+    "sources": {"type": "array", "items": {"type": "string"}},
+    "status": {"enum": ["fact", "inference", "simulation", "counterfactual", "assumption"]},
+    "timeline": {"enum": ["shared_baseline", "observed_baseline", "simulated_branch"]},
+    "probability": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1}, "assumption_ref": {"type": "string"},
+    "alternative_explanations": {"type": "array", "items": {"type": "string"}},
+    "sensitivity": {"type": "object", "additionalProperties": false, "required": ["level", "drivers"], "properties": {"level": {"enum": ["low", "medium", "high"]}, "drivers": {"type": "array", "items": {"type": "string"}}}}, "role": {"type": "string"}, "datatype": {"type": "string"},
+    "unit": {"type": "string"}, "scale": {"type": "string"}, "baseline": {"type": "number"}, "bounds": {"type": "array"}
+  },
+  "$defs": {
+    "state": {"type": "object", "additionalProperties": false, "required": ["summary"], "properties": {"summary": {"type": "string"}, "value": {"type": "number"}, "unit": {"type": "string"}, "category": {"type": "string"}, "lower": {"type": "number"}, "upper": {"type": "number"}}},
+    "trigger": {"type": "object", "additionalProperties": false, "required": ["kind", "description"], "properties": {"kind": {"type": "string"}, "description": {"type": "string"}, "source": {"type": "string"}, "magnitude": {"type": "number"}}}
+  }
+}

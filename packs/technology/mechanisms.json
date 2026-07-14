@@ -1,0 +1,10 @@
+{
+  "templates": [
+    {
+      "id": "mech:technology:pass_through",
+      "relation": "increases",
+      "sign": 1,
+      "description": "Core technology transmission mechanism template for validated packs."
+    }
+  ]
+}

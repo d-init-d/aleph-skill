@@ -1,0 +1,14 @@
+{
+  "policy_id": "cal:climate:v1",
+  "precommitted": true,
+  "commitment_version": "aleph-hindcast-commitment-v2",
+  "case_commitments": {
+    "hindcast:climate:synthetic-001": "ebc58287d91ec3f3c2fa78ba8365dbe7fe178accda61eace908c61e00cd69627"
+  },
+  "min_oos_cases": 30,
+  "metrics": [
+    "mae",
+    "rmse"
+  ],
+  "maturity_gate": "validated"
+}

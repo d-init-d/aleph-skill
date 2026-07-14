@@ -1,0 +1,1 @@
+{"step": 1, "time": "2026-07-01", "edge_id": "causal:rate-to-gap", "from": "factor:policy-rate", "to": "factor:output-gap", "input_effect": 1.0, "output_effect": -0.44, "noise": 0.0, "amplification": 1.0, "mechanism": "rate to gap", "evidence_ids": ["evidence:macro-series"], "formula_version": "2.0.0"}

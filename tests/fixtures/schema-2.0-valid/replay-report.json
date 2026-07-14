@@ -1,0 +1,23 @@
+{
+  "schema_version": "2.0.0",
+  "formula_version": "2.0.0",
+  "recorded_contract_hash": "7aa05115604df5a5c1ee0394a1a8eec34577a52e06f9fc2b70dd87394cc01097",
+  "contract_hash_ok": true,
+  "recorded_model_hash": "f93f7681d96b0a5e66cc5e2ee0b1014613cb1665e9c5582f2544c1bebf092f4f",
+  "current_model_hash": "f93f7681d96b0a5e66cc5e2ee0b1014613cb1665e9c5582f2544c1bebf092f4f",
+  "model_hash_ok": true,
+  "config_hash_ok": true,
+  "recorded_result_hash": "1031c2b88163c4125473a78baa4e5480d2fcca425796cc6b69a358903468150c",
+  "replay_result_hash": "1031c2b88163c4125473a78baa4e5480d2fcca425796cc6b69a358903468150c",
+  "result_hash_ok": true,
+  "saved_result_ok": true,
+  "trace_rows": 1,
+  "trace_contract_ok": true,
+  "trace_execution_binding_ok": true,
+  "recorded_trace_hash": "836654e44cc0df37422fa11a79e3000a6b0e01c70cb714cf3468de07fdfcd672",
+  "current_trace_hash": "836654e44cc0df37422fa11a79e3000a6b0e01c70cb714cf3468de07fdfcd672",
+  "trace_ok": true,
+  "issues": [],
+  "match": true,
+  "report_hash": "d02717ab01b5567c53fb535c5207b7eed86a7e4023ed876997f1f41ee0aae436"
+}

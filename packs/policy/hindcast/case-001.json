@@ -1,0 +1,62 @@
+{
+  "schema_version": "2.0.0",
+  "case_id": "hindcast:policy:synthetic-001",
+  "cutoff": "2020-01-01",
+  "evidence_snapshot_hash": "b654b49fb7dfbfa713ac8a5470dd5549ff9253438c04d2bc67b011cd4e5fb268",
+  "model": {
+    "nodes": [
+      {
+        "id": "policy:source",
+        "role": "exogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 1,
+        "bounds": [
+          0,
+          10
+        ]
+      },
+      {
+        "id": "policy:outcome",
+        "role": "endogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 0,
+        "bounds": [
+          -10,
+          10
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge:policy:hindcast",
+        "from": "policy:source",
+        "to": "policy:outcome",
+        "sign": 1,
+        "base_strength": 0.5,
+        "lag_ticks": 0,
+        "transform": "linear"
+      }
+    ],
+    "interventions": []
+  },
+  "config": {
+    "seed": "policy-hindcast",
+    "mode": "deterministic"
+  },
+  "ticks": 1,
+  "observations": {
+    "policy:outcome": 0.45
+  },
+  "baselines": {
+    "policy:outcome": 0
+  },
+  "evidence": [
+    {
+      "id": "evidence:policy:synthetic-precutoff",
+      "available_at": "2019-01-01"
+    }
+  ],
+  "provenance": "synthetic regression case; not empirical calibration evidence"
+}

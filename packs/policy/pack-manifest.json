@@ -1,0 +1,18 @@
+{
+  "name": "policy",
+  "version": "2.0.0",
+  "maturity": "experimental",
+  "spdx": "CC-BY-4.0",
+  "license": "CC-BY-4.0",
+  "source_url": "https://github.com/d-init-d/aleph-skill/tree/main/packs/policy",
+  "calibration_cases": 0,
+  "datasets": [
+    {
+      "path": "data/public-sample.json",
+      "sha256": "0cbaa67ab95650eab230525620668c42816458ad8fd91bbb3e2016ed60485604",
+      "spdx": "CC-BY-4.0",
+      "provenance": "synthetic"
+    }
+  ],
+  "description": "authority, veto, quorum, implementation lag, compliance"
+}

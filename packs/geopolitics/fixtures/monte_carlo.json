@@ -1,0 +1,60 @@
+{
+  "schema_version": "2.0.0",
+  "mode": "monte_carlo",
+  "ticks": 1,
+  "model": {
+    "nodes": [
+      {
+        "id": "geopolitics:source",
+        "role": "exogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 1,
+        "bounds": [
+          0,
+          10
+        ]
+      },
+      {
+        "id": "geopolitics:outcome",
+        "role": "endogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 0,
+        "bounds": [
+          -10,
+          10
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge:geopolitics:fixture-mc",
+        "from": "geopolitics:source",
+        "to": "geopolitics:outcome",
+        "sign": 1,
+        "base_strength": 0.5,
+        "lag_ticks": 0,
+        "transform": "linear",
+        "effect_distribution": {
+          "distribution": "uniform",
+          "min": 0.4,
+          "max": 0.6
+        }
+      }
+    ],
+    "interventions": []
+  },
+  "config": {
+    "seed": "geopolitics-mc",
+    "mode": "monte_carlo",
+    "min_runs": 32,
+    "max_runs": 32,
+    "batch_size": 16,
+    "stable_batches": 1,
+    "max_invalid_fraction": 0
+  },
+  "expected": {
+    "max_mass_error": 1e-12
+  }
+}

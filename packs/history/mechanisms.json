@@ -1,0 +1,10 @@
+{
+  "templates": [
+    {
+      "id": "mech:history:pass_through",
+      "relation": "increases",
+      "sign": 1,
+      "description": "Core history transmission mechanism template for validated packs."
+    }
+  ]
+}

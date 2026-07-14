@@ -1,0 +1,10 @@
+{
+  "parameters": [
+    {
+      "id": "prior:history:strength",
+      "distribution": "uniform",
+      "min": 0.1,
+      "max": 0.9
+    }
+  ]
+}

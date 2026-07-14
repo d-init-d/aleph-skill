@@ -25,9 +25,13 @@ Refuse or narrow requests that involve:
 - stolen credentials or cookies,
 - instructions to manipulate real people.
 
+A local safety phrase such as “do not collect” or “never reveal” negates only the harmful term in that clause. It does not sanitize a later request joined with “but”, “however”, or another contrasting clause. Evaluate every harmful match in its own local context and refuse the whole mixed request when any requested action remains disallowed.
+
 ## Living people
 
 For living people, keep dossiers public-role-only and simulation-relevant. Use phrases such as “public record suggests” and “the model assumes” rather than claiming private motives.
+
+Frozen knowledge packets and roleplay outputs use closed schemas. Reject unknown fields, post-cutoff claims, absent access bases, private contact or sensitive-personal content, hidden probability fields, and private-motive text at any nesting depth. Recomputing a packet hash never makes disallowed content valid.
 
 ## Emotional and psychological claims
 

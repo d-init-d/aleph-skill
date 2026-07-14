@@ -1,0 +1,10 @@
+{
+  "templates": [
+    {
+      "id": "mech:policy:pass_through",
+      "relation": "increases",
+      "sign": 1,
+      "description": "Core policy transmission mechanism template for validated packs."
+    }
+  ]
+}

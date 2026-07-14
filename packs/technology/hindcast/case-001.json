@@ -1,0 +1,62 @@
+{
+  "schema_version": "2.0.0",
+  "case_id": "hindcast:technology:synthetic-001",
+  "cutoff": "2020-01-01",
+  "evidence_snapshot_hash": "351e0367fb40c27ede0979c97a6179ee6a1431e4abc91ef92fc9b4a0dbefd05f",
+  "model": {
+    "nodes": [
+      {
+        "id": "technology:source",
+        "role": "exogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 1,
+        "bounds": [
+          0,
+          10
+        ]
+      },
+      {
+        "id": "technology:outcome",
+        "role": "endogenous",
+        "datatype": "continuous",
+        "unit": "index",
+        "baseline": 0,
+        "bounds": [
+          -10,
+          10
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge:technology:hindcast",
+        "from": "technology:source",
+        "to": "technology:outcome",
+        "sign": 1,
+        "base_strength": 0.5,
+        "lag_ticks": 0,
+        "transform": "linear"
+      }
+    ],
+    "interventions": []
+  },
+  "config": {
+    "seed": "technology-hindcast",
+    "mode": "deterministic"
+  },
+  "ticks": 1,
+  "observations": {
+    "technology:outcome": 0.45
+  },
+  "baselines": {
+    "technology:outcome": 0
+  },
+  "evidence": [
+    {
+      "id": "evidence:technology:synthetic-precutoff",
+      "available_at": "2019-01-01"
+    }
+  ],
+  "provenance": "synthetic regression case; not empirical calibration evidence"
+}

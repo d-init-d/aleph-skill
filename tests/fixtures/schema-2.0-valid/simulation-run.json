@@ -1,0 +1,1169 @@
+{
+  "schema_version": "2.0.0",
+  "run_contract_version": "aleph-run-2.0",
+  "mode": "deterministic",
+  "ticks": 182,
+  "model_hash": "f93f7681d96b0a5e66cc5e2ee0b1014613cb1665e9c5582f2544c1bebf092f4f",
+  "config": {
+    "seed": "0",
+    "mode": "deterministic",
+    "timestep": 1.0,
+    "max_events": 1000000,
+    "jacobi_abs_tol": 1e-09,
+    "jacobi_rel_tol": 1e-07,
+    "jacobi_relax": 0.5,
+    "jacobi_max_iter": 100,
+    "min_runs": 1000,
+    "max_runs": 20000,
+    "batch_size": 250,
+    "stable_batches": 3,
+    "branch_mass_tol": 0.01,
+    "max_invalid_fraction": 0.01
+  },
+  "config_hash": "5714d99f21515e60c2dad78f74f756452bdc69ab03061b5f6c802b57808fd91c",
+  "result_hash": "1031c2b88163c4125473a78baa4e5480d2fcca425796cc6b69a358903468150c",
+  "result": {
+    "ok": true,
+    "payload": {
+      "model_hash": "f93f7681d96b0a5e66cc5e2ee0b1014613cb1665e9c5582f2544c1bebf092f4f",
+      "config_hash": "5714d99f21515e60c2dad78f74f756452bdc69ab03061b5f6c802b57808fd91c",
+      "final_state": {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": -1.8700000000000003,
+        "factor:policy-rate": 4.25
+      },
+      "ticks": 182,
+      "events": 182,
+      "unresolved": false,
+      "event_storm": false,
+      "run_id": 0,
+      "seed": "0",
+      "history_hash": "3a8eb8d8cc29c54da5baaf978366fe97af31c09d40afe3817d6f0c02b9d94893",
+      "workers": 1
+    },
+    "history": [
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": 0.0,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": -1.8700000000000003,
+        "factor:policy-rate": 4.25
+      },
+      {
+        "context:open-economy": 1.0,
+        "entity:central-bank": 0.0,
+        "factor:output-gap": -1.8700000000000003,
+        "factor:policy-rate": 4.25
+      }
+    ],
+    "run_hash": "1031c2b88163c4125473a78baa4e5480d2fcca425796cc6b69a358903468150c",
+    "issues": [],
+    "exit_code": 0
+  },
+  "trace_contract": {
+    "path": "propagation-trace.jsonl",
+    "sha256": "836654e44cc0df37422fa11a79e3000a6b0e01c70cb714cf3468de07fdfcd672",
+    "row_count": 1
+  },
+  "trace_execution_binding": {
+    "version": "aleph-trace-execution-binding-v1",
+    "mode": "deterministic",
+    "ticks": 182,
+    "rows": [
+      {
+        "step": 1,
+        "edge_id": "causal:rate-to-gap",
+        "run_id": 0,
+        "tick": 181,
+        "source_tick": 1,
+        "source_state": 4.25,
+        "target_state": -1.8700000000000003,
+        "sampled_strength": 0.4,
+        "run_hash": "1031c2b88163c4125473a78baa4e5480d2fcca425796cc6b69a358903468150c",
+        "history_hash": "3a8eb8d8cc29c54da5baaf978366fe97af31c09d40afe3817d6f0c02b9d94893"
+      }
+    ],
+    "binding_hash": "5eac1b25d13151f3577b4c99ab5a68d001d7f9dd3d9bfff14a1b5d023a93cffb"
+  },
+  "contract_hash": "7aa05115604df5a5c1ee0394a1a8eec34577a52e06f9fc2b70dd87394cc01097"
+}

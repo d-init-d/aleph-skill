@@ -1,0 +1,2 @@
+{"actor_id": "actor:governor", "track": "research", "execution_mode": "isolated-pass", "agent_ref": "research-agent-1", "started_at": "2026-07-01T10:00:00Z", "completed_at": "2026-07-01T11:00:00Z", "output_artifact": "research-governor.md", "status": "completed"}
+{"actor_id": "actor:governor", "track": "roleplay", "execution_mode": "isolated-pass", "agent_ref": "roleplay-agent-2", "started_at": "2026-07-01T12:00:00Z", "completed_at": "2026-07-01T13:00:00Z", "output_artifact": "roleplay-governor.md", "status": "completed"}

@@ -3,14 +3,20 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import json
-import os
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
+# Ensure aleph package is importable when scripts run as files
+_SCRIPTS = Path(__file__).resolve().parent
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+
+from aleph.discovery import discover_d_research  # noqa: E402
+from aleph.installer import install as safe_install  # noqa: E402
+from aleph.io import write_json_atomic  # noqa: E402
 
 SKILL_NAME = "aleph-skill"
 
@@ -38,10 +44,7 @@ def load_json(path: Path) -> Any:
 
 
 def write_json(path: Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="\n") as handle:
-        json.dump(data, handle, indent=2, ensure_ascii=False)
-        handle.write("\n")
+    write_json_atomic(path, data)
 
 
 def load_csv_rows(path: Path) -> list[dict[str, str]]:
@@ -111,34 +114,23 @@ def load_optional_yaml(path: Path) -> Any:
 
     if importlib.util.find_spec("yaml") is None:
         raise RuntimeError("PyYAML is not installed; use JSON or install PyYAML explicitly")
-    import yaml  # type: ignore[import-not-found]
+    import yaml
 
     with path.open("r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
 
 
-def copy_skill_tree(src: Path, dest: Path, force: bool = False) -> None:
-    if dest.exists():
-        if not force:
-            raise FileExistsError(f"Destination already exists: {dest}")
-        shutil.rmtree(dest)
-
-    def ignore(_directory: str, names: list[str]) -> set[str]:
-        ignored = {"__pycache__", ".pytest_cache", ".ruff_cache", ".git"}
-        return {name for name in names if name in ignored}
-
-    shutil.copytree(src, dest, ignore=ignore)
+def copy_skill_tree(src: Path, dest: Path, force: bool = False) -> dict[str, Any]:
+    """Allowlist-based install; refuses source==dest and nested paths."""
+    return safe_install(src, dest, mode="copy", force=force)
 
 
-def common_d_research_candidates() -> list[Path]:
-    return [
-        Path(os.environ.get("D_RESEARCH_SKILL", "")) if os.environ.get("D_RESEARCH_SKILL") else None,
-        Path.home() / ".codex" / "skills" / "d-research",
-        Path.home() / ".agents" / "skills" / "d-research",
-        Path.home() / ".claude" / "skills" / "d-research",
-        Path.home() / ".config" / "opencode" / "skills" / "d-research",
-        Path(r"D:\Downloads\aleph-qweb 3.7\d-research-skill"),
-    ]  # type: ignore[return-value]
+def common_d_research_candidates() -> list[Path | None]:
+    """Deprecated helper — use discover_d_research(). Kept for compatibility without hardcoded paths."""
+    result = discover_d_research()
+    if result.get("path"):
+        return [Path(result["path"])]
+    return []
 
 
 def first_existing(candidates: list[Path | None]) -> Path | None:
@@ -149,11 +141,21 @@ def first_existing(candidates: list[Path | None]) -> Path | None:
 
 
 def print_json(data: Any) -> None:
+    # Machine-readable on stdout
     print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
-def exit_from_errors(errors: list[str]) -> None:
+def exit_from_errors(errors: list[str], code: int = 1) -> None:
     if errors:
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(code)
+
+
+def emit_result(data: Any, *, json_mode: bool = False, exit_code: int = 0) -> None:
+    if json_mode:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+    if exit_code:
+        raise SystemExit(exit_code)

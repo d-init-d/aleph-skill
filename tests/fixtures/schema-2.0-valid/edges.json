@@ -1,0 +1,35 @@
+[
+  {
+    "id": "causal:rate-to-gap",
+    "from": "factor:policy-rate",
+    "to": "factor:output-gap",
+    "relation": "decreases",
+    "sign": -1,
+    "base_strength": 0.4,
+    "evidence_confidence": 0.6,
+    "confidence": 0.6,
+    "mechanism": "Policy rate hikes raise real rates, reducing credit growth and interest-sensitive demand, which lowers the output gap through investment and durable goods channels over about two quarters.",
+    "lag_distribution": {
+      "type": "fixed",
+      "fixed": "P180D",
+      "min": "P90D",
+      "max": "P270D"
+    },
+    "context_modifiers": [
+      {
+        "context": "context:open-economy",
+        "multiplier": 1.1,
+        "rationale": "Open capital markets amplify financial-condition transmission."
+      }
+    ],
+    "evidence": [
+      "evidence:macro-series"
+    ],
+    "status": "admitted",
+    "transform": "linear",
+    "effect_parameter": {
+      "kind": "draft_reference",
+      "reference_value": 0.4
+    }
+  }
+]

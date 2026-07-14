@@ -1,0 +1,102 @@
+{
+  "schema_version": "1.2.0",
+  "simulation_id": "sim-valid-2.0",
+  "created_at": "2026-07-01T00:00:00Z",
+  "status": "completed",
+  "change_point": {
+    "type": "factor_change",
+    "target": "factor:policy-rate",
+    "description": "25bp policy rate hike",
+    "magnitude": 0.25,
+    "time": "2026-01-01",
+    "location": "example-economy",
+    "assumption_ref": "assumption:change-point"
+  },
+  "temporal_frame": {
+    "mode": "prospective_intervention",
+    "observation_cutoff": "2026-01-01",
+    "simulation_start": "2026-01-01",
+    "simulation_end": "2027-01-01",
+    "future_projection": true,
+    "calibration_strategy": "Mechanisms calibrated to pre-cutoff macro history; post-cutoff states are simulation.",
+    "monitoring_indicators": [
+      "factor:policy-rate",
+      "factor:output-gap"
+    ]
+  },
+  "scope": {
+    "horizon": "P12M",
+    "domains": [
+      "economics"
+    ],
+    "geographies": [
+      "example-economy"
+    ]
+  },
+  "execution": {
+    "adaptive_scope": {
+      "assessed": true,
+      "overall_complexity": 0.2,
+      "dimensions": {
+        "temporal_span": 0.2,
+        "domain_breadth": 0.2,
+        "geographic_breadth": 0.1,
+        "actor_density": 0.2,
+        "causal_depth": 0.3,
+        "evidence_uncertainty": 0.2,
+        "stakes": 0.2
+      },
+      "rationale": "Single-economy monetary transmission fixture.",
+      "decomposition": {
+        "subquestions": [
+          "How does a hike affect the output gap?"
+        ],
+        "critical_paths": [
+          "policy-rate -> output-gap"
+        ],
+        "research_waves_completed": 2
+      }
+    },
+    "research_quality": "limited",
+    "research_control": {
+      "policy": "evidence-saturation",
+      "sources_examined": 2,
+      "saturation_reached": true,
+      "consecutive_no_new_material_claims": 2,
+      "stop_reason": "Fixture claims covered.",
+      "unresolved_critical_gaps": []
+    },
+    "d_research": {
+      "status": "unavailable",
+      "invoked": false
+    },
+    "subagents": {
+      "status": "unavailable",
+      "tool": null,
+      "detection_method": "fixture",
+      "fallback_reason": "unit fixture"
+    },
+    "repair_cycles_completed": 0,
+    "checkpoints": {
+      "initialized": true,
+      "scope_assessed": true,
+      "baseline_researched": true,
+      "human_tracks_completed": true,
+      "graph_built": true,
+      "propagated": true,
+      "branched": true,
+      "validated": true
+    }
+  },
+  "artifact_paths": {
+    "nodes": "nodes.json",
+    "edges": "edges.json",
+    "actors": "actors.json",
+    "human_track_ledger": "human-track-ledger.jsonl",
+    "evidence_map": "evidence-map.csv",
+    "branch_ledger": "branch-ledger.json",
+    "propagation_trace": "propagation-trace.jsonl",
+    "validation_report": "validation-report.json",
+    "final_report": "REPORT.md"
+  }
+}

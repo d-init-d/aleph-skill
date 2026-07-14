@@ -47,4 +47,4 @@ No node after the observation cutoff may be labeled `fact`. A `simulated_branch`
 
 ## Temporal knowledge
 
-Actors know only information available at their roleplay `knowledge_cutoff`. For future projections, update branch probabilities from indicators through a new simulation run; do not retroactively rewrite what actors knew.
+Actors know only information available and accessible at their roleplay `knowledge_cutoff`. For future projections, update relative weights or calibrated probabilities through a new simulation run; do not retroactively rewrite what actors knew.

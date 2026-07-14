@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://aleph.local/schemas/2.0/finalization-receipts.schema.json",
+  "type": "object", "additionalProperties": false, "required": ["validation_receipt", "quality_receipt"],
+  "properties": {
+    "validation_receipt": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "validator_version", "formula_version", "schema_digest", "bundle_digest", "artifact_hashes", "status", "created_at", "transaction_id"],
+      "properties": {
+        "schema_version": {"const": "2.0.0"}, "validator_version": {"type": "string"}, "formula_version": {"const": "2.0.0"},
+        "schema_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "bundle_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "artifact_hashes": {"type": "object"}, "status": {"const": "pass"}, "assurance_status": {"type": "string"},
+        "created_at": {"type": "string", "format": "date-time"}, "transaction_id": {"type": "string"}
+      }
+    },
+    "quality_receipt": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "validation_receipt_hash", "artifact_hashes", "diagnostic_score", "status", "created_at", "transaction_id"],
+      "properties": {
+        "schema_version": {"const": "2.0.0"}, "validation_receipt_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "artifact_hashes": {"type": "object"}, "assurance_tier": {"type": ["string", "null"]}, "diagnostic_score": {"type": "number", "minimum": 0, "maximum": 100},
+        "status": {"type": "string"}, "created_at": {"type": "string", "format": "date-time"}, "transaction_id": {"type": "string"}
+      }
+    }
+  }
+}

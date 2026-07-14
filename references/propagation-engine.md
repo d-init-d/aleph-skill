@@ -1,99 +1,65 @@
 # Propagation engine
 
-This skill uses structured causal propagation. The formula is a modeling convention, not a guarantee.
+Aleph 2.0 uses auditable discrete level equations. The numerical result is a modeling convention, not a factual guarantee.
 
-## Per-hop formula
+## Level equation
+
+For each tick, every variable starts from its declared baseline. Aleph then applies active interventions, delayed emissions due at that tick, and zero-lag causal effects:
 
 ```text
-effect(A -> B) =
-  change_in_A
-  * sign
-  * base_strength
-  * context_multiplier
-  * confidence
-  * time_decay
-  * noise_sample
-  * saturation
+target[t] = baseline[target]
+          + intervention[target, t]
+          + sum(saturate(transform(source[t - sampled_lag])
+                         * sign * sampled_strength * context_multiplier))
 ```
 
-Definitions:
+`do(set)` interventions replace the target level and block incoming effects while active. `add` and `multiply` interventions apply on every active tick. When an intervention ends, the target returns to the level implied by the baseline and active causal inputs.
 
-- `change_in_A`: normalized perturbation from the source node.
-- `sign`: `1` for positive/increasing relations, `-1` for negative/decreasing relations.
-- `base_strength`: estimated effect size at peak lag.
-- `context_multiplier`: product of active context modifiers.
-- `confidence`: reliability of the edge.
-- `time_decay`: lag-dependent arrival and fade.
-- `noise_sample`: Monte Carlo uncertainty, usually centered near `1.0`.
-- `saturation`: diminishing returns for extreme perturbations.
+The engine does not implicitly carry a previous level into the next tick. That prevents a static input from creating accidental linear growth. Stock/flow integration, decay kernels, and continuous-time dynamics are outside the 2.0 engine contract and must not be claimed from a level-model run.
+
+## Edge semantics
+
+- `sign` must be exactly `1` or `-1`.
+- `base_strength` is the deterministic reference effect.
+- `effect_distribution` is sampled once per Monte Carlo run.
+- Effect distributions fail compilation unless their kind and finite parameters are complete and ordered (`uniform min < max`, `triangular min <= mode <= max`, `normal sd > 0`). Invalid distributions never fall back to `base_strength`.
+- `lag_distribution` is preserved in the compiled model and sampled once per edge and run. Deterministic runs use `fixed`, the triangular mode, the uniform midpoint, or the truncated-exponential mean.
+- ISO-8601 lags use the supported duration subset and are rounded up to days, then divided by the positive `timestep` (days per tick) with ceiling. Invalid durations fail compilation rather than becoming zero-lag edges.
+- `existence_prob` controls edge admission per Monte Carlo run.
+- Evidence confidence is epistemic metadata. It is not silently multiplied into the numerical effect.
+
+Supported transforms are `linear`, `elasticity`, `identity`, and `logistic` in the engine API. Shipped causal-edge artifacts currently admit `linear` and `elasticity`.
+
+## Cycles
+
+Zero-lag strongly connected components use a relaxed Jacobi fixed-point solve. Convergence is decided from the unrelaxed equation residual, never from the smaller relaxation step. Convergence tolerances, relaxation, and iteration limits are part of the hashed execution configuration. A component that does not converge is a numerical hard failure; Aleph does not return its state as a valid branch.
+
+Delayed cycles are resolved through emission snapshots. A delayed effect captures its source value when emitted and is delivered after the sampled lag.
+
+## Monte Carlo
+
+Counter-addressed RNG binds every draw to the seed, run ID, edge ID, and purpose. Length-prefixed typed fields prevent ambiguous counter addresses. Worker count does not alter the run hash.
+
+Invalid runs are excluded from branch clusters and remain unresolved probability mass. The run fails when the invalid fraction exceeds its configured hard gate. Valid branch mass plus unresolved mass must equal one.
 
 ## Trace requirement
 
-Every propagated hop should record:
+Every material propagated hop records its source and target, input effect, sign, strength, context multiplier, noise, output effect, lag, mechanism, evidence IDs, and hash-chain linkage. The saved run contract binds the raw trace SHA-256 and positive row count. Replay requires both to match before formula replay; an absent, empty, or substituted trace fails. Formula replay recomputes values from source artifacts; it never trusts an artifact-provided amplification ratio.
 
-- `time`,
-- `from`,
-- `to`,
-- `input_change`,
-- `sign`,
-- `base_strength`,
-- `context_multiplier`,
-- `confidence`,
-- `time_decay`,
-- `noise`,
-- `saturation`,
-- `output_effect`,
-- `lag_applied`,
-- `mechanism`,
-- `evidence_ids`,
-- `amplification_ratio`,
-- `butterfly_pattern`.
+Numerical traces have a stronger contract than qualitative traces. Every numerical row must identify exactly one bounded `run:N` sample, the source tick, source state, target state, and sampled edge strength. The execution-binding validator independently reconstructs that run and requires the row to match the engine trajectory, active intervention window, sampled edge admission, lag, and zero-noise engine semantics. The run ledger stores the resulting execution-binding digest, and replay recomputes it. Rehashing a fabricated but internally consistent row is therefore insufficient.
 
-Use `templates/propagation-trace.jsonl`.
+Manifest-declared paths are authoritative for nodes, edges, the compiled model, run ledger, replay report, and propagation trace. CLI output overrides must resolve to the same non-aliased file as the declared artifact path.
 
-## Amplification patterns
-
-Flag these patterns:
-
-- Cascade: multiple high-confidence hops create compounding effects.
-- Threshold breach: a factor crosses a level that unlocks new effects.
-- Feedback loop: a cycle reinforces or stabilizes the perturbation.
-- Context creation: a propagated effect activates a new context.
-- Human catalyst: an actor response creates disproportionate downstream effects.
-
-## Cycle handling
-
-For positive feedback cycles:
-
-- allow at most three full cycles before damping,
-- apply damping after the cap,
-- report the cap and sensitivity.
-
-For negative feedback cycles:
-
-- allow convergence,
-- report stabilizing nodes and equilibrium direction.
-
-## Threshold handling
-
-When a factor crosses a threshold:
-
-1. record the crossing,
-2. create or activate resulting event/context nodes,
-3. branch if the threshold value is uncertain,
-4. lower confidence if the threshold is weakly sourced.
-
-## Monte Carlo guidance
-
-Use multiple runs when the graph has many uncertain edges or human decision points. Cluster end states into branches. If no deterministic engine is available, approximate manually but state that clustering was qualitative.
+OAT sensitivity perturbations are clamped to declared parameter bounds and report the actual perturbed values and deltas. Boundary parameters therefore use one-sided or zero-distance contrasts rather than silently evaluating an invalid parameter value.
 
 ## Warning conditions
 
 Add warnings for:
 
-- extreme perturbations above normalized magnitude `2.0`,
-- context multipliers above `3.0`,
-- confidence below `0.30` on critical edges,
+- extreme normalized perturbations,
+- context multipliers above the declared domain range,
+- weak evidence on critical edges,
 - roleplay-driven paths without external evidence,
-- missing observed-history validation,
-- circular amplification that dominates the result.
+- missing hindcast validation,
+- non-convergent or dominant feedback,
+- requested stock/flow behavior that the level engine cannot represent.
