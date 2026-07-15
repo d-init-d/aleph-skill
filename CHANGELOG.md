@@ -19,7 +19,7 @@
 ### Security
 - Component path traversal, symlink/reparse, bytecode/cache, one-byte tamper, missing/extra file hard fails.
 - Roleplay uses a sealed packet/receipt boundary and requires host-enforced network/tool denial; filtered environment variables are defense in depth and are not claimed as an OS sandbox.
-- Release CI fetches the pinned annotated D Research tag and verifies its tag object, commit, Git tree, reproducible archive, snapshot recipe, and bundled bytes before publication.
+- Release CI fetches the pinned annotated D Research tag and verifies its tag object, commit, Git tree, reproducible archive, snapshot recipe, and bundled bytes before publication. Provenance archives explicitly disable `core.autocrlf`, force LF and `tar.umask=0002`, failures remain visible in CI logs, and the full research-acceptance process receives 300 seconds on slower macOS runners without skipping checks.
 
 ## v2.0.1 - 2026-07-14
 

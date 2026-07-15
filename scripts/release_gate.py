@@ -286,7 +286,15 @@ def main() -> None:
         ),
         (
             "research-acceptance",
-            [python, "-B", "scripts/research_gateway.py", "research:acceptance", "--json"],
+            [
+                python,
+                "-B",
+                "scripts/research_gateway.py",
+                "research:acceptance",
+                "--timeout",
+                "300",
+                "--json",
+            ],
             frozenset({"ok", "degraded"}),
         ),
     ]

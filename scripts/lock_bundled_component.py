@@ -126,7 +126,20 @@ def verify_upstream_snapshot(
         raise ValueError("upstream Git tree differs from component lock")
 
     archive_process = subprocess.run(
-        [git, "-C", str(repo), "archive", "--format=tar", commit],
+        [
+            git,
+            "-C",
+            str(repo),
+            "-c",
+            "core.autocrlf=false",
+            "-c",
+            "core.eol=lf",
+            "-c",
+            "tar.umask=0002",
+            "archive",
+            "--format=tar",
+            commit,
+        ],
         capture_output=True,
         check=False,
     )

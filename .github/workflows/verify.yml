@@ -43,12 +43,29 @@ jobs:
           git -C "$repo" fetch --quiet --force --no-tags --depth=1 origin \
             "+refs/tags/$UPSTREAM_TAG:refs/tags/$UPSTREAM_TAG"
           tag_ref="refs/tags/$UPSTREAM_TAG"
-          test "$(git -C "$repo" cat-file -t "$tag_ref")" = tag
-          test "$(git -C "$repo" rev-parse "$tag_ref")" = "$UPSTREAM_TAG_OBJECT"
-          test "$(git -C "$repo" rev-parse "$tag_ref^{}")" = "$UPSTREAM_COMMIT"
-          python -B scripts/lock_bundled_component.py \
-            --upstream-repo "$repo" > "$RUNNER_TEMP/component-provenance.json"
-          python - "$RUNNER_TEMP/component-provenance.json" <<'PY'
+          actual_type="$(git -C "$repo" cat-file -t "$tag_ref")"
+          actual_tag="$(git -C "$repo" rev-parse "$tag_ref")"
+          actual_commit="$(git -C "$repo" rev-parse "$tag_ref^{}")"
+          if [[ "$actual_type" != tag ]]; then
+            echo "expected annotated upstream tag, got $actual_type" >&2
+            exit 1
+          fi
+          if [[ "$actual_tag" != "$UPSTREAM_TAG_OBJECT" ]]; then
+            echo "upstream tag object mismatch: expected $UPSTREAM_TAG_OBJECT, got $actual_tag" >&2
+            exit 1
+          fi
+          if [[ "$actual_commit" != "$UPSTREAM_COMMIT" ]]; then
+            echo "upstream commit mismatch: expected $UPSTREAM_COMMIT, got $actual_commit" >&2
+            exit 1
+          fi
+          provenance="$RUNNER_TEMP/component-provenance.json"
+          if ! python -B scripts/lock_bundled_component.py \
+            --upstream-repo "$repo" > "$provenance"; then
+            cat "$provenance" >&2
+            exit 1
+          fi
+          cat "$provenance"
+          python - "$provenance" <<'PY'
           import json
           import os
           import sys

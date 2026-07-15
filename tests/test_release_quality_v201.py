@@ -114,6 +114,13 @@ class ReleaseGateOrchestrationTests(unittest.TestCase):
             "research-acceptance",
         }
         self.assertFalse(mandatory - {name for name, _ in observed}, observed)
+        research_acceptance = [
+            command for name, command in observed if name == "research-acceptance"
+        ]
+        self.assertEqual(len(research_acceptance), 1)
+        self.assertIn("--timeout", research_acceptance[0])
+        timeout_index = research_acceptance[0].index("--timeout")
+        self.assertEqual(research_acceptance[0][timeout_index + 1], "300")
         release_artifacts.assert_called_once_with(ROOT, release_gate.sys.executable)
         mypy = [command for name, command in observed if name == "mypy-strict"]
         self.assertEqual(len(mypy), 1)

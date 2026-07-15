@@ -12,7 +12,7 @@
       "upstream_commit": "8156b460b358636e69d66c10c16800045d258446",
       "upstream_tree": "2a77a48bd98126fec5812398afd98033e03d4709",
       "source_archive_format": "git-archive-tar",
-      "source_archive_sha256": "sha256:7db1d0122b279e81cbb5ff6fedd7c3931cdfa0a70d53eed7b65346dcb6681342",
+      "source_archive_sha256": "sha256:7942008985c288dd276bee459de61400662eb5a327febf84ebef9e953f2df1d7",
       "snapshot_recipe": {
         "version": 1,
         "source": "git-tree",

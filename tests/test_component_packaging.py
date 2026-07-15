@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
 import json
+import subprocess
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import lock_bundled_component
 from aleph.component_registry import build_component_lock, locked_component_paths
 from aleph.installer import collect_distribution_files, scan_secret_like_files
 from aleph.paths import is_distribution_path
@@ -94,6 +100,88 @@ class ComponentPackagingTests(unittest.TestCase):
         self.assertIn("cat-file -t", workflow)
         self.assertIn("--upstream-repo", workflow)
         self.assertIn("upstream_verification", workflow)
+        verifier = (ROOT / "scripts" / "lock_bundled_component.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("core.autocrlf=false", verifier)
+        self.assertIn("core.eol=lf", verifier)
+        self.assertIn("tar.umask=0002", verifier)
+        self.assertIn('cat "$provenance"', workflow)
+
+    def test_upstream_archive_ignores_host_line_ending_configuration(self) -> None:
+        content = b"hello\n"
+        archive_buffer = io.BytesIO()
+        with tarfile.open(fileobj=archive_buffer, mode="w:") as archive:
+            member = tarfile.TarInfo("sample.md")
+            member.size = len(content)
+            archive.addfile(member, io.BytesIO(content))
+        archive_bytes = archive_buffer.getvalue()
+        tag_object = "1" * 40
+        commit = "2" * 40
+        tree = "3" * 40
+        completed = [
+            subprocess.CompletedProcess([], 0, stdout=(tag_object + "\n").encode(), stderr=b""),
+            subprocess.CompletedProcess([], 0, stdout=(commit + "\n").encode(), stderr=b""),
+            subprocess.CompletedProcess([], 0, stdout=(tree + "\n").encode(), stderr=b""),
+            subprocess.CompletedProcess([], 0, stdout=archive_bytes, stderr=b""),
+        ]
+        rebuilt = {
+            "components": {
+                "d-research": {
+                    "source_tag": "v3.2.0",
+                    "upstream_tag_object": tag_object,
+                    "upstream_commit": commit,
+                    "upstream_tree": tree,
+                    "source_archive_sha256": (
+                        "sha256:" + hashlib.sha256(archive_bytes).hexdigest()
+                    ),
+                    "snapshot_recipe": {"excluded_paths": []},
+                    "files": [{"path": "sample.md"}],
+                }
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            component = root / "components" / "d-research"
+            component.mkdir(parents=True)
+            (component / "sample.md").write_bytes(content)
+            upstream = root / "upstream.git"
+            upstream.mkdir()
+            with (
+                patch.object(lock_bundled_component.shutil, "which", return_value="git"),
+                patch.object(
+                    lock_bundled_component.subprocess,
+                    "run",
+                    side_effect=completed,
+                ) as run,
+            ):
+                verification = lock_bundled_component.verify_upstream_snapshot(
+                    root,
+                    upstream,
+                    rebuilt,
+                    component_id="d-research",
+                )
+
+        self.assertEqual(verification["archive_sha256"], rebuilt["components"]["d-research"]["source_archive_sha256"])
+        archive_command = run.call_args_list[3].args[0]
+        self.assertEqual(
+            archive_command,
+            [
+                "git",
+                "-C",
+                str(upstream.resolve()),
+                "-c",
+                "core.autocrlf=false",
+                "-c",
+                "core.eol=lf",
+                "-c",
+                "tar.umask=0002",
+                "archive",
+                "--format=tar",
+                commit,
+            ],
+        )
 
     def test_component_snapshot_has_no_cache_or_crlf_text(self) -> None:
         component = ROOT / "components" / "d-research"

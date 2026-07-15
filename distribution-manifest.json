@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 433,
-  "tree_sha256": "c58959fcafbed3f88f0c1158fb3d4efbecabe531eab591b6d76cff8ec986c615",
+  "tree_sha256": "584b993d2a7d1e2d97a3fa7b2c9b4ee91d5e11588733fd009bef0a6150298f1c",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -13,8 +13,8 @@
     },
     {
       "path": ".github/release-notes/v2.1.0.md",
-      "sha256": "1ff03e467fa53437c14b95db31ac1e737314e653c795e170a7549c215a4c1b36",
-      "size": 4025
+      "sha256": "2aa87c72c04c934536774c84d4f09c0f7817a52a3560a42643427f8d1717bc80",
+      "size": 4280
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -28,8 +28,8 @@
     },
     {
       "path": ".github/workflows/verify.yml",
-      "sha256": "dac123b66b9228bf82209511abb29ec3b3d24a67667d39a1de5fd2c97580caf5",
-      "size": 9027
+      "sha256": "3c6229c686edeea9bbf2374e677ac1453406679289f0e71333151b4d7348c156",
+      "size": 9650
     },
     {
       "path": "AGENTS.md",
@@ -38,8 +38,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "876bfeca5df2d3bc65f48693e814ba41b2335d67f6ea0d3e673a72db83683569",
-      "size": 17583
+      "sha256": "bdfd48f6485603c0ce013c67c4cd3dac030dfa75c5be43b489ffe4160718fffd",
+      "size": 17817
     },
     {
       "path": "LICENSE",
@@ -118,7 +118,7 @@
     },
     {
       "path": "component-lock.json",
-      "sha256": "64fc264ec1e06b0ff385c81f32057e175267e29a3d03e051c12ebe903dab8de7",
+      "sha256": "0d31fcf828ef575c96f3d346184fe038fb107c18208df82bfaed71645277674c",
       "size": 40722
     },
     {
@@ -1773,8 +1773,8 @@
     },
     {
       "path": "scripts/lock_bundled_component.py",
-      "sha256": "1f08db91ec46c6689e9255f4052ff4238cd43d58279cdc6b2df7d325951b66b4",
-      "size": 9086
+      "sha256": "716b135ab6575a9197991ba57cca6a65c6e4f72505d1fd608cad8db24e9d65df",
+      "size": 9315
     },
     {
       "path": "scripts/migrate_workspace.py",
@@ -1788,8 +1788,8 @@
     },
     {
       "path": "scripts/release_gate.py",
-      "sha256": "8ae2276722bf14bc7fa9575c864939fdcb430d679feccdbfcf61b708a17acdfc",
-      "size": 14743
+      "sha256": "3d776ee1d268ca0da8a63a438e333e61b311a8912416181eb7c406cbf321c31b",
+      "size": 14890
     },
     {
       "path": "scripts/render_simulation_report.py",
@@ -2028,8 +2028,8 @@
     },
     {
       "path": "tests/test_component_packaging.py",
-      "sha256": "d5ff41dab8f861b27dd05cee8c4735a345fadbcdaff169ebae89989d4838af52",
-      "size": 7556
+      "sha256": "276feae9a23289332365c68461760ef6f65bdc2c75418eca9c16b6f6f4c02c41",
+      "size": 10930
     },
     {
       "path": "tests/test_component_registry.py",
@@ -2103,8 +2103,8 @@
     },
     {
       "path": "tests/test_release_quality_v201.py",
-      "sha256": "153f4b19473b20f3b0c8c65d53669c96358ada1359d5202315481e34c4b16477",
-      "size": 33406
+      "sha256": "fb8ff60dadffe7a42373a7c9dceb01eedb4e064457b3f5d3c4935af2c4a9c6e9",
+      "size": 33785
     },
     {
       "path": "tests/test_release_tag_verifier.py",
