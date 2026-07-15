@@ -4,9 +4,11 @@ import copy
 import io
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any
@@ -55,9 +57,28 @@ class ReleaseGateOrchestrationTests(unittest.TestCase):
         observed: list[tuple[str, list[str]]] = []
 
         def record(name: str, command: list[str], cwd: Path) -> dict[str, object]:
-            self.assertEqual(cwd, ROOT)
+            expected_cwd = (
+                ROOT / "components" / "d-research"
+                if name == "research-package-check"
+                else ROOT
+            )
+            self.assertEqual(cwd, expected_cwd)
             observed.append((name, command))
-            return {"name": name, "command": command, "returncode": 0, "ok": True}
+            status = {
+                "component-lock": "pass",
+                "research-self-test": "degraded",
+                "research-acceptance": "degraded",
+                "preflight": "pass",
+            }.get(name)
+            result: dict[str, object] = {
+                "name": name,
+                "command": command,
+                "returncode": 0,
+                "ok": True,
+            }
+            if status is not None:
+                result["reported_status"] = status
+            return result
 
         with (
             patch.object(release_gate.sys, "argv", ["release_gate.py", "--with-dev"]),
@@ -68,6 +89,11 @@ class ReleaseGateOrchestrationTests(unittest.TestCase):
                 return_value={"name": "static-contract", "ok": True},
             ),
             patch.object(release_gate, "_run", side_effect=record),
+            patch.object(
+                release_gate,
+                "_release_artifact_checks",
+                return_value=[{"name": "release-artifacts", "ok": True}],
+            ) as release_artifacts,
             patch.object(release_gate.shutil, "which", return_value=None),
             redirect_stdout(io.StringIO()),
             self.assertRaises(SystemExit) as raised,
@@ -80,7 +106,15 @@ class ReleaseGateOrchestrationTests(unittest.TestCase):
         lifecycle = [command for name, command in observed if name == "lifecycle-acceptance"]
         self.assertEqual(len(lifecycle), 1, observed)
         self.assertIn("--skip-unit-tests", lifecycle[0])
-        self.assertIn("--skip-component-checks", lifecycle[0])
+        self.assertNotIn("--skip-component-checks", lifecycle[0])
+        mandatory = {
+            "component-lock",
+            "research-self-test",
+            "research-package-check",
+            "research-acceptance",
+        }
+        self.assertFalse(mandatory - {name for name, _ in observed}, observed)
+        release_artifacts.assert_called_once_with(ROOT, release_gate.sys.executable)
         mypy = [command for name, command in observed if name == "mypy-strict"]
         self.assertEqual(len(mypy), 1)
         self.assertIn("--strict", mypy[0])
@@ -88,6 +122,107 @@ class ReleaseGateOrchestrationTests(unittest.TestCase):
         ruff = [command for name, command in observed if name == "ruff"]
         self.assertEqual(len(ruff), 1)
         self.assertIn("--no-cache", ruff[0])
+
+    def test_release_artifact_gate_checks_the_relocated_distribution(self) -> None:
+        observed: list[tuple[str, list[str], Path]] = []
+
+        def record(name: str, command: list[str], cwd: Path) -> dict[str, object]:
+            observed.append((name, command, cwd))
+            reported_status = (
+                "pass"
+                if name
+                in {
+                    "release-zip-build",
+                    "release-zip-preflight",
+                    "release-zip-component-lock",
+                }
+                else None
+            )
+            result: dict[str, object] = {
+                "name": name,
+                "command": command,
+                "returncode": 0,
+                "ok": True,
+            }
+            if reported_status is not None:
+                result["reported_status"] = reported_status
+            return result
+
+        with (
+            patch.object(release_gate, "_run", side_effect=record),
+            patch.object(release_gate, "_extract_release_archive", return_value=ROOT),
+        ):
+            checks = release_gate._release_artifact_checks(ROOT, sys.executable)
+
+        names = [str(check["name"]) for check in checks]
+        self.assertEqual(
+            names,
+            [
+                "release-zip-build",
+                "release-zip-extract",
+                "release-zip-preflight",
+                "release-zip-component-lock",
+                "release-zip-component-package",
+                "release-zip-skill-package",
+            ],
+        )
+        self.assertTrue(all(bool(check["ok"]) for check in checks), checks)
+        commands = {name: command for name, command, _ in observed}
+        self.assertIn("scripts/build_release_assets.py", commands["release-zip-build"])
+        self.assertIn("scripts/preflight.py", commands["release-zip-preflight"])
+        self.assertIn(
+            "scripts/lock_bundled_component.py",
+            commands["release-zip-component-lock"],
+        )
+        self.assertEqual(
+            commands["release-zip-component-package"],
+            ["node", "scripts/package_manifest_check.mjs"],
+        )
+        self.assertIn(
+            "scripts/validate_skill_package.py",
+            commands["release-zip-skill-package"],
+        )
+
+    def test_release_archive_extraction_refuses_path_traversal(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            temporary = Path(raw)
+            archive = temporary / "malicious.zip"
+            with zipfile.ZipFile(archive, "w") as bundle:
+                bundle.writestr("aleph-skill/SKILL.md", "safe")
+                bundle.writestr("aleph-skill/../escaped.txt", "unsafe")
+            with self.assertRaisesRegex(ValueError, "unsafe release archive member"):
+                release_gate._extract_release_archive(archive, temporary / "extracted")
+            self.assertFalse((temporary / "extracted" / "escaped.txt").exists())
+
+    def test_json_status_is_a_hard_gate_even_when_exit_code_is_zero(self) -> None:
+        check: dict[str, Any] = {
+            "name": "semantic-status",
+            "returncode": 0,
+            "ok": True,
+            "reported_status": "delegated",
+        }
+        release_gate._require_reported_status(check, frozenset({"pass"}))
+        self.assertFalse(check["ok"])
+        self.assertIn("status_error", check)
+
+    def test_plain_success_output_is_not_reported_as_a_json_error(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=["plain-tool"],
+            returncode=0,
+            stdout="plain success\n",
+            stderr="",
+        )
+        with patch.object(release_gate.subprocess, "run", return_value=completed):
+            check = release_gate._run("plain-tool", ["plain-tool"], ROOT)
+        self.assertTrue(check["ok"])
+        self.assertNotIn("json_error", check)
+
+    def test_missing_release_runtime_is_reported_instead_of_crashing(self) -> None:
+        with patch.object(release_gate.subprocess, "run", side_effect=OSError("missing node")):
+            check = release_gate._run("component-package", ["node", "check.mjs"], ROOT)
+        self.assertFalse(check["ok"])
+        self.assertIsNone(check["returncode"])
+        self.assertIn("missing node", str(check["stderr"]))
 
     def test_acceptance_missing_explicit_fixture_fails_closed(self) -> None:
         observed: list[list[str]] = []
@@ -253,7 +388,18 @@ class ReleaseGateOrchestrationTests(unittest.TestCase):
         self.assertIn("uv sync --locked", workflow)
         self.assertIn("uv run --no-sync", workflow)
         self.assertEqual(workflow.count('version: "0.11.18"'), 2)
-        self.assertEqual(workflow.count("npm ci --ignore-scripts"), 1)
+        self.assertIn("component-no-browser:", workflow)
+        self.assertIn("browser-smoke:", workflow)
+        self.assertIn("node-version: [18, 20, 22]", workflow)
+        self.assertIn('{"delegated", "degraded"}', workflow)
+        self.assertIn("browser_cases_delegated", workflow)
+        self.assertIn("research:browser-smoke", workflow)
+        self.assertIn('payload.get("status") != "ok"', workflow)
+        self.assertIn(
+            "node node_modules/playwright/cli.js install --with-deps chromium",
+            workflow,
+        )
+        self.assertEqual(workflow.count("npm ci --ignore-scripts"), 3)
 
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn("strict = true", pyproject)

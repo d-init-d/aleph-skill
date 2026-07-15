@@ -1,6 +1,6 @@
 {
   "schema_version": "2.0.0",
-  "package_version": "2.0.1",
+  "package_version": "2.1.0",
   "adapters": {
     "codex": {
       "kind": "native",
@@ -9,7 +9,7 @@
       "project_path": ".agents/skills/aleph-skill",
       "name": "codex",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"
@@ -21,7 +21,7 @@
       "project_path": ".claude/skills/aleph-skill",
       "name": "claude-code",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"
@@ -33,7 +33,7 @@
       "project_path": ".opencode/skills/aleph-skill",
       "name": "opencode",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"
@@ -45,7 +45,7 @@
       "project_path": ".gemini/skills/aleph-skill",
       "name": "gemini-cli",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"
@@ -57,7 +57,7 @@
       "project_path": ".github/skills/aleph-skill",
       "name": "github-copilot-cli",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"
@@ -69,7 +69,7 @@
       "project_path": ".agents/skills/aleph-skill",
       "name": "agents",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"
@@ -81,7 +81,7 @@
       "project_path": ".cursor/skills/aleph-skill",
       "name": "cursor",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"
@@ -93,7 +93,7 @@
       "project_path": ".github/skills/aleph-skill",
       "name": "vscode-copilot",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"
@@ -105,7 +105,7 @@
       "project_path": ".windsurf/skills/aleph-skill",
       "name": "windsurf",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"
@@ -117,7 +117,7 @@
       "project_path": ".cline/skills/aleph-skill",
       "name": "cline",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"
@@ -129,7 +129,7 @@
       "project_path": ".roo/skills/aleph-skill",
       "name": "roo-code",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"
@@ -140,7 +140,7 @@
       "project_path": ".agents/skills/aleph-skill",
       "name": "jetbrains",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"
@@ -154,7 +154,7 @@
       "core_path": ".aleph/core/aleph-skill",
       "name": "continue",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"
@@ -168,7 +168,7 @@
       "core_path": ".aleph/core/aleph-skill",
       "name": "grok-build",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"
@@ -182,7 +182,7 @@
       "core_path": ".aleph/core/aleph-skill",
       "name": "aider",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"
@@ -196,7 +196,7 @@
       "core_path": ".aleph/core/aleph-skill",
       "name": "generic-cli",
       "capability_detection": "runtime-probe-required",
-      "d_research_discovery": "aleph-preflight",
+      "d_research_discovery": "bundled-component-gateway",
       "self_elevate_forbidden": true,
       "capability_tier_cap": "unknown-until-probed",
       "receipt_assurance": "cryptographic-only-when-hmac-verified"

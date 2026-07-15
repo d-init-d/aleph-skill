@@ -266,11 +266,16 @@ ALLOWLIST_NAMES = frozenset(
         "README.md",
         "README.vi.md",
         "CHANGELOG.md",
+        "CONTRIBUTING.md",
         "LICENSE",
         "package.json",
+        "package-lock.json",
         "pyproject.toml",
         "uv.lock",
         "aleph.config.json",
+        "component-lock.json",
+        "THIRD_PARTY_NOTICES.md",
+        "research.config.example.json",
     }
 )
 ALLOWLIST_DIRS = frozenset(
@@ -284,6 +289,8 @@ ALLOWLIST_DIRS = frozenset(
         "schemas",
         "packs",
         "tests",
+        "components",
+        "docs",
         ".github",
     }
 )
@@ -302,8 +309,14 @@ ALLOWLIST_SUFFIXES = frozenset(
         ".css",
         ".js",
         ".ts",
+        ".mjs",
+        ".bib",
+        ".pdf",
     }
 )
+# Suffixes allowed only under components/ (never widen global binary allowlist).
+COMPONENT_ONLY_SUFFIXES = frozenset({".mjs", ".bib", ".pdf"})
+COMPONENT_ALLOWED_DOTFILES = frozenset({".npmignore"})
 BLOCKED_NAMES = frozenset(
     {
         ".env",
@@ -344,6 +357,13 @@ def is_distribution_path(rel_posix: str) -> bool:
     suffix = Path(name).suffix.lower()
     if suffix in BLOCKED_SUFFIXES:
         return False
+    under_component = parts[0] == "components" and len(parts) >= 2
+    # Component-only suffixes stay scoped to locked components tree.
+    if suffix in COMPONENT_ONLY_SUFFIXES and not under_component and len(parts) > 1:
+        # Still allow .mjs under top-level scripts for Aleph gateway if ever added;
+        # plan requires .mjs/.bib/.pdf only inside components/ for vendored assets.
+        if parts[0] != "scripts":
+            return False
     # top-level file
     if len(parts) == 1:
         return name in ALLOWLIST_NAMES or suffix in ALLOWLIST_SUFFIXES
@@ -351,8 +371,16 @@ def is_distribution_path(rel_posix: str) -> bool:
     if top not in ALLOWLIST_DIRS:
         return False
     # skip nested caches
-    if any(p.startswith(".") for p in parts[1:-1]):
+    component_archive = (
+        len(parts) >= 5
+        and parts[:4] == ["components", "d-research", "docs", ".archive"]
+    )
+    if any(p.startswith(".") for p in parts[1:-1]) and not component_archive:
         return False
     if name.endswith(".pyc"):
         return False
+    if under_component and name in ALLOWLIST_NAMES:
+        return True
+    if under_component and name in COMPONENT_ALLOWED_DOTFILES:
+        return True
     return suffix in ALLOWLIST_SUFFIXES or name in ALLOWLIST_NAMES

@@ -1,0 +1,129 @@
+{
+  "browser": {
+    "default": "playwright",
+    "headless": true,
+    "timeoutMs": 30000,
+    "screenshotOnBlocker": true,
+    "screenshotOnEvidence": false
+  },
+  "crawl": {
+    "maxDepth": 2,
+    "maxPagesPerDomain": 30,
+    "maxTotalPages": 100,
+    "delayMs": 1000,
+    "respectRobots": true,
+    "followExternalLinks": false
+  },
+  "research": {
+    "intake": {
+      "enabled": true,
+      "emitClassificationCard": false,
+      "multiLabel": true,
+      "askOnSafetyOrOutputAmbiguity": true,
+      "defaultToConservativeBranch": true,
+      "defaultDepth": "standard",
+      "allowCompletenessFirst": true,
+      "completenessFirstOnRiskOrAudit": true,
+      "completenessFirstTriggers": [
+        "due_diligence_or_investigation",
+        "systematic_review",
+        "long_horizon",
+        "high_stakes",
+        "user_requests_thoroughness"
+      ]
+    },
+    "requireEvidenceLedger": true,
+    "requireContradictionPass": true,
+    "preferPrimarySources": true,
+    "minSourcesForStrongClaim": 2,
+    "searchLogRequired": true,
+    "executionGates": {
+      "enabled": true,
+      "lowRecallGuard": true,
+      "noSingleBasinStop": true,
+      "finalVerificationGate": true,
+      "subagentsOptional": true,
+      "minIndependentBasinsForCompleteness": 3
+    }
+  },
+  "researchPlan": {
+    "context": {
+      "mainContextLength": null,
+      "taskBudgetRatio": 0.5,
+      "writeFindingsImmediately": true
+    },
+    "subagents": {
+      "slots": [
+        {
+          "id": "default",
+          "agent": null,
+          "contextLength": null,
+          "maxParallel": null
+        }
+      ]
+    },
+    "workspace": {
+      "baseDir": ".",
+      "nameTemplate": "research-{slug}-{date}",
+      "fallbackToCwdOnError": true
+    },
+    "approval": {
+      "requireHuman": true,
+      "allowUnattended": false
+    },
+    "finalResponse": {
+      "reportWorkspacePath": true
+    }
+  },
+  "access": {
+    "allowLoginWithUserPermission": false,
+    "allowPaywalledSources": false,
+    "allowCaptchaSolving": false,
+    "allowStealthEvasion": false,
+    "defaultMode": "read-only",
+    "_safetyNote": "allowCaptchaSolving and allowStealthEvasion MUST remain false. Values of true fail validation — captcha solving and stealth evasion are never allowed."
+  },
+  "output": {
+    "defaultReport": "research-report",
+    "includeBlockedSources": true,
+    "includeConfidence": true,
+    "includeNextSearches": true
+  },
+  "api": {
+    "defaultDelayMs": 500,
+    "maxRetries": 3,
+    "backoffMultiplier": 2,
+    "respectRateLimitHeaders": true,
+    "maxPagesPerEndpoint": 50,
+    "timeoutMs": 30000
+  },
+  "database": {
+    "queryTimeoutMs": 30000,
+    "maxResultRows": 10000,
+    "readOnly": true
+  },
+  "citation": {
+    "defaultFormat": "bibtex",
+    "enrichFromCrossRef": true,
+    "autoGenerateKeys": true,
+    "deduplicateByDOI": true
+  },
+  "monitoring": {
+    "enabled": false,
+    "defaultIntervalMinutes": 60,
+    "hashMethod": "sha256",
+    "archiveSnapshots": true
+  },
+  "processing": {
+    "autoClean": false,
+    "detectOutliers": true,
+    "deduplicateByDefault": true,
+    "dateFormatISO8601": true
+  },
+  "largeScale": {
+    "checkpointEveryN": 50,
+    "checkpointEveryMinutes": 5,
+    "maxErrorRatePercent": 20,
+    "adaptiveRateLimit": true
+  }
+}

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -15,6 +18,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from aleph import PACKAGE_VERSION  # noqa: E402
+from aleph.component_registry import locked_component_paths, verify_component_lock  # noqa: E402
 from aleph.installer import (  # noqa: E402
     MANIFEST_NAME,
     build_distribution_manifest,
@@ -22,7 +26,11 @@ from aleph.installer import (  # noqa: E402
     verify_distribution_manifest,
 )
 from aleph.io import write_json_atomic  # noqa: E402
-from build_release_assets import ARCHIVE_ROOT, build_release_assets  # noqa: E402
+from build_release_assets import (  # noqa: E402
+    ARCHIVE_ROOT,
+    _verify_component_distribution_coverage,
+    build_release_assets,
+)
 from release_gate import _static_contract  # noqa: E402
 
 
@@ -61,6 +69,50 @@ class ReleasePackagingV201Tests(unittest.TestCase):
             self.assertTrue(plan["ok"], plan["issues"])
             self.assertNotIn(f"{ARCHIVE_ROOT}/.gitignore", expected)
 
+    def test_release_extract_runs_component_preflight_and_package_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            temporary = Path(raw)
+            assets = build_release_assets(ROOT, temporary / "assets")
+            with zipfile.ZipFile(Path(str(assets["archive"]))) as bundle:
+                bundle.extractall(temporary / "extracted")
+            extracted = temporary / "extracted" / ARCHIVE_ROOT
+
+            component = verify_component_lock(skill_root=extracted)
+            self.assertTrue(component.ok, component.message)
+
+            environment = os.environ.copy()
+            environment["PYTHONDONTWRITEBYTECODE"] = "1"
+            preflight = subprocess.run(
+                [sys.executable, str(extracted / "scripts" / "preflight.py"), "--json"],
+                cwd=extracted,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(preflight.returncode, 0, preflight.stdout + preflight.stderr)
+            self.assertEqual(json.loads(preflight.stdout)["status"], "pass")
+
+            package_check = subprocess.run(
+                ["node", str(extracted / "components" / "d-research" / "scripts" / "package_manifest_check.mjs")],
+                cwd=extracted / "components" / "d-research",
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(package_check.returncode, 0, package_check.stdout + package_check.stderr)
+
+            validation = subprocess.run(
+                [sys.executable, str(extracted / "scripts" / "validate_skill_package.py"), str(extracted)],
+                cwd=extracted,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(validation.returncode, 0, validation.stdout + validation.stderr)
+
     def test_repository_distribution_contains_every_self_test_input(self) -> None:
         self.assertTrue(_static_contract(ROOT)["ok"])
         manifest = build_distribution_manifest(ROOT)
@@ -70,9 +122,39 @@ class ReleasePackagingV201Tests(unittest.TestCase):
             ".github/workflows/ci.yml",
             ".github/workflows/verify.yml",
             ".github/workflows/release.yml",
-            ".github/release-notes/v2.0.1.md",
+            f".github/release-notes/v{PACKAGE_VERSION}.md",
+            "component-lock.json",
+            "THIRD_PARTY_NOTICES.md",
+            "components/d-research/SKILL.md",
         }
         self.assertFalse(required - distributed, sorted(required - distributed))
+
+    def test_release_refuses_a_locked_component_file_missing_from_manifest(self) -> None:
+        manifest = build_distribution_manifest(ROOT)
+        distributed = {str(entry["path"]) for entry in manifest["files"]}
+        missing = min(locked_component_paths(ROOT))
+        distributed.remove(missing)
+        with self.assertRaisesRegex(
+            ValueError,
+            "component lock contains files absent from the distribution manifest",
+        ):
+            _verify_component_distribution_coverage(ROOT, distributed)
+
+    def test_release_refuses_unlocked_component_bytecode_even_when_manifest_is_exact(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            temporary = Path(raw)
+            source = temporary / "source"
+            shutil.copytree(ROOT / "components", source / "components")
+            shutil.copy2(ROOT / "component-lock.json", source / "component-lock.json")
+            cache = source / "components" / "d-research" / "scripts" / "__pycache__"
+            cache.mkdir()
+            (cache / "rogue.pyc").write_bytes(b"unlocked")
+            write_json_atomic(source / MANIFEST_NAME, build_distribution_manifest(source))
+            with self.assertRaisesRegex(
+                ValueError,
+                "COMPONENT_EXTRA_FILE",
+            ):
+                build_release_assets(source, temporary / "assets")
 
     def test_tampered_source_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -194,13 +276,13 @@ class ReleasePackagingV201Tests(unittest.TestCase):
             ROOT / ".github" / "release-notes" / f"v{PACKAGE_VERSION}.md"
         ).read_text(encoding="utf-8")
         self.assertIn("sha256sum -c SHA256SUMS.txt", notes)
-        self.assertIn("gh attestation verify aleph-skill-v2.0.1.zip", notes)
+        self.assertIn(f"gh attestation verify aleph-skill-v{PACKAGE_VERSION}.zip", notes)
         self.assertIn("--repo d-init-d/aleph-skill", notes)
         self.assertIn(
             "--signer-workflow d-init-d/aleph-skill/.github/workflows/release.yml",
             notes,
         )
-        self.assertIn("--source-ref refs/tags/v2.0.1", notes)
+        self.assertIn(f"--source-ref refs/tags/v{PACKAGE_VERSION}", notes)
         self.assertIn("GitHub's attestation service", notes)
 
 

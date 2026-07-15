@@ -1,17 +1,16 @@
-# D Research 3.x integration
+# D Research integration (bundled component)
 
-Aleph prefers D Research for lawful public evidence collection. Integration is optional, but verified research requires exact D Research identity and a compatible major. Absence is not permission to fabricate a ledger or import receipt.
+Aleph 2.1+ ships D Research as a locked internal component. Hosts load only `aleph-skill`. Nested `components/d-research/` is an internal resource, not a second installable skill.
 
-## Discovery
+## Discovery order (2.1)
 
-Check in this order:
+1. Verified bundled component `aleph-component://d-research` (default; always preferred).
+2. Explicit external path only when both `--external-d-research` and `--allow-external` are supplied (dev/legacy).
+3. Conventional external roots only in explicit external mode when the bundle is absent.
 
-1. explicit `--d-research <path>`;
-2. `D_RESEARCH_SKILL`;
-3. a host capability file;
-4. conventional user skill locations for Codex, Agent Skills, Claude Code, OpenCode, and Grok.
+`D_RESEARCH_SKILL` **must not** silently override the bundled component. Preflight records refused env overrides under `tried[]`.
 
-Accept only a directory whose `SKILL.md` frontmatter name is exactly `d-research`, whose package identity is recognized, whose major is `3`, and which contains `scripts/evidence_ledger.py`. An explicit incompatible candidate is a hard preflight failure. Do not silently select another installation or hardcode a developer path.
+Accept only identity-compatible D Research 3.x (`SKILL.md` name `d-research`, recognized package name, major `3`, `scripts/evidence_ledger.py` present). Bundled installs are verified via `component-lock.json` (per-file SHA-256, tree digest, entrypoints). One-byte tamper, missing file, or extra file is a hard fail (`COMPONENT_TAMPER` / `COMPONENT_FILE_MISSING` / `COMPONENT_EXTRA_FILE`).
 
 Record discovery/import state as a closed contract:
 
@@ -20,47 +19,78 @@ Record discovery/import state as a closed contract:
 | `unknown` | Draft only; `invoked: false` and research quality `unknown` or `limited`. |
 | `unavailable` | `invoked: false`, no import receipt, and `research_quality: limited`. |
 | `incompatible` | `invoked: false`; hard failure rather than silent fallback or final output. |
-| `available` | Discovered package `path`, `package_major: 3`, and the truthful invocation flag. |
-| `imported` / `verified` | `invoked: true`, compatible package path/major, `ledger_ref`, and `artifact_paths.research_import_receipt`. |
+| `available` | Bundled URI or explicit external path, `package_major: 3`, truthful invocation flag. |
+| `imported` / `verified` | `invoked: true`, portable `component_binding` on the import receipt, `ledger_ref`, and `artifact_paths.research_import_receipt`. |
 
-Never infer one state from another or retain a research import receipt for `unknown`, `unavailable`, `incompatible`, or merely `available` status.
+For bundled runs store `execution.d_research.path` as `aleph-component://d-research`. Workspace `schema_version` and `formula_version` remain `2.0.0`.
+
+## Gateway
+
+All research subprocesses use `scripts/research_gateway.py`:
+
+- allowlisted locked scripts only;
+- `shell=False`;
+- absolute locked script paths with the child working directory set to an external user workspace;
+- filtered environment (`D_RESEARCH_*` allowlist; HMAC only when needed);
+- timeouts and output limits;
+- JSON result with `component_binding`, capabilities, selected route, fallback chain, blockers, stdout/stderr digests.
+
+Use `research:manifest` as the machine-readable route inventory. Stable routes cover ledger, plan, browser, API/search, citations, archives, Wikidata, social snapshots, PDF/OCR, translation, semantic retrieval, multi-format extraction, data cleanup, scoring, reports, quality evaluation, acceptance, and package checks. `scripts/run_python.mjs` is deliberately not dispatchable.
+
+## Capability ladder
+
+1. Playwright + Node + browser binary
+2. Host browser (runtime-declared only)
+3. Fetch / read URL
+4. Web search (snippet-only; never strong evidence alone)
+5. Structured blocker — never fabricate claims or ledgers
+
+Do not auto-install dependencies or browser binaries.
 
 ## Limited host-native fallback
 
-When discovery returns `unavailable`, ask once whether the user wants to install D Research. If installation is declined or unavailable, continue only when the host exposes lawful research tools such as a browser, search, a source connector, or user-provided documents. Otherwise publish a partial blocker instead of inventing evidence. Record `execution.d_research.status` as unavailable, `invoked` as false, `execution.research_quality` as `limited`, and preserve the detected host capabilities and fallback reason in the capability snapshot or research notes. A discovered but incompatible explicit candidate is a failure, not a fallback trigger.
+When the bundle cannot run a needed capability, continue only with host-lawful tools or publish a partial blocker. Fallback does not emit a D Research CSV, HMAC sidecar, or import receipt, and cannot support `verified` / `calibrated` assurance.
 
 Execute the same decomposed questions, source fanout, contradiction searches, and saturation checks with those host-native tools. For every material atomic claim, write the standard `evidence-map.csv` fields: stable evidence ID, claim, opened URL or workspace-relative source path, source type/tier, publication and retrieval dates, access method/status, quote or measured value, evidence confidence, contradiction status, and provenance notes. Preserve allowed raw captures or structured research notes under the simulation workspace and hash them when the artifact contract requires it. Search snippets remain discovery aids and never become strong evidence by themselves.
 
-The fallback does not emit a D Research CSV, HMAC sidecar, preserved D Research ledger, or research import receipt, and it must not populate `artifact_paths.research_import_receipt`. It can support an honest `limited` result only; it cannot support `verified` or `calibrated` assurance. Public-role research still runs in a dedicated research execution, and neither its tools nor its evidence are exposed to the sealed roleplay execution.
+The fallback does not emit a D Research CSV, HMAC sidecar, preserved D Research ledger, or research import receipt, and it must not populate `artifact_paths.research_import_receipt`. It can support an honest `limited` result only; it cannot support `verified` or `calibrated` assurance. Public-role research still runs in a dedicated research execution, and neither its tools nor its evidence are exposed to the sealed roleplay execution. The same seal applies to host-native fallback research.
 
 ## Ledger contract
 
-Accept the exact ordered D Research CSV headers:
+Accept exact ordered D Research CSV headers: legacy 14, social 19, provenance 22, record-type 23. Verify sidecar `d-research-skill/hmac-sha256/v1 <digest>` with `D_RESEARCH_LEDGER_KEY`. Canonical CSV of Aleph must stay byte-equivalent with the pinned helper; drift is `D_RESEARCH_CANONICAL_DRIFT` hard fail.
 
-- legacy 14 columns;
-- social 19 columns;
-- provenance 22 columns;
-- record-type 23 columns.
+Import only `record_type=claim` as evidence; keep `process` and `blocker` in the audit stream.
 
-Verify the sidecar format `d-research-skill/hmac-sha256/v1 <digest>` using `D_RESEARCH_LEDGER_KEY`. The digest covers D Research canonical CSV bytes: ordered headers, trimmed values, RFC 4180 quoting, UTF-8, and LF line endings. If a sidecar exists, a missing key, malformed signature, or mismatch is a hard failure.
+## Portable receipt binding
 
-Preserve the raw ledger bytes before transformation, the verified sidecar, raw SHA-256, canonical SHA-256, every source field, and a hash of every raw row. Import only `record_type=claim` as evidence; keep `process` and `blocker` rows in the audit stream. The importer refuses any source, evidence, raw-preservation, receipt, or sidecar paths that alias one another.
+Import receipts keep `schema_version: "2.0.0"` and `receipt_type: "d-research-import"`, plus:
 
-Every successful import emits a separate import-receipt JSON artifact that binds the discovered D Research package identity, mapping contract, raw and canonical ledger digests, evidence-map digest, preserved-ledger reference, sidecar reference, and HMAC-verification result. Store that artifact under `artifact_paths.research_import_receipt` in the simulation manifest.
+```json
+{
+  "component_binding": {
+    "source_kind": "bundled",
+    "component_uri": "aleph-component://d-research",
+    "component_id": "d-research",
+    "package_name": "d-research-skill-tools",
+    "package_version": "<pinned>",
+    "package_major": 3,
+    "upstream_tag": "<tag>",
+    "upstream_tag_object": "<40-hex>",
+    "upstream_commit": "<40-hex>",
+    "component_lock_sha256": "sha256:<digest>",
+    "component_tree_sha256": "sha256:<digest>",
+    "entrypoint": "scripts/evidence_ledger.py",
+    "entrypoint_sha256": "sha256:<digest>"
+  }
+}
+```
 
-`verified` assurance does not trust `d_research.status` or arbitrary ledger files. During quality evaluation Aleph reloads the import receipt, verifies its own hash and all referenced digests, rediscovers the compatible D Research package, and repeats the ledger import contract with `D_RESEARCH_LEDGER_KEY`. A missing key, missing receipt, self-asserted status, changed artifact, or unverifiable sidecar can never support `verified` output.
+Bundled receipts must not embed absolute component install paths. Quality re-verifies lock, tree, and helper digests from the current Aleph root; it does not trust self-asserted `status: verified`.
 
-| D Research | Aleph evidence map |
-|---|---|
-| `claim_id` | stable `evidence_id` |
-| `claim` | atomic claim |
-| `source_url` | source |
-| `source_type` | source type and conservative tier |
-| `date_published` | date |
-| `date_accessed` | retrieved_at |
-| `access_method` | access method and retrieval status |
-| `evidence`, `quote_or_anchor` | quote_or_value |
-| `contradiction` | contradiction_status |
-| `confidence` | preserved label plus explicit evidence-confidence mapping; never event probability |
+## Roleplay isolation
 
-Blocked/process rows never support causal claims. Search snippets remain provisional. D Research only feeds the Human Research track; the Roleplay track has no browser or ledger access. The same seal applies to host-native fallback research.
+Roleplay never calls the research gateway. Aleph emits and validates only the sealed packet/output/receipt chain; the host must create a distinct execution with browser, network, shell, filesystem, and research tools denied. Environment filtering is defense in depth, not an operating-system sandbox. A host that cannot attest and enforce the deny policies must stop or remain below verified assurance.
+
+## External compatibility
+
+External D Research requires both explicit CLI flags and always remains compatibility-limited at runtime. Workspace migration rewrites an old absolute path only when every file in the external snapshot is byte-equivalent to the component lock; a helper-only digest match is insufficient. Incompatible explicit candidates hard-fail without silent fallback.

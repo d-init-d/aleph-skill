@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "profile_id": "aider",
-  "package_version": "2.0.1",
+  "package_version": "2.1.0",
   "executable": "aider",
   "shell": false,
   "prompt_transport": "stdin",

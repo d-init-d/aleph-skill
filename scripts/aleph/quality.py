@@ -79,22 +79,50 @@ def _d_research_verified(
     if receipt_hash != canonical_hash(receipt_body):
         return False
     identity = receipt.get("d_research_identity")
+    binding = receipt.get("component_binding")
     if not isinstance(identity, dict) or identity.get("identity_verified") is not True:
         return False
-    identity_path = identity.get("path")
-    if not isinstance(identity_path, str):
+    # Prefer portable component binding; never re-discover via stale absolute path
+    # for bundled components.
+    from .component_registry import (
+        COMPONENT_URI,
+        ComponentError,
+        resolve_component,
+        skill_root_from,
+        verify_component_lock,
+    )
+
+    skill_root = skill_root_from()
+    verification = verify_component_lock(skill_root=skill_root)
+    if not verification.ok:
         return False
-    discovery = discover_d_research(explicit=identity_path)
-    helper = Path(identity_path) / "scripts" / "evidence_ledger.py"
+    try:
+        resolution = resolve_component(COMPONENT_URI, skill_root=skill_root, require_verified=True)
+    except ComponentError:
+        return False
+    helper = Path(resolution.root) / "scripts" / "evidence_ledger.py"
+    discovery = discover_d_research(skill_root=skill_root)
     if discovery.get("status") != "available" or not helper.is_file():
         return False
     try:
+        helper_digest = sha256_file(helper)
+        # A bundled receipt is a provenance claim, not merely a helper hash.
+        # Require every immutable identity and content field emitted by the
+        # component resolver. Missing fields (including tag/commit provenance)
+        # must fail closed; an external legacy receipt can therefore never be
+        # promoted to ``verified`` by this path.
+        expected_binding = resolution.binding()
+        binding_ok = isinstance(binding, dict) and all(
+            binding.get(key) == value for key, value in expected_binding.items()
+        )
         identity_matches = bool(
-            identity.get("name") == discovery.get("name")
+            binding_ok
+            and identity.get("name") == discovery.get("name")
             and identity.get("package_name") == discovery.get("package_name")
-            and identity.get("package_version") == discovery.get("package_version")
+            and identity.get("package_version") == discovery.get("package_version") == resolution.package_version
             and identity.get("package_major") == discovery.get("package_major") == 3
-            and identity.get("ledger_helper_sha256") == sha256_file(helper)
+            and identity.get("path") == COMPONENT_URI
+            and identity.get("ledger_helper_sha256") == helper_digest
         )
     except OSError:
         return False

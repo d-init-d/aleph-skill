@@ -17,6 +17,73 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --prefix components/d-research
+
+  component-provenance:
+    needs: lockfiles
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      UPSTREAM_REPOSITORY: https://github.com/d-init-d/d-research-skill
+      UPSTREAM_TAG: v3.2.0
+      UPSTREAM_TAG_OBJECT: 091997d33825a29ed6f30b089c33de9acf897ae3
+      UPSTREAM_COMMIT: 8156b460b358636e69d66c10c16800045d258446
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+      - name: Verify the bundled snapshot against the pinned upstream tag
+        shell: bash
+        run: |
+          repo="$RUNNER_TEMP/d-research-upstream.git"
+          test ! -e "$repo"
+          git init --bare --quiet "$repo"
+          git -C "$repo" remote add origin "$UPSTREAM_REPOSITORY"
+          git -C "$repo" fetch --quiet --force --no-tags --depth=1 origin \
+            "+refs/tags/$UPSTREAM_TAG:refs/tags/$UPSTREAM_TAG"
+          tag_ref="refs/tags/$UPSTREAM_TAG"
+          test "$(git -C "$repo" cat-file -t "$tag_ref")" = tag
+          test "$(git -C "$repo" rev-parse "$tag_ref")" = "$UPSTREAM_TAG_OBJECT"
+          test "$(git -C "$repo" rev-parse "$tag_ref^{}")" = "$UPSTREAM_COMMIT"
+          python -B scripts/lock_bundled_component.py \
+            --upstream-repo "$repo" > "$RUNNER_TEMP/component-provenance.json"
+          python - "$RUNNER_TEMP/component-provenance.json" <<'PY'
+          import json
+          import os
+          import sys
+
+          payload = json.load(open(sys.argv[1], encoding="utf-8"))
+          lock = json.load(open("component-lock.json", encoding="utf-8"))
+          entry = lock["components"]["d-research"]
+          expected_lock = {
+              "source_repository": os.environ["UPSTREAM_REPOSITORY"],
+              "source_tag": os.environ["UPSTREAM_TAG"],
+              "upstream_tag_object": os.environ["UPSTREAM_TAG_OBJECT"],
+              "upstream_commit": os.environ["UPSTREAM_COMMIT"],
+          }
+          for field, value in expected_lock.items():
+              if entry.get(field) != value:
+                  raise SystemExit(
+                      f"component lock {field} mismatch: "
+                      f"expected {value}, got {entry.get(field)!r}"
+                  )
+          if payload.get("status") != "pass":
+              raise SystemExit(f"component provenance failed: {payload!r}")
+          upstream = payload.get("upstream_verification")
+          if not isinstance(upstream, dict):
+              raise SystemExit("component provenance omitted upstream_verification")
+          expected = {
+              "tag_object": os.environ["UPSTREAM_TAG_OBJECT"],
+              "commit": os.environ["UPSTREAM_COMMIT"],
+          }
+          for field, value in expected.items():
+              if upstream.get(field) != value:
+                  raise SystemExit(
+                      f"component provenance {field} mismatch: "
+                      f"expected {value}, got {upstream.get(field)!r}"
+                  )
+          PY
 
   portable:
     needs: lockfiles
@@ -32,6 +99,9 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: "0.11.18"
@@ -39,6 +109,90 @@ jobs:
           cache-dependency-glob: uv.lock
       - run: uv sync --locked --python ${{ matrix.python-version }}
       - run: uv run --no-sync python scripts/release_gate.py
+
+  component-no-browser:
+    needs: lockfiles
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18, 20, 22]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Verify locked component and package manifest
+        run: |
+          python -B scripts/lock_bundled_component.py
+          node components/d-research/scripts/package_manifest_check.mjs
+      - name: Require an honest no-browser self-test status
+        shell: bash
+        run: |
+          python -B scripts/research_gateway.py research:self-test --json > "$RUNNER_TEMP/research-self-test.json"
+          python - "$RUNNER_TEMP/research-self-test.json" <<'PY'
+          import json
+          import sys
+
+          payload = json.load(open(sys.argv[1], encoding="utf-8"))
+          if payload.get("status") not in {"delegated", "degraded"}:
+              raise SystemExit(f"no-browser self-test claimed {payload.get('status')!r}")
+          delegated = payload.get("result", {}).get("delegated", [])
+          if not any(item.get("code") == "CAPABILITY_BROWSER" for item in delegated):
+              raise SystemExit("no-browser self-test omitted CAPABILITY_BROWSER delegation")
+          PY
+      - name: Require delegated browser cases in no-browser acceptance
+        shell: bash
+        run: |
+          python -B scripts/research_gateway.py research:acceptance --json > "$RUNNER_TEMP/research-acceptance.json"
+          python - "$RUNNER_TEMP/research-acceptance.json" <<'PY'
+          import json
+          import sys
+
+          payload = json.load(open(sys.argv[1], encoding="utf-8"))
+          if payload.get("status") not in {"delegated", "degraded"}:
+              raise SystemExit(f"no-browser acceptance claimed {payload.get('status')!r}")
+          reconciliation = payload.get("acceptance_reconciliation", {})
+          if reconciliation.get("browser_cases_delegated", 0) < 1:
+              raise SystemExit("no-browser acceptance did not delegate browser cases")
+          PY
+
+  browser-smoke:
+    needs: lockfiles
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Install the pinned optional browser capability outside the component
+        shell: bash
+        run: |
+          npm ci --ignore-scripts --prefix components/d-research
+          mv components/d-research/node_modules node_modules
+          node node_modules/playwright/cli.js install --with-deps chromium
+      - name: Verify component integrity after dependency staging
+        run: python -B scripts/lock_bundled_component.py
+      - name: Run real Chromium smoke through the Aleph gateway
+        shell: bash
+        run: |
+          python -B scripts/research_gateway.py research:browser-smoke --timeout 600 --json > "$RUNNER_TEMP/browser-smoke.json"
+          python - "$RUNNER_TEMP/browser-smoke.json" <<'PY'
+          import json
+          import sys
+
+          payload = json.load(open(sys.argv[1], encoding="utf-8"))
+          if payload.get("status") != "ok":
+              raise SystemExit(f"browser smoke did not run: {payload.get('status')!r}")
+          PY
 
   quality:
     needs: lockfiles
@@ -49,6 +203,9 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.13"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: "0.11.18"

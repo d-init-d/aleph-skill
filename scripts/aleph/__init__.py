@@ -4,8 +4,8 @@ from __future__ import annotations
 
 SCHEMA_VERSION = "2.0.0"
 LEGACY_SCHEMA_VERSION = "1.2.0"
-PACKAGE_VERSION = "2.0.1"
-VALIDATOR_VERSION = "2.0.1"
+PACKAGE_VERSION = "2.1.0"
+VALIDATOR_VERSION = "2.1.0"
 FORMULA_VERSION = "2.0.0"
 
 ASSURANCE_TIERS = ("experimental", "limited", "verified", "calibrated")

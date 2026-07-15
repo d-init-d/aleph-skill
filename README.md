@@ -46,7 +46,7 @@ This repository is a portable Agent Skill package, not a hosted forecasting serv
 
 An agent reads `SKILL.md` as the entry point, then loads only the reference files and templates needed for the scenario. The local helpers initialize and migrate workspaces, import signed research, compile/run/replay models, execute sensitivity and hindcast checks, validate domain packs and artifacts, render reports, finalize receipts, and verify the distributable package. They support the workflow; they do not replace the agent’s reasoning.
 
-For the strongest evidence layer, pair Aleph Skill with [D Research](https://github.com/d-init-d/d-research-skill), a companion skill for browser-first research and auditable evidence workflows. Aleph remains the causal simulation layer; D Research is recommended rather than bundled, so the skill stays portable. If D Research is unavailable, Aleph can build a provenance-rich evidence map with the host's lawful research tools, but that fallback is capped at `limited` assurance and never fabricates a signed D Research ledger or import receipt.
+From **2.1.0**, [D Research](https://github.com/d-init-d/d-research-skill) is **bundled** as a locked internal component (`aleph-component://d-research` under `components/d-research/`). Hosts install only `aleph-skill`; nested D Research is not a second skill. Research runs through `scripts/research_gateway.py` with a browser → host-browser → fetch → search → blocker capability ladder. Optional Node/Playwright/browser binaries are not shipped and are not auto-installed. If capabilities are missing, Aleph builds a provenance-rich evidence map with host tools or emits structured blockers, caps assurance at `limited`, and never fabricates a signed ledger. See `THIRD_PARTY_NOTICES.md` and `component-lock.json`.
 
 External-CLI profiles describe version probes, bootstrap instructions, capability boundaries, isolation requirements, and receipt expectations. Installing one does not create subagents, tool isolation, or orchestration by itself; the selected host or wrapper must implement and attest those controls.
 
@@ -84,8 +84,11 @@ aleph-skill/
   README.md                 # public overview
   README.vi.md              # Vietnamese overview
   LICENSE                   # CC BY-NC 4.0
+  THIRD_PARTY_NOTICES.md    # bundled-component attribution
   agents/openai.yaml        # Codex UI metadata
   adapters/                 # runtime-specific notes
+  component-lock.json       # D Research identity, recipe, and content lock
+  components/d-research/    # locked internal D Research component
   examples/                 # forward-test prompts and example artifacts
   references/               # workflow, safety, causal, reporting, and research guides
   scripts/                  # stdlib-first validation and rendering helpers
@@ -147,7 +150,7 @@ Supported install locations:
 
 ## Verification
 
-When upgrading an existing 2.0.0 workspace, keep an untouched backup and run draft validation first. v2.0.1 keeps `schema_version: 2.0.0`, but its stricter likelihood, D Research, privacy, and sealed-roleplay contracts can require report, packet/receipt, and numerical-artifact regeneration before final validation succeeds. Do not use the 1.x schema migrator or hand-edit hashes for this repair pass.
+When upgrading an existing 2.0.0 workspace, keep an untouched backup and run draft validation first. Aleph 2.1.0 keeps `schema_version: 2.0.0`, but its stricter component binding, likelihood, privacy, and sealed-roleplay contracts can require report, packet/receipt, and numerical-artifact regeneration before final validation succeeds. For a workspace that still stores an absolute D Research path, run `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, inspect the byte-equivalence report, then repeat without `--check`. Do not use the 1.x schema migrator or hand-edit hashes.
 
 Run the local release gate:
 
@@ -178,7 +181,7 @@ python "$env:ALEPH_SKILL_ROOT\scripts\evaluate_simulation_quality.py" --workspac
 ```text
 Use $aleph-skill to simulate an oil price +40% shock, with both the observation cutoff and shock start set to 2026-06-01.
 Focus on inflation, central-bank reaction, growth, shipping, and emerging markets over 24 months.
-Use compatible D Research where available, otherwise use the limited host-native evidence fallback; keep sourced actor dossiers separate from simulated decisions,
+Use the bundled D Research component through Aleph's gateway, falling back to limited host-native evidence only when the gateway reports a missing capability; keep sourced actor dossiers separate from simulated decisions,
 and produce at least three branches with relative weights, indicators, contradictions, and uncertainty warnings.
 ```
 

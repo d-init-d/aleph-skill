@@ -14,6 +14,12 @@ from pathlib import Path
 from typing import Any
 
 from aleph import PACKAGE_VERSION
+from aleph.component_registry import (
+    COMPONENT_REL,
+    LOCK_NAME,
+    locked_component_paths,
+    verify_component_lock,
+)
 from aleph.installer import MANIFEST_NAME, verify_distribution_manifest
 from aleph.io import ResourceLimitError
 from aleph.paths import is_distribution_path
@@ -36,6 +42,37 @@ def _zip_info(name: str) -> zipfile.ZipInfo:
     info.compress_type = zipfile.ZIP_STORED
     info.external_attr = 0o100644 << 16
     return info
+
+
+def _verify_component_distribution_coverage(root: Path, distributed: set[str]) -> None:
+    """Require every locked component byte to be present in the release manifest."""
+    lock_present = (root / LOCK_NAME).is_file()
+    component_present = (root / COMPONENT_REL).is_dir()
+    if not lock_present and not component_present:
+        return
+    if not lock_present or not component_present:
+        raise ValueError("bundled component and component-lock.json must be packaged together")
+
+    component = verify_component_lock(skill_root=root)
+    if not component.ok:
+        code = component.error_code or "COMPONENT_LOCK_INVALID"
+        message = component.message or "component verification failed"
+        raise ValueError(f"bundled component verification failed: {code}: {message}")
+    locked = locked_component_paths(root)
+    prefix = COMPONENT_REL.as_posix() + "/"
+    distributed_component = {path for path in distributed if path.startswith(prefix)}
+    missing = sorted(locked - distributed_component)
+    if missing:
+        raise ValueError(
+            "component lock contains files absent from the distribution manifest: "
+            + ", ".join(missing[:10])
+        )
+    extra = sorted(distributed_component - locked)
+    if extra:
+        raise ValueError(
+            "distribution manifest contains unlocked component files: "
+            + ", ".join(extra[:10])
+        )
 
 
 def _verified_files(root: Path) -> tuple[list[str], dict[str, tuple[int, str]], dict[str, Any]]:
@@ -67,6 +104,7 @@ def _verified_files(root: Path) -> tuple[list[str], dict[str, tuple[int, str]], 
     relative_files = sorted(str(item) for item in files)
     if set(relative_files) != set(expected):
         raise ValueError("verified distribution entries do not match the file list")
+    _verify_component_distribution_coverage(root, set(relative_files))
     return relative_files, expected, verification
 
 

@@ -101,21 +101,39 @@ def main() -> None:
         hmac_key=key,
         package_major=args.major,
     )
-    discovery = discover_d_research(explicit=args.d_research) if args.d_research else discover_d_research()
+    from aleph.component_registry import COMPONENT_URI
+
+    allow_external = bool(args.d_research) and str(args.d_research).strip() != COMPONENT_URI
+    discovery = (
+        discover_d_research(explicit=args.d_research, allow_external=allow_external, require_bundled=not allow_external)
+        if args.d_research
+        else discover_d_research()
+    )
     if args.d_research and discovery.get("status") != "available":
         result.setdefault("issues", []).extend(discovery.get("issues") or [])
         result["ok"] = False
     identity: dict[str, object] | None = None
-    discovered_path = discovery.get("path")
+    component_binding: dict[str, object] | None = None
+    binding = discovery.get("component_binding")
+    if isinstance(binding, dict):
+        component_binding = binding
+    discovered_path = discovery.get("resolved_path") or discovery.get("path")
     if discovery.get("status") == "available" and isinstance(discovered_path, str):
-        helper = Path(discovered_path) / "scripts" / "evidence_ledger.py"
-        if helper.is_file():
+        # Portable URI for bundled; absolute only for external compatibility.
+        if discovery.get("source_kind") == "bundled" or discovered_path == COMPONENT_URI:
+            root_fs = discovery.get("resolved_path")
+            helper = Path(str(root_fs)) / "scripts" / "evidence_ledger.py" if root_fs else None
+            identity_path: object = COMPONENT_URI
+        else:
+            helper = Path(discovered_path) / "scripts" / "evidence_ledger.py"
+            identity_path = str(Path(discovered_path).resolve())
+        if helper is not None and helper.is_file():
             identity = {
                 "name": discovery.get("name"),
                 "package_name": discovery.get("package_name"),
                 "package_version": discovery.get("package_version"),
                 "package_major": discovery.get("package_major"),
-                "path": str(Path(discovered_path).resolve()),
+                "path": identity_path,
                 "ledger_helper_sha256": hashlib.sha256(helper.read_bytes()).hexdigest(),
                 "identity_verified": discovery.get("identity_verified") is True,
             }
@@ -146,6 +164,7 @@ def main() -> None:
             ),
             "hmac_verified": result.get("hmac_verified") is True,
             "d_research_identity": identity,
+            "component_binding": component_binding,
         }
         receipt["receipt_hash"] = canonical_hash(receipt)
         write_json_atomic(receipt_out, receipt)

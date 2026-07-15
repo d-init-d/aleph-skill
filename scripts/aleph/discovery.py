@@ -1,4 +1,4 @@
-"""Strict D Research discovery without machine-specific paths."""
+"""Strict D Research discovery — bundled component first, external opt-in only."""
 
 from __future__ import annotations
 
@@ -87,14 +87,140 @@ def discover_d_research(
     explicit: str | Path | None = None,
     capability_file: Path | None = None,
     conventional_roots: list[Path] | None = None,
+    skill_root: Path | None = None,
+    allow_external: bool = False,
+    require_bundled: bool = True,
+    env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Discover an exact, compatible D Research 3.x installation.
+    """Discover D Research with bundled component preferred by default.
 
-    An explicit/env/capability candidate is authoritative: if it exists but is
-    incompatible, discovery returns ``incompatible`` instead of silently using
-    another installation.  Conventional candidates are searched until a valid
-    3.x identity is found.
+    ``D_RESEARCH_SKILL`` never silently overrides a verified bundled component.
+    External paths require ``allow_external=True`` (CLI ``--allow-external``
+    together with ``--external-d-research``).
+    When ``explicit`` is a portable URI ``aleph-component://d-research``, resolve
+    the bundle. When ``explicit`` is a filesystem path and ``allow_external`` is
+    false, the bundled component still wins if present; an explicit incompatible
+    external with ``allow_external`` hard-fails.
     """
+    # Lazy import avoids circular dependency at module load.
+    from .component_registry import (
+        COMPONENT_URI,
+        skill_root_from,
+    )
+    from .component_registry import (
+        discover_d_research as _bundled_discover,
+    )
+
+    environ = dict(os.environ) if env is None else dict(env)
+    root = skill_root if skill_root is not None else skill_root_from(env=environ)
+
+    # Portable URI always means bundled resolve.
+    if explicit is not None and str(explicit).strip() == COMPONENT_URI:
+        return _bundled_discover(
+            skill_root=root,
+            explicit=None,
+            allow_external=False,
+            require_bundled=True,
+            env=environ,
+        )
+
+    # Explicit filesystem path is authoritative for identity: incompatible hard-fails
+    # even when a bundle exists (no silent fallback). Compatible explicit paths only
+    # replace the bundle when allow_external is set.
+    if explicit is not None:
+        report = _candidate_report("explicit", Path(explicit).expanduser())
+        if not report.get("ok"):
+            return {
+                "status": "incompatible",
+                "path": report.get("resolved_path") or str(explicit),
+                "source": "explicit",
+                "source_kind": "external",
+                "package_major": report.get("package_major"),
+                "package_version": report.get("package_version"),
+                "compatible": False,
+                "identity_verified": bool(report.get("identity_ok")),
+                "supported_majors": [3],
+                "tried": [report],
+                "assurance_cap": "experimental",
+                "error_code": "COMPONENT_IDENTITY_MISMATCH",
+                "issues": [
+                    issue(
+                        "D_RESEARCH",
+                        message=report.get("reason", "configured D Research is unavailable or incompatible"),
+                    ).to_dict()
+                ],
+            }
+        if not allow_external:
+            bundled = _bundled_discover(
+                skill_root=root,
+                explicit=None,
+                allow_external=False,
+                require_bundled=True,
+                env=environ,
+            )
+            tried = list(bundled.get("tried") or [])
+            tried.append(
+                {
+                    **report,
+                    "ok": False,
+                    "compatible": True,
+                    "reason": "COMPONENT_OVERRIDE_REFUSED: use allow_external for external path",
+                }
+            )
+            bundled["tried"] = tried
+            return bundled
+        if allow_external:
+            return _bundled_discover(
+                skill_root=root,
+                explicit=explicit,
+                allow_external=True,
+                require_bundled=require_bundled,
+                capability_file=capability_file,
+                conventional_roots=conventional_roots,
+                env=environ,
+            )
+
+    # Default: bundled first; env never overrides.
+    if require_bundled or not allow_external:
+        result = _bundled_discover(
+            skill_root=root,
+            explicit=None,
+            allow_external=False,
+            require_bundled=True,
+            capability_file=capability_file,
+            conventional_roots=conventional_roots,
+            env=environ,
+        )
+        if result.get("status") == "available" or not allow_external:
+            return result
+        return _bundled_discover(
+            skill_root=root,
+            explicit=None,
+            allow_external=True,
+            require_bundled=False,
+            capability_file=capability_file,
+            conventional_roots=conventional_roots,
+            env=environ,
+        )
+
+    return _bundled_discover(
+        skill_root=root,
+        explicit=None,
+        allow_external=True,
+        require_bundled=False,
+        capability_file=capability_file,
+        conventional_roots=conventional_roots,
+        env=environ,
+    )
+
+
+def legacy_external_discover(
+    *,
+    explicit: str | Path | None = None,
+    capability_file: Path | None = None,
+    conventional_roots: list[Path] | None = None,
+) -> dict[str, Any]:
+    """Pre-2.1 external-first discovery (compatibility/tests only)."""
     candidates: list[tuple[str, Path, bool]] = []
     if explicit is not None:
         candidates.append(("explicit", Path(explicit).expanduser(), True))
@@ -151,7 +277,12 @@ def discover_d_research(
                 "supported_majors": [3],
                 "tried": tried,
                 "assurance_cap": "experimental",
-                "issues": [issue("D_RESEARCH", message=entry.get("reason", "configured D Research is unavailable or incompatible")).to_dict()],
+                "issues": [
+                    issue(
+                        "D_RESEARCH",
+                        message=entry.get("reason", "configured D Research is unavailable or incompatible"),
+                    ).to_dict()
+                ],
             }
         if entry.get("exists") and entry.get("reason") not in {"directory missing"}:
             incompatible = entry
@@ -168,7 +299,9 @@ def discover_d_research(
             "supported_majors": [3],
             "tried": tried,
             "assurance_cap": "experimental",
-            "issues": [issue("D_RESEARCH", message=incompatible.get("reason", "incompatible D Research")).to_dict()],
+            "issues": [
+                issue("D_RESEARCH", message=incompatible.get("reason", "incompatible D Research")).to_dict()
+            ],
         }
     return {
         "status": "unavailable",
@@ -178,5 +311,7 @@ def discover_d_research(
         "identity_verified": False,
         "tried": tried,
         "assurance_cap": "limited",
-        "issues": [issue("D_RESEARCH", severity="warning", message="D Research not found; limited mode only").to_dict()],
+        "issues": [
+            issue("D_RESEARCH", severity="warning", message="D Research not found; limited mode only").to_dict()
+        ],
     }

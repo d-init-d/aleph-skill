@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$comment": "Research plan managed by scripts/research_plan.py (schema 2.0). See references/research-plan-protocol.md. Do not hand-edit task status while a task is running; use mark/add-task/block.",
+  "schema_version": "2.0",
+  "plan_id": "",
+  "title": "",
+  "workspace_dir": ".",
+  "plan_render_path": "PLAN.md",
+  "created": "",
+  "owner": "",
+  "context_budget_tokens": 200000,
+  "execution_profile": {
+    "source": "defaults",
+    "main_context_length": null,
+    "task_budget_ratio": 0.5,
+    "checkpoint_policy": "write findings to declared output files immediately; split the task before reading sources or inputs that risk exceeding the context budget",
+    "subagent_slots": [
+      {
+        "id": "default",
+        "agent": null,
+        "context_length": null,
+        "max_parallel": null
+      }
+    ]
+  },
+  "estimated_runtime_hours": null,
+  "scope": "",
+  "sub_questions": [],
+  "source_classes": [],
+  "approval": {
+    "approved_by": "",
+    "approved_at": "",
+    "notes": "",
+    "plan_sha256": ""
+  },
+  "stopping_criteria": "",
+  "stopping_criteria_satisfied": false,
+  "tasks": [],
+  "gates": {
+    "plan_ready": {
+      "description": "Plan is shaped correctly, rendered for review, and ready for approval.",
+      "assertions": [
+        "schema_valid",
+        "plan_complete",
+        "workspace_layout",
+        "execution_configured",
+        "plan_rendered",
+        "no_dependency_cycles",
+        "no_orphan_dependencies",
+        "no_task_is_done",
+        "standard_gates_intact"
+      ]
+    },
+    "execute_ready": {
+      "description": "Plan is approved and ready to dispatch.",
+      "assertions": [
+        "schema_valid",
+        "plan_complete",
+        "workspace_layout",
+        "execution_configured",
+        "plan_rendered",
+        "no_dependency_cycles",
+        "no_orphan_dependencies",
+        "no_task_is_done",
+        "plan_approved",
+        "standard_gates_intact"
+      ]
+    },
+    "synthesize_ready": {
+      "description": "All research-phase tasks finished with artefacts on disk; ledger and checklist OK.",
+      "assertions": [
+        "schema_valid",
+        "workspace_layout",
+        "execution_configured",
+        "research_tasks_terminal",
+        "research_outputs_exist",
+        "blocked_research_justified",
+        "ledger_validates",
+        "ledger_hmac_verified",
+        "reproducibility_checklist_complete",
+        "standard_gates_intact"
+      ]
+    },
+    "release_ready": {
+      "description": "Synthesis tasks complete; report/citations valid; claim coverage and stopping criteria satisfied.",
+      "assertions": [
+        "synthesize_ready",
+        "synthesis_tasks_terminal",
+        "synthesis_outputs_exist",
+        "final_report_valid",
+        "rendered_citations_exist",
+        "claim_coverage_complete",
+        "stopping_criteria_satisfied",
+        "standard_gates_intact"
+      ]
+    }
+  },
+  "notes": "Free-form notes for humans. Decision log, open questions, etc. Ignored by the script."
+}

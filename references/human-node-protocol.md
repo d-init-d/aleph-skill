@@ -4,7 +4,7 @@ Use this protocol only for a public-role person whose decision materially change
 
 ## Three owners
 
-1. **Research execution:** collect public-role evidence and uncertainty with compatible D Research or the limited host-native fallback. Never predict or roleplay.
+1. **Research execution:** collect public-role evidence and uncertainty through the bundled D Research gateway or, after a capability blocker, the limited host-native fallback. Never predict or roleplay.
 2. **Roleplay execution:** consume one frozen temporal packet offline. Propose decision-graph actions only; never add evidence or likelihood.
 3. **Main adjudicator:** compare hypotheses against evidence, preserve alternatives, and assign `relative_weight` by default. It may assign `calibrated_probability` only after every calibration and validation gate passes.
 

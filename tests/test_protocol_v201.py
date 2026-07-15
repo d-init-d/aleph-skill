@@ -77,7 +77,8 @@ class ProtocolDocumentationV201Tests(unittest.TestCase):
         self.assertIn("does not emit a D Research CSV", integration)
         self.assertIn("The same seal applies to host-native fallback research.", integration)
         self.assertIn("limited host-native workflow", adaptive)
-        self.assertIn("D Research unavailable", evaluation)
+        self.assertIn("required D Research capability blocked", evaluation)
+        self.assertIn("gateway capability blocker", evaluation)
 
     def test_host_limits_create_resumable_unsaturated_handoffs(self) -> None:
         adaptive = read("references/adaptive-research-workflow.md")

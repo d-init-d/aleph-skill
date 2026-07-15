@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import os
 import shutil
 import uuid
 from pathlib import Path
@@ -10,6 +12,22 @@ from typing import Any
 
 from . import LEGACY_SCHEMA_VERSION, SCHEMA_VERSION
 from .io import canonical_hash, load_json_secure, sha256_file, write_json_atomic
+from .paths import resolve_in_workspace
+
+FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+_EXTERNAL_SNAPSHOT_RUNTIME_DIRS = frozenset(
+    {
+        ".cache",
+        ".git",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".venv",
+        "__pycache__",
+        "node_modules",
+    }
+)
+_BIND_REPORT = "migration-bind-report.json"
 
 
 def _inside(path: Path, parent: Path) -> bool:
@@ -20,10 +38,16 @@ def _inside(path: Path, parent: Path) -> bool:
         return False
 
 
-def _workspace_digest(root: Path) -> tuple[str, list[dict[str, Any]]]:
+def _workspace_digest(
+    root: Path,
+    *,
+    excluded: frozenset[str] = frozenset(),
+) -> tuple[str, list[dict[str, Any]]]:
     entries: list[dict[str, Any]] = []
     for path in sorted(root.rglob("*"), key=lambda value: value.relative_to(root).as_posix()):
         relative = path.relative_to(root).as_posix()
+        if relative in excluded:
+            continue
         if path.is_symlink():
             entries.append({"path": relative, "type": "symlink", "target": str(path.readlink())})
         elif path.is_file():
@@ -37,6 +61,253 @@ def _load_json(path: Path) -> Any:
         details = "; ".join(problem.legacy_string() for problem in problems)
         raise ValueError(f"invalid JSON artifact {path}: {details}")
     return data
+
+
+def _tree_link_or_special_entries(root: Path) -> list[str]:
+    """Return symlink, reparse-point, or non-file/non-directory entries without following them."""
+    unsafe: list[str] = []
+    stack = [root]
+    while stack:
+        current = stack.pop()
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    relative = Path(entry.path).relative_to(root).as_posix()
+                    try:
+                        stat = entry.stat(follow_symlinks=False)
+                    except OSError:
+                        unsafe.append(relative)
+                        continue
+                    reparse = bool(
+                        getattr(stat, "st_file_attributes", 0) & FILE_ATTRIBUTE_REPARSE_POINT
+                    )
+                    if entry.is_symlink() or reparse:
+                        unsafe.append(relative)
+                    elif entry.is_dir(follow_symlinks=False):
+                        stack.append(Path(entry.path))
+                    elif not entry.is_file(follow_symlinks=False):
+                        unsafe.append(relative)
+        except OSError:
+            unsafe.append(current.relative_to(root).as_posix() or ".")
+    return sorted(set(unsafe))
+
+
+def _copytree_without_links(source: Path, destination: Path) -> None:
+    unsafe = _tree_link_or_special_entries(source)
+    if unsafe:
+        raise ValueError(f"workspace contains links or special files: {unsafe[0]}")
+    shutil.copytree(source, destination, symlinks=True)
+    copied_unsafe = _tree_link_or_special_entries(destination)
+    if copied_unsafe:
+        raise ValueError(f"copied workspace contains links or special files: {copied_unsafe[0]}")
+
+
+def _component_lock_entry(skill_root: Path) -> dict[str, Any]:
+    lock = _load_json(skill_root / "component-lock.json")
+    if not isinstance(lock, dict):
+        raise ValueError("component-lock.json must be an object")
+    components = lock.get("components")
+    if not isinstance(components, dict):
+        raise ValueError("component-lock.json components must be an object")
+    entry = components.get("d-research")
+    if not isinstance(entry, dict) or not isinstance(entry.get("files"), list):
+        raise ValueError("component-lock.json d-research entry is invalid")
+    return entry
+
+
+def _snapshot_recipe_exclusions(entry: dict[str, Any]) -> frozenset[str]:
+    recipe = entry.get("snapshot_recipe")
+    if not isinstance(recipe, dict):
+        raise ValueError("component lock snapshot_recipe must be an object")
+    raw_excluded = recipe.get("excluded_paths")
+    if not isinstance(raw_excluded, list) or not all(
+        isinstance(value, str) for value in raw_excluded
+    ):
+        raise ValueError("component lock snapshot_recipe.excluded_paths must be a string array")
+    if raw_excluded != sorted(set(raw_excluded)):
+        raise ValueError(
+            "component lock snapshot_recipe.excluded_paths must be sorted and unique"
+        )
+    for relative in raw_excluded:
+        normalized = relative.replace("\\", "/")
+        parts = normalized.split("/")
+        if (
+            not normalized
+            or normalized != relative
+            or normalized.startswith("/")
+            or len(normalized) >= 2
+            and normalized[0].isalpha()
+            and normalized[1] == ":"
+            or any(part in {"", ".", ".."} for part in parts)
+        ):
+            raise ValueError(
+                "component lock snapshot_recipe contains an unsafe excluded path"
+            )
+    return frozenset(raw_excluded)
+
+
+def _snapshot_file_paths(
+    root: Path,
+    *,
+    excluded_paths: frozenset[str],
+) -> tuple[dict[str, Path], list[str]]:
+    files: dict[str, Path] = {}
+    unsafe: list[str] = []
+    stack = [root]
+    while stack:
+        current = stack.pop()
+        with os.scandir(current) as entries:
+            for entry in entries:
+                path = Path(entry.path)
+                relative_path = path.relative_to(root)
+                relative = relative_path.as_posix()
+                if relative in excluded_paths:
+                    continue
+                stat = entry.stat(follow_symlinks=False)
+                reparse = bool(
+                    getattr(stat, "st_file_attributes", 0) & FILE_ATTRIBUTE_REPARSE_POINT
+                )
+                if entry.is_symlink() or reparse:
+                    unsafe.append(relative)
+                    continue
+                if entry.is_dir(follow_symlinks=False):
+                    if entry.name not in _EXTERNAL_SNAPSHOT_RUNTIME_DIRS:
+                        stack.append(path)
+                    continue
+                if not entry.is_file(follow_symlinks=False):
+                    unsafe.append(relative)
+                    continue
+                files[relative] = path
+    return files, sorted(unsafe)
+
+
+def _external_snapshot_equivalence(
+    external_root: Path,
+    *,
+    skill_root: Path,
+) -> dict[str, Any]:
+    """Compare an external installation with every byte in the locked embedded snapshot."""
+    try:
+        external_root = external_root.resolve(strict=True)
+        if not external_root.is_dir():
+            raise ValueError("external D Research root is not a directory")
+        locked = _component_lock_entry(skill_root)
+        excluded_paths = _snapshot_recipe_exclusions(locked)
+        raw_files = locked.get("files")
+        assert isinstance(raw_files, list)
+        expected: dict[str, tuple[int, str]] = {}
+        for item in raw_files:
+            if not isinstance(item, dict):
+                raise ValueError("component lock contains a malformed file entry")
+            relative = item.get("path")
+            size = item.get("size")
+            digest = item.get("sha256")
+            if not isinstance(relative, str) or not isinstance(size, int) or not isinstance(
+                digest, str
+            ):
+                raise ValueError("component lock contains a malformed file entry")
+            expected[relative] = (size, digest.removeprefix("sha256:"))
+        overlap = sorted(set(expected) & excluded_paths)
+        if overlap:
+            raise ValueError(
+                "component lock snapshot_recipe excludes a locked snapshot file: "
+                f"{overlap[0]}"
+            )
+        actual, unsafe = _snapshot_file_paths(
+            external_root,
+            excluded_paths=excluded_paths,
+        )
+        if unsafe:
+            return {
+                "ok": False,
+                "reason": "external D Research contains links, reparse points, or special files",
+                "unsafe": unsafe[:20],
+            }
+        missing = sorted(set(expected) - set(actual))
+        extra = sorted(set(actual) - set(expected))
+        mismatched: list[str] = []
+        for relative, (size, digest) in expected.items():
+            path = actual.get(relative)
+            if path is None:
+                continue
+            if path.stat().st_size != size or sha256_file(path) != digest:
+                mismatched.append(relative)
+        ok = not missing and not extra and not mismatched
+        return {
+            "ok": ok,
+            "comparison": "locked-snapshot-byte-exact",
+            "expected_file_count": len(expected),
+            "actual_file_count": len(actual),
+            "missing": missing[:20],
+            "extra": extra[:20],
+            "mismatched": mismatched[:20],
+            "component_tree_sha256": locked.get("tree_sha256"),
+            "package_version": locked.get("version"),
+            "upstream_commit": locked.get("upstream_commit"),
+            "upstream_tag_object": locked.get("upstream_tag_object"),
+            "snapshot_recipe_excluded_count": len(excluded_paths),
+        }
+    except (OSError, ValueError) as exc:
+        return {"ok": False, "reason": str(exc)}
+
+
+def _dual_run_research_canonical(helper: Path, ledger: Path) -> dict[str, Any]:
+    """Execute the locked upstream canonicaliser and compare it with Aleph's implementation."""
+    from .import_ledger import canonicalise_d_research_csv
+
+    try:
+        raw = ledger.read_bytes()
+        aleph_bytes, _, _, issues = canonicalise_d_research_csv(raw)
+        if aleph_bytes is None or issues:
+            return {
+                "ok": False,
+                "reason": "Aleph canonicaliser rejected the ledger",
+                "issues": [item.to_dict() for item in issues],
+            }
+        namespace: dict[str, Any] = {
+            "__file__": str(helper),
+            "__name__": "_aleph_locked_d_research_evidence_ledger",
+        }
+        source = helper.read_bytes()
+        exec(compile(source, str(helper), "exec"), namespace)  # noqa: S102 - locked component
+        canonicalise = namespace.get("canonicalise")
+        if not callable(canonicalise):
+            return {"ok": False, "reason": "locked upstream canonicalise() is unavailable"}
+        upstream_bytes = canonicalise(ledger)
+        if not isinstance(upstream_bytes, bytes):
+            return {"ok": False, "reason": "locked upstream canonicalise() returned non-bytes"}
+        aleph_sha256 = hashlib.sha256(aleph_bytes).hexdigest()
+        upstream_sha256 = hashlib.sha256(upstream_bytes).hexdigest()
+        return {
+            "ok": aleph_bytes == upstream_bytes,
+            "aleph_canonical_sha256": aleph_sha256,
+            "upstream_canonical_sha256": upstream_sha256,
+            "byte_equal": aleph_bytes == upstream_bytes,
+            "helper_sha256": sha256_file(helper),
+        }
+    except (OSError, SyntaxError, TypeError, ValueError) as exc:
+        return {"ok": False, "reason": str(exc)}
+
+
+def _invalidate_finalization(workspace: Path, manifest: dict[str, Any]) -> list[str]:
+    invalidated: list[str] = []
+    manifest["status"] = "draft"
+    manifest["assurance_tier"] = None
+    for field in ("artifact_index", "validation_receipt", "quality_receipt", "finalization"):
+        if field in manifest:
+            manifest.pop(field, None)
+            invalidated.append(f"simulation-manifest.json#{field}")
+    for name in (
+        "validation-receipt.json",
+        "quality-receipt.json",
+        "validation-report.json",
+        "quality-report.json",
+    ):
+        path = workspace / name
+        if path.is_file():
+            path.unlink()
+            invalidated.append(name)
+    return invalidated
 
 
 def plan_migration(source: Path) -> dict[str, Any]:
@@ -411,3 +682,277 @@ def migrate_dual_run_canonical(source: Path, out_a: Path, out_b: Path) -> dict[s
         left_hash, right_hash = canonical_hash(left), canonical_hash(right)
         hashes[name] = {"a": left_hash, "b": right_hash, "equal": left_hash == right_hash}
     return {"ok": all(value["equal"] for value in hashes.values()), "hashes": hashes, "r1": first, "r2": second}
+
+
+def bind_bundled_d_research(
+    workspace: Path,
+    *,
+    skill_root: Path | None = None,
+    check_only: bool = False,
+) -> dict[str, Any]:
+    """Rewrite absolute external D Research paths to portable component URI when equivalent.
+
+    Always writes sibling output unless check_only. Does not mutate source on --check.
+    Keeps schema_version 2.0.0; only rewrites execution.d_research.path when the
+    complete external snapshot is byte-equivalent to the locked component.
+    """
+    from .component_registry import (
+        COMPONENT_URI,
+        ComponentError,
+        resolve_component,
+        skill_root_from,
+    )
+
+    source = workspace.resolve()
+    unsafe_source = _tree_link_or_special_entries(source) if source.is_dir() else []
+    if unsafe_source:
+        return {
+            "ok": False,
+            "error": "source contains links, reparse points, or special files",
+            "unsafe": unsafe_source[:20],
+        }
+    manifest_path = source / "simulation-manifest.json"
+    if not manifest_path.is_file():
+        return {"ok": False, "error": "missing simulation-manifest.json"}
+    try:
+        manifest = _load_json(manifest_path)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+    if not isinstance(manifest, dict):
+        return {"ok": False, "error": "manifest must be an object"}
+    if manifest.get("schema_version") != SCHEMA_VERSION:
+        return {"ok": False, "error": f"schema must be {SCHEMA_VERSION}", "schema": manifest.get("schema_version")}
+
+    root = skill_root if skill_root is not None else skill_root_from()
+    try:
+        resolution = resolve_component(COMPONENT_URI, skill_root=root, require_verified=True)
+    except ComponentError as exc:
+        return {"ok": False, "error": exc.message, "error_code": exc.code}
+
+    raw_execution = manifest.get("execution")
+    execution: dict[str, Any] = raw_execution if isinstance(raw_execution, dict) else {}
+    raw_research = execution.get("d_research")
+    research: dict[str, Any] = raw_research if isinstance(raw_research, dict) else {}
+    old_path = research.get("path")
+    prior_status = research.get("status")
+    transforms: list[str] = []
+    unresolved: list[dict[str, Any]] = []
+    dual_run: dict[str, Any] | None = None
+    equivalence: dict[str, Any] | None = None
+
+    receipt_ref: str | None = None
+    raw_artifact_paths = manifest.get("artifact_paths")
+    artifact_paths: dict[str, Any] = (
+        raw_artifact_paths if isinstance(raw_artifact_paths, dict) else {}
+    )
+    if isinstance(artifact_paths.get("research_import_receipt"), str):
+        receipt_ref = artifact_paths["research_import_receipt"]
+
+    can_rewrite = False
+    if isinstance(old_path, str) and old_path not in {COMPONENT_URI, ""}:
+        external_path = Path(old_path)
+        if external_path.is_absolute():
+            equivalence = _external_snapshot_equivalence(external_path, skill_root=root)
+        else:
+            equivalence = {
+                "ok": False,
+                "reason": "legacy D Research path must be absolute before it can be rebound",
+            }
+        can_rewrite = bool(equivalence.get("ok"))
+        if can_rewrite:
+            transforms.append(
+                "rewrite byte-equivalent external D Research path to aleph-component://d-research"
+            )
+        else:
+            unresolved.append(
+                {
+                    "item": "execution.d_research.path",
+                    "field": "path",
+                    "code": "COMPONENT_DRIFT",
+                    "note": "external installation is not byte-equivalent to the locked snapshot",
+                    "details": equivalence,
+                }
+            )
+    elif old_path == COMPONENT_URI:
+        transforms.append("path already portable component URI")
+        can_rewrite = True
+    else:
+        if prior_status in {"imported", "verified"}:
+            unresolved.append(
+                {
+                    "item": "execution.d_research.path",
+                    "field": "path",
+                    "code": "COMPONENT_IDENTITY_MISMATCH",
+                    "note": "an imported/verified execution without a source path cannot be rebound",
+                }
+            )
+        else:
+            transforms.append("bind unused or missing path to bundled component URI")
+            can_rewrite = True
+
+    if prior_status in {"imported", "verified"} and receipt_ref is None:
+        unresolved.append(
+            {
+                "item": "artifact_paths.research_import_receipt",
+                "field": "research_import_receipt",
+                "code": "MISSING_ARTIFACT",
+                "note": "imported/verified research requires its preserved import receipt",
+            }
+        )
+        can_rewrite = False
+
+    # Execute both Aleph and the exact locked upstream canonicalisers when a ledger exists.
+    ledger_ref = research.get("ledger_ref")
+    if isinstance(ledger_ref, str):
+        ledger_path, ledger_issues = resolve_in_workspace(
+            source,
+            ledger_ref,
+            must_exist=True,
+            require_file=True,
+        )
+        if ledger_path is None or ledger_issues:
+            dual_run = {
+                "ok": False,
+                "issues": [item.to_dict() for item in ledger_issues],
+            }
+        else:
+            dual_run = _dual_run_research_canonical(
+                Path(resolution.root) / "scripts" / "evidence_ledger.py",
+                ledger_path,
+            )
+        if not dual_run.get("ok"):
+            unresolved.append(
+                {
+                    "item": ledger_ref,
+                    "field": "ledger",
+                    "code": "LEDGER_TAMPER",
+                    "note": "Aleph and locked upstream canonicalisers did not match",
+                    "details": dual_run,
+                }
+            )
+            can_rewrite = False
+
+    try:
+        source_digest, _ = _workspace_digest(source)
+    except OSError as exc:
+        return {"ok": False, "error": f"cannot hash source workspace: {exc}"}
+
+    report = {
+        "schema_version": SCHEMA_VERSION,
+        "ok": can_rewrite and not unresolved,
+        "source_digest": source_digest,
+        "target_digest": None,
+        "target_digest_scope": f"workspace excluding {_BIND_REPORT}",
+        "transforms": transforms,
+        "unresolved_fields": unresolved,
+        "dual_run": dual_run,
+        "external_equivalence": equivalence,
+        "component_uri": COMPONENT_URI,
+        "component_binding": resolution.binding(),
+        "mode": "check" if check_only else "write",
+        "source_mutated": False,
+        "finalization_invalidated": [],
+    }
+    if check_only or not can_rewrite:
+        report["ok"] = can_rewrite and not unresolved
+        return report
+
+    destination = source.parent / f"{source.name}-bundled-bind"
+    if destination.exists():
+        return {"ok": False, "error": "destination exists; refusing overwrite", "destination": str(destination)}
+    stage = source.parent / f".{source.name}.bind-stage-{uuid.uuid4().hex}"
+    try:
+        _copytree_without_links(source, stage)
+        if _workspace_digest(source)[0] != source_digest:
+            raise ValueError("source changed while creating the staged migration")
+        stage_manifest = _load_json(stage / "simulation-manifest.json")
+        if not isinstance(stage_manifest, dict):
+            raise ValueError("invalid staged manifest")
+        stage_execution = stage_manifest.setdefault("execution", {})
+        if not isinstance(stage_execution, dict):
+            stage_execution = {}
+            stage_manifest["execution"] = stage_execution
+        stage_research = stage_execution.setdefault("d_research", {})
+        if not isinstance(stage_research, dict):
+            stage_research = {}
+            stage_execution["d_research"] = stage_research
+        stage_research["path"] = COMPONENT_URI
+        # Keep schema/formula stable.
+        stage_manifest["schema_version"] = SCHEMA_VERSION
+        # Rewrite receipt identity path if present and equivalent.
+        if receipt_ref:
+            receipt_path, receipt_issues = resolve_in_workspace(
+                stage,
+                receipt_ref,
+                must_exist=True,
+                require_file=True,
+            )
+            if receipt_path is None or receipt_issues:
+                raise ValueError("research import receipt path is missing or unsafe")
+            if receipt_path.is_file():
+                receipt = _load_json(receipt_path)
+                if isinstance(receipt, dict):
+                    identity = receipt.get("d_research_identity")
+                    if not isinstance(identity, dict):
+                        raise ValueError("research import receipt lacks d_research_identity")
+                    identity["path"] = COMPONENT_URI
+                    identity["package_name"] = resolution.package_name
+                    identity["package_version"] = resolution.package_version
+                    identity["package_major"] = resolution.package_major
+                    identity["upstream_commit"] = resolution.upstream_commit
+                    identity["upstream_tag_object"] = resolution.upstream_tag_object
+                    identity["ledger_helper_sha256"] = resolution.entrypoint_sha256.removeprefix(
+                        "sha256:"
+                    )
+                    receipt["component_binding"] = resolution.binding()
+                    body = {key: value for key, value in receipt.items() if key != "receipt_hash"}
+                    receipt["receipt_hash"] = canonical_hash(body)
+                    write_json_atomic(receipt_path, receipt)
+                    transforms.append("rewrite import receipt to portable component binding")
+                else:
+                    raise ValueError("research import receipt must be an object")
+
+        invalidated = _invalidate_finalization(stage, stage_manifest)
+        report["finalization_invalidated"] = invalidated
+        if invalidated:
+            transforms.append("invalidate stale finalization, artifact index, and assurance receipts")
+        write_json_atomic(stage / "simulation-manifest.json", stage_manifest)
+
+        target_digest, _ = _workspace_digest(stage, excluded=frozenset({_BIND_REPORT}))
+        report.update(
+            {
+                "ok": True,
+                "destination": str(destination),
+                "target_digest": target_digest,
+                "transforms": transforms,
+                "source_mutated": False,
+            }
+        )
+        report_body = {key: value for key, value in report.items() if key != "report_hash"}
+        report["report_hash"] = canonical_hash(report_body)
+        write_json_atomic(stage / _BIND_REPORT, report)
+        verified_target_digest, _ = _workspace_digest(
+            stage,
+            excluded=frozenset({_BIND_REPORT}),
+        )
+        if verified_target_digest != target_digest:
+            raise ValueError("staged target digest changed while writing the migration report")
+        if _workspace_digest(source)[0] != source_digest:
+            raise ValueError("source changed before atomic publication")
+        stage.rename(destination)
+    except Exception as exc:
+        if stage.exists():
+            shutil.rmtree(stage, ignore_errors=True)
+        return {"ok": False, "error": f"bind rolled back: {exc}"}
+    try:
+        if _workspace_digest(source)[0] != source_digest:
+            shutil.rmtree(destination)
+            return {
+                "ok": False,
+                "error": "source changed during sibling migration",
+                "source_mutated": True,
+            }
+    except OSError as exc:
+        shutil.rmtree(destination, ignore_errors=True)
+        return {"ok": False, "error": f"cannot reverify source after publication: {exc}"}
+    return report

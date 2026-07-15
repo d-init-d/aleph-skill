@@ -1,6 +1,6 @@
 # Adaptive research workflow
 
-Use compatible D Research as the preferred evidence engine and this protocol as the causal-simulation outer loop. If D Research is unavailable, use the limited host-native workflow in `references/d-research-integration.md`. Depth is determined by the event, not by a user-selected speed mode.
+Use the locked bundled D Research component as the preferred evidence engine and this protocol as the causal-simulation outer loop. If gateway preflight reports a missing capability, use the limited host-native workflow in `references/d-research-integration.md`. Depth is determined by the event, not by a user-selected speed mode.
 
 ## 1. Frame the investigation
 
@@ -58,7 +58,7 @@ Map likely primary and authoritative sources for each subquestion:
 - public-role speeches, testimony, decisions, and memoirs for human actors,
 - contradiction sources and alternative interpretations.
 
-With compatible D Research, follow its browser-first/tool-priority rules. In limited fallback mode, use only the host's declared lawful research capabilities and record the retrieval method for every source. Never bypass access controls.
+With bundled D Research, follow its browser-first/tool-priority rules through Aleph's gateway. In limited fallback mode, use only the host's declared lawful research capabilities and record the retrieval method for every source. Never bypass access controls.
 
 ## 5. Generate query fanout
 
@@ -92,7 +92,7 @@ Search snippets are discovery aids, not strong evidence. Prefer opened primary/a
 
 ## 8. Run human tracks
 
-For each material actor, complete a dedicated public-role research dossier with compatible D Research or the limited host-native fallback before dispatching the separate roleplay track. Freeze the dossier and simulated-time knowledge cutoff. Roleplay cannot browse, call research tools, inspect the evidence map, or add evidence.
+For each material actor, complete a dedicated public-role research dossier through the bundled D Research gateway or, after a capability blocker, the limited host-native fallback before dispatching the separate roleplay track. Freeze the dossier and simulated-time knowledge cutoff. Roleplay cannot browse, call research tools, inspect the evidence map, or add evidence.
 
 ## 9. Construct and challenge the causal graph
 

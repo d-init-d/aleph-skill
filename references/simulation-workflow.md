@@ -39,7 +39,7 @@ Read `references/adaptive-research-workflow.md`. Reassess complexity when new do
 
 ## Phase 3: Research in waves
 
-Use compatible D Research, or the limited host-native fallback in `references/d-research-integration.md`, to:
+Use the locked bundled D Research component through the gateway, or the limited host-native fallback in `references/d-research-integration.md` only after a capability blocker, to:
 
 1. map primary and authoritative sources,
 2. fan out queries,
@@ -63,7 +63,7 @@ Use `references/node-builder.md` and `references/causal-edge-protocol.md`.
 
 For every material actor:
 
-1. dispatch a dedicated public-role research track using compatible D Research or the limited host-native fallback,
+1. dispatch a dedicated public-role research track through the bundled D Research gateway or, after a capability blocker, the limited host-native fallback,
 2. freeze the dossier and knowledge cutoff,
 3. dispatch a different roleplay track without browsing authority,
 4. adjudicate at least two normalized actions,

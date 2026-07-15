@@ -76,24 +76,81 @@ class DiscoveryAndAdapterEdgeTests(unittest.TestCase):
             self.assertIsNone(_candidate_report("test", invalid_version)["package_major"])
 
     def test_discovery_sources_available_incompatible_and_unavailable(self) -> None:
+        # External-only compatibility path (bundled disabled for unit isolation).
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             good = _make_d_research(root / "good")
-            result = discover_d_research(conventional_roots=[root / "missing", good])
+            no_opt_in = discover_d_research(
+                explicit=good,
+                allow_external=False,
+                require_bundled=True,
+                skill_root=root / "no-bundle",
+            )
+            self.assertNotEqual(no_opt_in["status"], "available")
+            self.assertEqual(no_opt_in["source_kind"], "bundled")
+            self.assertTrue(
+                any(
+                    item.get("error_code") in {"COMPONENT_LOCK_INVALID", "COMPONENT_NOT_FOUND"}
+                    for item in no_opt_in.get("tried", [])
+                )
+            )
+            result = discover_d_research(
+                conventional_roots=[root / "missing", good],
+                allow_external=True,
+                require_bundled=False,
+                skill_root=root / "no-bundle",
+            )
             self.assertEqual(result["status"], "available")
             incompatible = _make_d_research(root / "old", version="2.9.0")
-            result = discover_d_research(conventional_roots=[incompatible, root / "missing"])
+            result = discover_d_research(
+                conventional_roots=[incompatible, root / "missing"],
+                allow_external=True,
+                require_bundled=False,
+                skill_root=root / "no-bundle",
+            )
             self.assertEqual(result["status"], "incompatible")
-            result = discover_d_research(conventional_roots=[root / "missing"])
+            result = discover_d_research(
+                conventional_roots=[root / "missing"],
+                allow_external=True,
+                require_bundled=False,
+                skill_root=root / "no-bundle",
+            )
             self.assertEqual(result["status"], "unavailable")
 
             capability = root / "capability.json"
             capability.write_text(json.dumps({"d_research": {"path": str(good)}}), encoding="utf-8")
-            self.assertEqual(discover_d_research(capability_file=capability, conventional_roots=[])["status"], "available")
+            self.assertEqual(
+                discover_d_research(
+                    capability_file=capability,
+                    conventional_roots=[],
+                    allow_external=True,
+                    require_bundled=False,
+                    skill_root=root / "no-bundle",
+                )["status"],
+                "available",
+            )
             capability.write_text("broken", encoding="utf-8")
-            self.assertEqual(discover_d_research(capability_file=capability, conventional_roots=[])["status"], "incompatible")
+            self.assertEqual(
+                discover_d_research(
+                    capability_file=capability,
+                    conventional_roots=[],
+                    allow_external=True,
+                    require_bundled=False,
+                    skill_root=root / "no-bundle",
+                )["status"],
+                "incompatible",
+            )
             with mock.patch.dict(os.environ, {"D_RESEARCH_SKILL": str(good)}):
-                self.assertEqual(discover_d_research(conventional_roots=[])["source"], "env:D_RESEARCH_SKILL")
+                # Env is allowed only with explicit external mode when bundle is absent.
+                self.assertEqual(
+                    discover_d_research(
+                        conventional_roots=[],
+                        allow_external=True,
+                        require_bundled=False,
+                        skill_root=root / "no-bundle",
+                    )["source"],
+                    "env:D_RESEARCH_SKILL",
+                )
 
     def test_adapter_registry_generation_and_drift_errors(self) -> None:
         self.assertEqual(set(registry()["adapters"]), set(registry()["adapters"]))

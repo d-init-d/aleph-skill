@@ -30,9 +30,25 @@ MANIFEST_NAME = "distribution-manifest.json"
 PRUNED_DIRS = frozenset({".git", "node_modules", "__pycache__", ".venv", "venv", ".pytest_cache", ".mypy_cache", ".ruff_cache"})
 SECRET_NAMES = frozenset({".env", ".env.local", ".env.production", "id_rsa", "id_ed25519", "credentials.json", "secrets.json"})
 SECRET_SUFFIXES = frozenset({".pem", ".key", ".p12", ".pfx", ".jks", ".kdbx"})
+SAFE_HIDDEN_FILES = frozenset(
+    {
+        ".gitattributes",
+        ".gitignore",
+        "components/d-research/.npmignore",
+    }
+)
 SECRET_CONTENT = re.compile(
     rb"(?:-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|"
     rb"(?:^|\n)[ \t]*(?:api[_-]?key|secret|password|access[_-]?token)\s*[:=]\s*['\"]?[A-Za-z0-9_./+\-=]{16,})",
+    re.IGNORECASE,
+)
+# Test sentinels used by bundled D Research quality fixtures (not real secrets).
+SECRET_CONTENT_BENIGN = re.compile(
+    rb"^(?:AKIA_)?(?:FAKE|EXAMPLE|PLACEHOLDER|DO_NOT_LEAK|TEST_ONLY|REDACTED)(?:[_-]|$)",
+    re.IGNORECASE,
+)
+SECRET_VALUE = re.compile(
+    rb"(?:[:=])\s*['\"]?([A-Za-z0-9_./+\-=]{16,})",
     re.IGNORECASE,
 )
 SECRET_SCAN_CHUNK_BYTES = 1024 * 1024
@@ -94,6 +110,12 @@ def collect_distribution_files(source: Path) -> list[Path]:
 
 def _contains_secret_content(path: Path) -> bool:
     """Stream the complete file so size cannot bypass the secret gate."""
+
+    def is_benign_match(match: re.Match[bytes]) -> bool:
+        """Recognize only an explicitly marked fixture value, never its context."""
+        value = SECRET_VALUE.search(match.group(0))
+        return bool(value and SECRET_CONTENT_BENIGN.match(value.group(1)))
+
     tail = b""
     with path.open("rb") as handle:
         while True:
@@ -101,7 +123,12 @@ def _contains_secret_content(path: Path) -> bool:
             if not chunk:
                 return False
             window = tail + chunk
-            if SECRET_CONTENT.search(window):
+            for match in SECRET_CONTENT.finditer(window):
+                # Exempt only this exact matched credential token. Evaluating
+                # every match prevents an earlier fixture sentinel from
+                # suppressing a later real secret in the same chunk.
+                if is_benign_match(match):
+                    continue
                 return True
             tail = window[-SECRET_SCAN_OVERLAP_BYTES:]
 
@@ -125,7 +152,14 @@ def scan_secret_like_files(source: Path) -> list[dict[str, str]]:
                 # Linked worktrees store an administrative gitdir pointer as a file.
                 # It is pruned from distributions just like a normal .git directory.
                 continue
-            if name.startswith(".") and relative not in {".gitattributes", ".gitignore"}:
+            standalone_component_npmignore = (
+                relative == ".npmignore" and source.name == "d-research"
+            )
+            if (
+                name.startswith(".")
+                and relative not in SAFE_HIDDEN_FILES
+                and not standalone_component_npmignore
+            ):
                 findings.append({"path": relative, "reason": "hidden file is not distributable"})
                 continue
             if lowered in SECRET_NAMES or lowered.startswith(".env.") or path.suffix.lower() in SECRET_SUFFIXES:

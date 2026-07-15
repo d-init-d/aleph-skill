@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.1.0
+
+### Added
+- Bundled D Research component under `components/d-research` with `component-lock.json` digests.
+- `scripts/aleph/component_registry.py` resolve/verify/discovery (bundled-first).
+- `scripts/research_gateway.py` as the sole Aleph-to-D Research subprocess dispatch path.
+- Portable import `component_binding` and quality re-verify against lock digests.
+- `references/bundled-research-routing.md` and `THIRD_PARTY_NOTICES.md`.
+- Migration `--bind-bundled-d-research` / `--dual-run-research`.
+
+### Changed
+- Discovery no longer lets `D_RESEARCH_SKILL` override the bundle.
+- External compatibility mode now requires the explicit path and a separate `--allow-external` opt-in at every CLI boundary.
+- Adapter registry `d_research_discovery` is `bundled-component-gateway`.
+- Package version `2.1.0`; workspace schema/formula remain `2.0.0`.
+
+### Security
+- Component path traversal, symlink/reparse, bytecode/cache, one-byte tamper, missing/extra file hard fails.
+- Roleplay uses a sealed packet/receipt boundary and requires host-enforced network/tool denial; filtered environment variables are defense in depth and are not claimed as an OS sandbox.
+- Release CI fetches the pinned annotated D Research tag and verifies its tag object, commit, Git tree, reproducible archive, snapshot recipe, and bundled bytes before publication.
+
 ## v2.0.1 - 2026-07-14
 
 ### Compatibility and protocol correctness

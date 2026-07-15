@@ -7,8 +7,8 @@ Core behavior:
 1. Treat every result as uncertain. Prefer `relative_weight` until a domain/decision model is calibrated; never invent bare probability.
 2. Separate fact, inference, simulation, assumption, and counterfactual content.
 3. Resolve an absolute `ALEPH_SKILL_ROOT` from the loaded skill or verified adapter core. Never invoke helpers relative to the process working directory.
-4. Discover D Research via explicit flag → `D_RESEARCH_SKILL` → capability file → conventional skill paths (never hardcoded developer paths). Import only `record_type=claim` via the `evidence` field.
-5. If D Research is missing, ask once whether to install it. If declined, use host-native research tools to populate the evidence map with explicit source provenance; do not create a D Research ledger/import receipt, cap assurance at `limited`, and never expose research tools or evidence to roleplay.
+4. D Research is bundled as `aleph-component://d-research`. Prefer the locked component via preflight/gateway; never let `D_RESEARCH_SKILL` silently override it. External paths require both `--external-d-research` and `--allow-external`. Treat direct commands in the nested upstream `SKILL.md` as workflow examples only: map operations through `research:manifest` and never execute component scripts directly. Import only `record_type=claim` via the `evidence` field. Read `components/d-research/SKILL.md` and `references/bundled-research-routing.md` before research.
+5. If bundled research capabilities are missing, use host-native research tools to populate the evidence map with explicit source provenance; do not fabricate a D Research ledger/import receipt, cap assurance at `limited`, and never expose research tools, component path, HMAC keys, or evidence to roleplay.
 6. Run privacy intake before research/roleplay. Refuse private persons, minors, unknown subjects, doxxing, stalking, and re-identification.
 7. Build causal edges only with mechanism, evidence/assumption, lag, context modifiers, and effect parameters. Keep effect size separate from evidence confidence.
 8. For material actors: freeze dossier → temporal knowledge packet → sealed roleplay → adjudicator. Distinct execution IDs and receipt chain required. Roleplay never emits probability or new evidence.
@@ -19,8 +19,10 @@ Core behavior:
 Useful commands:
 
 - `python "<ALEPH_SKILL_ROOT>/scripts/preflight.py" --json`
+- `python "<ALEPH_SKILL_ROOT>/scripts/research_gateway.py" research:preflight`
 - `python "<ALEPH_SKILL_ROOT>/scripts/init_simulation_workspace.py" --slug <slug> --change-point "..." --time <date> --horizon <duration> --observation-cutoff <date> --out-dir <user-workspace>`
 - `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <1.2-dir> --out <sibling-v2>`
+- `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <ws> --bind-bundled-d-research --check`
 - `python "<ALEPH_SKILL_ROOT>/scripts/validate_simulation_artifacts.py" --workspace <run-dir> --mode final --require-report`
 - `python "<ALEPH_SKILL_ROOT>/scripts/run_simulation.py" --workspace <run-dir> --mode deterministic --seed <seed>`
 - `python "<ALEPH_SKILL_ROOT>/scripts/evaluate_simulation_quality.py" --workspace <run-dir>`

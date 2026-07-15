@@ -21,6 +21,7 @@ from aleph.import_ledger import (  # noqa: E402
     FIELDS_V3_1,
     canonicalise_d_research_csv,
 )
+from aleph.io import canonical_hash  # noqa: E402
 from aleph.packets import (  # noqa: E402
     build_knowledge_packet,
     build_receipt,
@@ -657,14 +658,45 @@ class ReceiptAndResearchHardeningTests(unittest.TestCase):
                 },
             }
             self.assertTrue(_d_research_verified(workspace, manifest, hmac_key=key))
+            # A helper digest alone is not a portable provenance proof. Every
+            # immutable component-binding field must be present in a bundled
+            # receipt; deleting any one must fail closed.
+            receipt_path = workspace / "evidence-map.csv.import-receipt.json"
+            original_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            legacy_receipt = json.loads(json.dumps(original_receipt))
+            legacy_receipt.pop("component_binding", None)
+            legacy_receipt.pop("receipt_hash", None)
+            legacy_receipt["receipt_hash"] = canonical_hash(legacy_receipt)
+            receipt_path.write_text(json.dumps(legacy_receipt), encoding="utf-8")
+            self.assertFalse(_d_research_verified(workspace, manifest, hmac_key=key))
+            required_binding_fields = (
+                "source_kind",
+                "component_uri",
+                "component_id",
+                "package_name",
+                "package_version",
+                "package_major",
+                "upstream_tag",
+                "upstream_tag_object",
+                "upstream_commit",
+                "component_lock_sha256",
+                "component_tree_sha256",
+                "entrypoint",
+                "entrypoint_sha256",
+            )
+            for field in required_binding_fields:
+                tampered = json.loads(json.dumps(original_receipt))
+                tampered["component_binding"].pop(field, None)
+                tampered.pop("receipt_hash", None)
+                tampered["receipt_hash"] = canonical_hash(tampered)
+                receipt_path.write_text(json.dumps(tampered), encoding="utf-8")
+                self.assertFalse(_d_research_verified(workspace, manifest, hmac_key=key), field)
+            receipt_path.write_text(json.dumps(original_receipt), encoding="utf-8")
             evidence = workspace / "evidence-map.csv"
             evidence.write_text(evidence.read_text(encoding="utf-8") + "\n", encoding="utf-8")
-            receipt_path = workspace / "evidence-map.csv.import-receipt.json"
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             receipt["evidence_map_sha256"] = hashlib.sha256(evidence.read_bytes()).hexdigest()
             receipt.pop("receipt_hash")
-            from aleph.io import canonical_hash
-
             receipt["receipt_hash"] = canonical_hash(receipt)
             receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
             self.assertFalse(_d_research_verified(workspace, manifest, hmac_key=key))
