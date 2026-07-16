@@ -150,7 +150,7 @@ Supported install locations:
 
 ## Verification
 
-When upgrading an existing 2.0.0 workspace, keep an untouched backup and run draft validation first. Aleph 2.1.0 keeps `schema_version: 2.0.0`, but its stricter component binding, likelihood, privacy, and sealed-roleplay contracts can require report, packet/receipt, and numerical-artifact regeneration before final validation succeeds. For a workspace that still stores an absolute D Research path, run `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, inspect the byte-equivalence report, then repeat without `--check`. Do not use the 1.x schema migrator or hand-edit hashes.
+When upgrading an existing 2.0.0 workspace, keep an untouched backup and run draft validation first. Aleph 2.1.x keeps `schema_version: 2.0.0`, but its stricter component binding, likelihood, privacy, and sealed-roleplay contracts can require report, packet/receipt, and numerical-artifact regeneration before final validation succeeds. For a workspace that still stores an absolute D Research path, run `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, inspect the byte-equivalence report, then repeat without `--check`. Do not use the 1.x schema migrator or hand-edit hashes.
 
 Run the local release gate:
 

@@ -533,10 +533,21 @@ def _component_internal_reference_reconciliation(root: Path) -> dict[str, Any]:
             if not (component / token).exists():
                 missing.add(token)
     unexpected = sorted(missing - allowed)
+    repo_contract_paths = [
+        ".github/workflows/lint-and-self-test.yml",
+        ".github/workflows/release-attest.yml",
+        ".github/workflows/release-source-archive.yml",
+    ]
     return {
         "ok": not unexpected,
+        "component_version": entry.get("version"),
         "missing_repo_only_refs": sorted(missing),
         "allowed_snapshot_exclusions": sorted(missing & allowed),
+        "repo_contract_exclusions": [
+            path
+            for path in repo_contract_paths
+            if path in allowed and not (component / path).exists()
+        ],
         "unexpected": unexpected,
     }
 
@@ -547,23 +558,35 @@ def _reconcile_component_acceptance(
     returncode: int,
     stdout: bytes,
 ) -> dict[str, Any] | None:
-    """Adapt the one repository-only acceptance case without hiding any runtime failure."""
+    """Adapt exact repository-only acceptance cases without hiding runtime failures."""
 
     if returncode != 1:
         return None
     text = stdout.decode("utf-8", errors="replace")
     failed = re.findall(r"^\s*\[FAIL\]\s+([^\s]+)", text, flags=re.MULTILINE)
-    if failed != ["10_undeclared_stale_citations"]:
-        return None
     reconciliation = _component_internal_reference_reconciliation(root)
     if reconciliation.get("ok") is not True:
+        return None
+    expected_failures = ["10_undeclared_stale_citations"]
+    if reconciliation.get("component_version") == "3.2.1":
+        expected_failures.append("23_unsafe_runtime_config")
+        required = ".github/workflows/lint-and-self-test.yml"
+        normalized = re.sub(r"/+", "/", text.replace("\\", "/"))
+        if (
+            required not in reconciliation.get("repo_contract_exclusions", [])
+            or required not in normalized
+            or "scripts/check_contract.py" not in normalized
+            or "FileNotFoundError" not in text
+        ):
+            return None
+    if failed != expected_failures:
         return None
     reconciliation.update(
         {
             "upstream_runtime_cases_passed": len(
                 re.findall(r"^\s*\[PASS\]", text, flags=re.MULTILINE)
             ),
-            "upstream_repo_only_cases_reconciled": 1,
+            "upstream_repo_only_cases_reconciled": len(expected_failures),
             "browser_cases_delegated": len(
                 re.findall(r"^\s*\[DELEGATED\]", text, flags=re.MULTILINE)
             ),
@@ -754,6 +777,13 @@ def _filter_research_env(
     filtered["D_RESEARCH_MODE"] = MODE_RESEARCH
     if not network_allowed:
         filtered["D_RESEARCH_NO_NETWORK"] = "1"
+        # D Research 3.2.1 can use an installed sentence-transformers backend.
+        # Keep model resolution cache-only unless the caller explicitly grants
+        # network access; these are defense-in-depth flags, not an OS sandbox.
+        filtered["HF_HUB_OFFLINE"] = "1"
+        filtered["TRANSFORMERS_OFFLINE"] = "1"
+        filtered["HF_DATASETS_OFFLINE"] = "1"
+        filtered["HF_HUB_DISABLE_TELEMETRY"] = "1"
     else:
         # A stale host value must not make a requested network operation look
         # offline.
@@ -1710,10 +1740,15 @@ def run_command(
     completed_message: str | None = None
     completed_exit = returncode
     if acceptance_reconciliation is not None:
+        reconciled_count = int(
+            acceptance_reconciliation.get("upstream_repo_only_cases_reconciled", 0)
+        )
+        noun = "case" if reconciled_count == 1 else "cases"
+        verb = "was" if reconciled_count == 1 else "were"
         completed_status = "degraded"
         completed_error = "COMPONENT_REPO_CHECK_DELEGATED"
         completed_message = (
-            "runtime acceptance passed; the repository-only reference case was "
+            f"runtime acceptance passed; {reconciled_count} repository-only {noun} {verb} "
             "reconciled against exact snapshot exclusions"
         )
         completed_exit = EXIT_OK
@@ -1726,11 +1761,19 @@ def run_command(
         completed_message = f"locked helper exited with code {returncode}"
     completed_blockers: list[dict[str, str]] | None = None
     if acceptance_reconciliation is not None:
+        reconciled_count = int(
+            acceptance_reconciliation.get("upstream_repo_only_cases_reconciled", 0)
+        )
+        case_labels = "10" if reconciled_count == 1 else "10 and 23"
+        case_noun = "case" if reconciled_count == 1 else "cases"
+        case_verb = "requires" if reconciled_count == 1 else "require"
         completed_blockers = [
             {
                 "code": "COMPONENT_REPO_CHECK_DELEGATED",
                 "message": (
-                    "Upstream case 10 requires repository-only files; all missing refs "
+                    f"Upstream acceptance {case_noun} {case_labels} {case_verb} "
+                    "repository-only files; "
+                    "all missing refs and workflow paths "
                     "matched exact locked snapshot exclusions."
                 ),
             }

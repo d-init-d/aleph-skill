@@ -7,6 +7,156 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-07-16
+
+Stable production release promoting the exact v3.2.1-rc.2 candidate without
+executable-code, dependency, workflow, route, or package-path drift.
+
+### Added
+
+- Production-capable offline semantic retrieval that prefers an installed
+  `sentence-transformers` backend and otherwise uses deterministic
+  `local-hashing`; the stub backend is now test-only and explicit.
+- Validated citation metadata for conservative `@article`, `@book`, and
+  `@inproceedings` BibTeX exports, including structured personal names and
+  literal corporate authors/editors, with safe `@misc` fallback.
+- Deterministic local `langdetect` and stdlib trigram language-detection
+  backends without a new mandatory dependency or remote request.
+
+### Changed
+
+- CI now exercises the real optional semantic and language backends offline
+  across the supported Python matrix.
+- Stable promotion derives scores from canonical schema-2.1 raw task bundles,
+  binds them through schema-1.2 promotion evidence, and requires independent
+  review of live-run origin, raw artifacts, and score recomputation.
+
+### Release assurance
+
+- The promoted candidate commit is
+  `520915764a97d717aaf4682e02b8aae5dc511d2f`; Git tag object
+  `fd309e47c9681a391621bf7b842893d5a2d15ab0` binds the GitHub-verified
+  annotated `v3.2.1-rc.2` tag to that exact tree.
+- Candidate exact-SHA CI, source archive/checksum replay, independent archive
+  reproduction, and GitHub build-provenance attestation passed before stable
+  preparation.
+- Live dogfood produced 128 canonical baseline/candidate bundles under one
+  Grok Build runtime, model, tool configuration, and evaluator binding. All
+  four score files have zero failed and zero not-run tasks; both tiers are
+  unchanged, and neither tier contains a contract-defined regression or safety
+  regression; per-task metric movement remains preserved in the score
+  artifacts.
+- At the maintainer's explicit direction, publication proceeded without an
+  independent GitHub review or `reviewer-signoff.json`. No such sign-off or
+  green stable-promotion attestation is claimed; this is a maintainer-published
+  release rather than a contract-compliant `live_evidence` promotion.
+
+## [3.2.1-rc.2] - 2026-07-16
+
+Release-assurance correction for the v3.2.1 candidate. Skill behavior,
+dependencies, routes, and evidence-ledger schemas are unchanged from rc.1.
+
+### Fixed
+
+- Fixed the default-branch provenance workflow to read the `workflow_run`
+  webhook from GitHub Actions' guaranteed `GITHUB_EVENT_PATH` environment
+  variable. The prior expression-derived alias could be empty in a live run,
+  preventing artifact selection before independent checksum, signed-tag,
+  archive-reproduction, and provenance checks.
+- Added a dynamic contract assertion and mutation self-test that reject the
+  expression-derived alias and require both webhook validation stages to use
+  `GITHUB_EVENT_PATH` directly.
+
+### Changed
+
+- Rebound release metadata and the frozen live-evidence promotion contract to
+  `v3.2.1-rc.2`; stable v3.2.1 must dogfood and promote this exact candidate.
+
+## [3.2.1-rc.1] - 2026-07-15
+
+Production-hardening release candidate that upgrades three optional helper
+paths from fallback- or test-oriented defaults to production-capable behavior
+while retaining dependency-free fallbacks. The canonical evidence-ledger
+schema and read-only research contract are unchanged.
+
+### Added
+
+- Added optional JSON citation-metadata sidecars to export conservative
+  `@article`, `@book`, and `@inproceedings` BibTeX entries while preserving the
+  canonical evidence-ledger schema and the legacy `@misc` fallback.
+- Added explicit corporate-author and corporate-editor support through
+  `{"literal": "Organization Name"}` metadata, preserving organizations as
+  single BibTeX and CSL names.
+- Added deterministic, local `langdetect` support through the optional
+  `language-detection` extra, with explicit backend selection and a stdlib
+  trigram fallback.
+- Added CI integration tests that exercise the real `sentence-transformers`
+  and `langdetect` packages offline, using a generated local embedding model
+  so the test never downloads model weights.
+- Added schema-1.2 stable-promotion evidence that binds each Tier-1/Tier-2
+  score artifact to its complete canonical raw-run bundle and records an
+  independent review scope covering live-run origin, raw artifacts, and score
+  recomputation.
+
+### Changed
+
+- Semantic indexing and direct ledger queries now default to an `auto` backend
+  that selects local `sentence-transformers` when installed and otherwise uses
+  a deterministic built-in word/character hashing backend. Auto never selects
+  a remote backend or the test-only stub, and existing dependency-free
+  invocations continue to work. Install `.[embeddings]` for trained semantic
+  similarity; explicitly pass `--backend stub` only for test fixtures.
+- Upgraded the SHA-pinned release actions to
+  `actions/upload-artifact@v7.0.1` and
+  `actions/attest-build-provenance@v4.1.1` for future release tags.
+- Upgraded the development and CI Ruff pin from `0.15.13` to `0.15.21`.
+
+### Fixed
+
+- The contract check now rejects drift between the Ruff version declared in
+  `pyproject.toml` and the version installed by CI.
+- The release archive workflow now resolves the dogfood baseline tag from the
+  frozen route manifest instead of hard-coding the v3.1.1 release line.
+- The release archive workflow now proves that the frozen baseline commit is
+  an ancestor of the dogfooded candidate before evaluating either RC or stable
+  release evidence.
+- The historical annotated `v3.2.0` baseline tag is now pinned to its exact tag
+  object SHA. Its legacy unsigned status is recorded explicitly instead of
+  being treated as GitHub-verified.
+- Stable promotion now re-verifies successful full CI for both the exact
+  dogfooded candidate SHA and the metadata-only stable SHA.
+- Pull-request CI now explicitly checks out and asserts the PR head SHA instead
+  of testing GitHub's synthetic merge ref while labeling the run as candidate CI.
+- Tag validation/build runs with read-only permissions; privileged provenance
+  attestation moved to a default-branch `workflow_run` that re-verifies the
+  signed tag, metadata, checksum, and reproduced archive without executing tag code.
+- Stable promotion now rejects self-declared scores: it validates the exact
+  canonical task-directory set, hashes raw prompt/output/ledger artifacts,
+  binds canonical rendered prompts and the 23-column ledger header, freezes
+  per-tier thresholds, and recomputes score artifacts from the raw runs.
+- Stable evidence now rejects failed or not-run executions, requires a factual
+  pass beyond refusal probes in every tier, pins the evaluator harness to the
+  candidate commit, rejects duplicate timestamp instants even when RFC 3339
+  offsets differ, and enforces
+  `run.finished_at <= score.created_at <= promotion.generated_at`.
+- Sentence-transformers model load and encode failures now return a controlled,
+  actionable backend error instead of escaping as a Python traceback.
+- Semantic indexes and backend responses now reject duplicate/non-finite JSON,
+  wrong vector counts, ragged or non-numeric embeddings, invalid entry fields,
+  and blank queries with controlled diagnostics; empty local-hashing documents
+  produce zero vectors instead of false duplicate matches.
+- Citation metadata now rejects duplicate/non-finite JSON values and conflicting
+  explicit DOI versus DOI-resolver URL identities. The `accessed` alias is
+  normalized to `date_accessed`, with conflicting aliases rejected.
+- Crossref and DataCite enrichment now preserves structured personal names,
+  editors, and organizational contributors instead of flattening corporate
+  identities into ambiguous strings.
+- Stable-evidence path derivation now resolves both sides before computing
+  repository-relative paths, preventing Windows 8.3 temporary-directory aliases
+  from crashing contract validation.
+- The Windows Python launcher now prefers the active PATH interpreter before the
+  global `py` launcher, so virtual environments and CI matrix versions are honored.
+
 ## [3.2.0] - 2026-07-13
 
 Production-ready release of the schema-2.0 D Research workflow. The stable tree
@@ -896,7 +1046,10 @@ git push origin v2.1.0 bench/v2.1 v3.0.0
   evidence-ledger schema, anti-bot fallback chain, citation export,
   systematic-review protocol, and PRISMA flow template.
 
-[Unreleased]: https://github.com/d-init-d/d-research-skill/compare/v3.2.0...HEAD
+[Unreleased]: https://github.com/d-init-d/d-research-skill/compare/v3.2.1...HEAD
+[3.2.1]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.2.1
+[3.2.1-rc.2]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.2.1-rc.2
+[3.2.1-rc.1]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.2.1-rc.1
 [3.2.0]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.2.0
 [3.2.0-rc.3]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.2.0-rc.3
 [3.2.0-rc.2]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.2.0-rc.2

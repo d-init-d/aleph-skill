@@ -1,6 +1,6 @@
 {
   "schema_version": "2.0.0",
-  "package_version": "2.1.0",
+  "package_version": "2.1.1",
   "adapters": {
     "codex": {
       "kind": "native",

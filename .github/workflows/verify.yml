@@ -25,9 +25,9 @@ jobs:
     timeout-minutes: 10
     env:
       UPSTREAM_REPOSITORY: https://github.com/d-init-d/d-research-skill
-      UPSTREAM_TAG: v3.2.0
-      UPSTREAM_TAG_OBJECT: 091997d33825a29ed6f30b089c33de9acf897ae3
-      UPSTREAM_COMMIT: 8156b460b358636e69d66c10c16800045d258446
+      UPSTREAM_TAG: v3.2.1
+      UPSTREAM_TAG_OBJECT: 4f797f0cb0f75539edfc9bc9332ca4dd041e881c
+      UPSTREAM_COMMIT: dc07d4902361ddf15ff0dd093faa0784b2fd47ab
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0

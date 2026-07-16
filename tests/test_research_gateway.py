@@ -132,21 +132,43 @@ class ResearchGatewayTests(unittest.TestCase):
         references = _component_internal_reference_reconciliation(ROOT)
         self.assertTrue(references["ok"], references)
         self.assertTrue(references["missing_repo_only_refs"])
+        self.assertIn(
+            ".github/workflows/lint-and-self-test.yml",
+            references["repo_contract_exclusions"],
+        )
         reconciled = _reconcile_component_acceptance(
             root=ROOT,
             returncode=1,
-            stdout=b"  [PASS] 01_x\n  [FAIL] 10_undeclared_stale_citations\n",
+            stdout=(
+                b"  [PASS] 01_x\n"
+                b"  [FAIL] 10_undeclared_stale_citations\n"
+                b"  [FAIL] 23_unsafe_runtime_config - Traceback: scripts/check_contract.py "
+                b"FileNotFoundError: .github/workflows/lint-and-self-test.yml\n"
+            ),
         )
         self.assertIsNotNone(reconciled)
+        assert reconciled is not None
+        self.assertEqual(reconciled["upstream_repo_only_cases_reconciled"], 2)
         hidden_failure = _reconcile_component_acceptance(
             root=ROOT,
             returncode=1,
             stdout=(
                 b"  [FAIL] 10_undeclared_stale_citations\n"
+                b"  [FAIL] 23_unsafe_runtime_config - Traceback: scripts/check_contract.py "
+                b"FileNotFoundError: .github/workflows/lint-and-self-test.yml\n"
                 b"  [FAIL] 11_unrelated_runtime_failure\n"
             ),
         )
         self.assertIsNone(hidden_failure)
+        missing_exact_trace = _reconcile_component_acceptance(
+            root=ROOT,
+            returncode=1,
+            stdout=(
+                b"  [FAIL] 10_undeclared_stale_citations\n"
+                b"  [FAIL] 23_unsafe_runtime_config - unrelated failure\n"
+            ),
+        )
+        self.assertIsNone(missing_exact_trace)
 
     def test_workspace_cannot_be_ancestor_of_skill(self) -> None:
         result = run_command(
@@ -325,6 +347,28 @@ class ResearchGatewayTests(unittest.TestCase):
         self.assertNotIn("D_RESEARCH_LEDGER_KEY", filtered)
         self.assertNotIn("D_RESEARCH_OUT", filtered)
         self.assertEqual(filtered["D_RESEARCH_ROOT"], str(ROOT / "components" / "d-research"))
+
+    def test_offline_routes_force_optional_model_backends_cache_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary).resolve()
+            filtered = _filter_research_env(
+                component_root=(ROOT / "components" / "d-research").resolve(),
+                skill_root=ROOT,
+                workspace=workspace,
+                include_hmac=False,
+                network_allowed=False,
+                base={
+                    "HF_HUB_OFFLINE": "0",
+                    "TRANSFORMERS_OFFLINE": "0",
+                    "HF_DATASETS_OFFLINE": "0",
+                    "HF_HUB_DISABLE_TELEMETRY": "0",
+                },
+            )
+        self.assertEqual(filtered["D_RESEARCH_NO_NETWORK"], "1")
+        self.assertEqual(filtered["HF_HUB_OFFLINE"], "1")
+        self.assertEqual(filtered["TRANSFORMERS_OFFLINE"], "1")
+        self.assertEqual(filtered["HF_DATASETS_OFFLINE"], "1")
+        self.assertEqual(filtered["HF_HUB_DISABLE_TELEMETRY"], "1")
 
     def test_component_self_test_does_not_run_repo_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

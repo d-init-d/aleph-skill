@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aleph-skill"
-version = "2.1.0"
+version = "2.1.1"
 description = "Portable causal timeline simulation with bundled D Research, strict validation, numerical engine, domain packs, and thin adapters."
 requires-python = ">=3.10"
 license = { text = "CC-BY-NC-4.0" }

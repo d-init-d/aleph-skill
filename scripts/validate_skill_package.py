@@ -32,7 +32,7 @@ REQUIRED_FILES = [
     ".github/workflows/ci.yml",
     ".github/workflows/verify.yml",
     ".github/workflows/release.yml",
-    ".github/release-notes/v2.1.0.md",
+    ".github/release-notes/v2.1.1.md",
     "references/simulation-workflow.md",
     "references/adaptive-research-workflow.md",
     "references/temporal-modes.md",

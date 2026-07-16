@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.1.1
+
+### Changed
+- Updated the locked internal D Research component from `3.2.0` to `3.2.1`.
+- Added upstream semantic retrieval with optional `sentence-transformers` auto-selection and deterministic `local-hashing` fallback.
+- Added richer fail-closed BibTeX/CSL metadata handling and optional local `langdetect` support with the existing trigram fallback.
+- Advanced Aleph package and validator versions to `2.1.1`; workspace schema and numerical formula versions remain `2.0.0`.
+
+### Compatibility
+- D Research workspaces require no schema migration and gain no new mandatory runtime dependency.
+- Existing Aleph finalization, validation, quality, and D Research component-binding receipts are version-bound; preserve the original workspace, rebind or re-import on a sibling copy as applicable, then validate and finalize again.
+- Optional embedding and language-detection backends are never bundled or auto-installed. Missing extras retain deterministic local fallbacks.
+
+### Security and provenance
+- Pinned the upstream verified annotated tag object `4f797f0cb0f75539edfc9bc9332ca4dd041e881c`, commit `dc07d4902361ddf15ff0dd093faa0784b2fd47ab`, Git tree `4943fec2d4fa6bda1f4beecfd9177a630af0ab8b`, and canonical archive SHA-256 `e91837e6d2d38cde4f055f54d382e58c7b2094220b87e77dff695f92a63cdd71`.
+- Locked 201 runtime files with component-tree SHA-256 `0276b3f4b6230b65e75c664edd642b9b2b7ce30e534a88a8328899b3d6fc7edd`; excluded all 529 tracked repository-only CI, release, and dogfood-evidence paths.
+- Retained bundled-first discovery, gateway-only subprocess routing, external HMAC refusal, sealed roleplay isolation, and fail-closed component verification.
+- Forces Hugging Face and Transformers cache-only mode for gateway operations unless the caller explicitly grants network access.
+
+### Verification scope
+- This patch retains the complete deterministic Aleph release gate and cross-platform CI matrix.
+- Per maintainer direction, no new model dogfood or manual multi-model forward-test campaign is part of the `2.1.1` release claim.
+
 ## 2.1.0
 
 ### Added

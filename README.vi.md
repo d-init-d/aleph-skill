@@ -146,7 +146,7 @@ Các vị trí cài đặt được hỗ trợ:
 
 ## Kiểm tra
 
-Khi nâng một workspace 2.0.0 hiện có, hãy giữ nguyên một bản sao lưu và chạy validation ở chế độ draft trước. Aleph 2.1.0 vẫn dùng `schema_version: 2.0.0`, nhưng cơ chế binding component, likelihood, privacy và sealed roleplay chặt hơn có thể yêu cầu tạo lại report, packet/receipt và numerical artifact trước khi final validation đạt. Với workspace còn lưu đường dẫn D Research tuyệt đối, chạy `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, xem báo cáo tương thích byte, rồi chạy lại không có `--check`. Không dùng migrator 1.x hoặc sửa hash bằng tay.
+Khi nâng một workspace 2.0.0 hiện có, hãy giữ nguyên một bản sao lưu và chạy validation ở chế độ draft trước. Aleph 2.1.x vẫn dùng `schema_version: 2.0.0`, nhưng cơ chế binding component, likelihood, privacy và sealed roleplay chặt hơn có thể yêu cầu tạo lại report, packet/receipt và numerical artifact trước khi final validation đạt. Với workspace còn lưu đường dẫn D Research tuyệt đối, chạy `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, xem báo cáo tương thích byte, rồi chạy lại không có `--check`. Không dùng migrator 1.x hoặc sửa hash bằng tay.
 
 ```powershell
 python "$env:ALEPH_SKILL_ROOT\scripts\validate_skill_package.py" "$env:ALEPH_SKILL_ROOT"

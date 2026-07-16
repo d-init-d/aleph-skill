@@ -3,7 +3,7 @@ name: aleph-skill
 description: Evidence-grounded causal timeline simulation for AI CLI and IDE hosts that support Agent Skills or an Aleph adapter contract. Use for counterfactual history, prospective interventions, hybrid past-to-future projections, butterfly effects, calibrated scenario analysis, domain-pack modeling, public-role actor decisions with sealed research/roleplay separation, and auditable uncertainty.
 ---
 
-# Aleph Skill 2.1.0
+# Aleph Skill 2.1.1
 
 Model how a defined intervention propagates through a causal system. Treat Aleph as a simulation protocol, never an oracle. Keep these labels distinct:
 
