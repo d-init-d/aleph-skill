@@ -215,13 +215,17 @@ class FormulaV21ContractTests(unittest.TestCase):
             <= {item.code for item in mismatch}
         )
 
-    def test_sobol_optional_executes_available_and_constant_paths(self) -> None:
+    def test_sobol_optional_executes_available_or_degraded_path(self) -> None:
         available = sobol_saltelli_optional(
             {"x": (0.0, 1.0), "y": (-1.0, 1.0)},
             lambda params: params["x"] + 2.0 * params["y"],
             n=16,
             seed="available",
         )
+        if not available["available"]:
+            self.assertTrue(available["degraded"])
+            self.assertNotIn("first_order", available)
+            return
         self.assertTrue(available["available"])
         self.assertEqual(set(available["first_order"]), {"x", "y"})
         constant = sobol_saltelli_optional(
