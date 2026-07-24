@@ -1,9 +1,9 @@
 {
   "policy_id": "cal:technology:v1",
   "precommitted": true,
-  "commitment_version": "aleph-hindcast-commitment-v2",
+  "commitment_version": "aleph-hindcast-commitment-v3",
   "case_commitments": {
-    "hindcast:technology:synthetic-001": "e14eeb503ef11822c30df7e15ec038296b97adc769f5efaea1bf2ea927197620"
+    "hindcast:technology:synthetic-001": "1e5ed6402dbad141a8d63d0010ee46c4a2747c124a8254ec94fe44e6268c3f39"
   },
   "min_oos_cases": 30,
   "metrics": [

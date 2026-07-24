@@ -1,5 +1,6 @@
 {
   "schema_version": "2.0.0",
+  "formula_version": "2.1.0",
   "case_id": "hindcast:economics:synthetic-001",
   "cutoff": "2020-01-01",
   "evidence_snapshot_hash": "a99cacf9fa3818a8b32271facb14b518f65c151338d8de03fe9420a76fe18ca4",

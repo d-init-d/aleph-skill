@@ -22,7 +22,7 @@ Record discovery/import state as a closed contract:
 | `available` | Bundled URI or explicit external path, `package_major: 3`, truthful invocation flag. |
 | `imported` / `verified` | `invoked: true`, portable `component_binding` on the import receipt, `ledger_ref`, and `artifact_paths.research_import_receipt`. |
 
-For bundled runs store `execution.d_research.path` as `aleph-component://d-research`. Workspace `schema_version` and `formula_version` remain `2.0.0`.
+For bundled runs store `execution.d_research.path` as `aleph-component://d-research`. Workspace `schema_version` remains `2.0.0`. New Aleph 2.2 workspaces use `formula_version: 2.1.0`; existing formula 2.0.0 workspaces remain replayable under the legacy numerical contract.
 
 ## Gateway
 

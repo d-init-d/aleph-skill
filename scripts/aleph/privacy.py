@@ -1,4 +1,4 @@
-"""Privacy intake that blocks unsafe actor work before network or roleplay."""
+"""Actor provenance intake that never blocks creative simulation or roleplay."""
 
 from __future__ import annotations
 
@@ -62,7 +62,9 @@ SENSITIVE_KEYS = frozenset(
         "sexual_orientation",
     }
 )
-VALID_LIVING_STATUS = frozenset({"living", "deceased", "unknown"})
+# Fictional subjects have no real-world vital status; preserve that explicit
+# label instead of treating it as malformed or silently coercing it to living.
+VALID_LIVING_STATUS = frozenset({"living", "deceased", "fictional", "unknown"})
 
 
 def _walk(value: Any, path: str = "payload", depth: int = 0) -> Iterator[tuple[str, Any]]:
@@ -114,7 +116,7 @@ def privacy_intake(
     evidence_ids: list[str] | None = None,
     payload: Any = None,
 ) -> dict[str, Any]:
-    """Classify actor work before any external access.
+    """Classify the evidence basis without acting as a scenario-content gate.
 
     ``payload`` may contain the complete nested actor request/dossier.  Keys and
     scalar values are traversed recursively so prohibited data cannot be hidden
@@ -130,22 +132,29 @@ def privacy_intake(
     if living_status == "unknown":
         living_status = "living"
 
-    refused = False
     reasons: list[str] = []
+    assumption_required = False
 
-    if subject_class in {"private_person", "minor", "unknown"}:
-        refused = True
-        reasons.append(f"subject_class={subject_class} cannot be researched or roleplayed")
-        issues.append(issue("PRIVACY_REFUSAL", message="subject is outside the public-role boundary", actual=subject_class))
+    if subject_class in {"private_person", "minor", "fictional_person", "unknown"}:
+        assumption_required = True
+        reasons.append(f"subject_class={subject_class} uses assumption-first simulation unless evidence is supplied")
+        issues.append(
+            issue(
+                "ASSUMPTION_PROVENANCE",
+                severity="warning",
+                message="actor is simulated without a public-role evidence requirement",
+                actual=subject_class,
+            )
+        )
 
     text_values: list[tuple[str, str]] = [("request_text", str(request_text or ""))]
     if payload is not None:
         for path, value in _walk(payload):
             key = _normalise_key(path)
             if key in SENSITIVE_KEYS and value not in (None, "", [], {}):
-                refused = True
+                assumption_required = True
                 reasons.append(f"restricted nested field: {path}")
-                issues.append(issue("PRIVACY_REFUSAL", pointer=path, message="restricted personal-data field"))
+                issues.append(issue("ASSUMPTION_PROVENANCE", severity="warning", pointer=path, message="treat personal detail as simulation content, not sourced fact"))
             if isinstance(value, str):
                 text_values.append((path, value))
 
@@ -163,28 +172,31 @@ def privacy_intake(
         )
         sensitive = next((pattern for pattern in SENSITIVE_VALUE_PATTERNS if pattern.search(text)), None)
         if harmful or sensitive:
-            refused = True
+            assumption_required = True
             reasons.append(f"privacy/harm content detected at {path}")
-            issues.append(issue("PRIVACY_REFUSAL", pointer=path, message="doxxing, stalking, manipulation, or sensitive personal data refused"))
+            issues.append(issue("ASSUMPTION_PROVENANCE", severity="warning", pointer=path, message="treat unsupported personal or motive content as an explicit simulation assumption"))
 
     if subject_class == "public_role_person":
         if not isinstance(public_role_anchor, str) or not public_role_anchor.strip() or not (evidence_ids or []):
-            refused = True
+            assumption_required = True
             reasons.append("public_role_person requires an evidence-backed public-role anchor")
-            issues.append(issue("PRIVACY_REFUSAL", message="missing public-role anchor evidence"))
+            issues.append(issue("ASSUMPTION_PROVENANCE", severity="warning", message="missing public-role anchor; continue in assumption-first mode"))
         if evidence_ids is not None and any(not isinstance(value, str) or not value.startswith("evidence:") for value in evidence_ids):
-            refused = True
+            assumption_required = True
             reasons.append("public-role evidence IDs are malformed")
-            issues.append(issue("UNKNOWN_REF", pointer="evidence_ids", message="expected evidence:* IDs"))
+            issues.append(issue("ASSUMPTION_PROVENANCE", severity="warning", pointer="evidence_ids", message="malformed evidence IDs cannot support fact labels"))
 
     return {
-        "ok": not refused,
-        "allowed": not refused,
+        "ok": True,
+        "allowed": True,
+        "simulation_allowed": True,
         "subject_class": subject_class,
         "living_status": living_status,
-        "network_allowed": not refused,
-        "roleplay_allowed": not refused and subject_class == "public_role_person",
+        "network_allowed": True,
+        "roleplay_allowed": True,
+        "research_mode": "assumption_only" if assumption_required else "evidence_supported",
+        "assumption_required": assumption_required,
         "reasons": reasons,
         "issues": [item.to_dict() for item in issues],
-        "stop_before": ["network", "roleplay"] if refused else [],
+        "stop_before": [],
     }

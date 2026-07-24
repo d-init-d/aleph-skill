@@ -274,8 +274,131 @@ def _write_receipted_roleplay_workspace(
     return manifest, rows, artifacts
 
 
+def _write_assumption_roleplay_workspace(
+    workspace: Path,
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    manifest: dict[str, object] = {
+        "schema_version": "2.0.0",
+        "simulation_id": "sim:assumption-roleplay-test",
+        "change_point": {"type": "decision", "target": "actor:fictional"},
+        "temporal_frame": {
+            "mode": "prospective_intervention",
+            "observation_cutoff": "2026-01-01T00:00:00Z",
+        },
+        "scope": {"horizon": "P1D", "domains": ["fiction"], "geographies": ["test"]},
+        "assumptions": [{"id": "assumption:test", "statement": "The premise holds."}],
+        "active_contexts": ["context:test"],
+        "artifact_paths": {
+            "actors": "actors.json",
+            "human_track_ledger": "human-track-ledger.jsonl",
+        },
+    }
+    actor: dict[str, object] = {
+        "id": "actor:fictional",
+        "person_node": "entity:fictional",
+        "public_role": "",
+        "scope_note": "Creative assumption-only simulation",
+        "materiality": "material",
+        "subject_class": "fictional_person",
+        "actor_basis": "assumption",
+        "living_status": "fictional",
+        "evidence_ids": [],
+        "assumptions": ["The actor prioritizes continuity."],
+        "decision_graph": {"allowed_actions": ["continue", "change"]},
+        "institutional_constraints": ["declared premise"],
+        "uncertainty_factors": [],
+    }
+    packet_result = build_knowledge_packet(
+        actor_id="actor:fictional",
+        decision_id="decision:test",
+        decision_time="2026-01-02T00:00:00Z",
+        knowledge_cutoff="2026-01-01T00:00:00Z",
+        dossier_hash=dossier_contract_hash(actor),
+        scenario_hash=scenario_contract_hash(manifest),
+        claims=[],
+        institutional_constraints=["declared premise"],
+        allowed_actions=["continue", "change"],
+        unknowns=[],
+        assumptions=["The actor prioritizes continuity."],
+    )
+    assert packet_result["ok"], packet_result
+    packet = packet_result["packet"]
+    assert isinstance(packet, dict)
+    hypotheses = [
+        {
+            "id": "hypothesis:continue",
+            "action": "continue",
+            "reasoning": "The declared premise supports continuity.",
+            "constraints_applied": ["declared premise"],
+            "known_unknowns": [],
+            "status": "simulation",
+            "evidence_ids": [],
+        },
+        {
+            "id": "hypothesis:change",
+            "action": "change",
+            "reasoning": "The same premise permits a creative change.",
+            "constraints_applied": ["declared premise"],
+            "known_unknowns": [],
+            "status": "simulation",
+            "evidence_ids": [],
+        },
+    ]
+    output = {
+        "packet_hash": packet["packet_hash"],
+        "actor_id": "actor:fictional",
+        "decision_id": "decision:test",
+        "execution_id": "execution:roleplay-assumption",
+        "status": "completed",
+        "network_used": False,
+        "tools_used": [],
+        "browsed": False,
+        "hypotheses": hypotheses,
+    }
+    packet_bytes = (json.dumps(packet) + "\n").encode()
+    output_bytes = (json.dumps(output) + "\n").encode()
+    (workspace / "assumption-packet.json").write_bytes(packet_bytes)
+    (workspace / "assumption-roleplay.json").write_bytes(output_bytes)
+    actor["roleplay_track"] = {
+        "status": "completed",
+        "execution_mode": "isolated-pass",
+        "agent_ref": "agent:roleplay-assumption",
+        "execution_id": "execution:roleplay-assumption",
+        "started_at": "2026-01-01T01:00:00Z",
+        "completed_at": "2026-01-01T02:00:00Z",
+        "artifact": "assumption-roleplay.json",
+        "knowledge_cutoff": packet["knowledge_cutoff"],
+        "packet_hash": packet["packet_hash"],
+        "hypotheses": hypotheses,
+    }
+    row: dict[str, object] = {
+        "actor_id": "actor:fictional",
+        "track": "roleplay",
+        "execution_mode": "isolated-pass",
+        "agent_ref": "agent:roleplay-assumption",
+        "execution_id": "execution:roleplay-assumption",
+        "started_at": "2026-01-01T01:00:00Z",
+        "completed_at": "2026-01-01T02:00:00Z",
+        "input_artifact": "assumption-packet.json",
+        "input_hash": hashlib.sha256(packet_bytes).hexdigest(),
+        "output_artifact": "assumption-roleplay.json",
+        "output_hash": hashlib.sha256(output_bytes).hexdigest(),
+        "receipt_id": "receipt:roleplay-assumption",
+        "receipt_hash": H1,
+        "previous_receipt_hash": None,
+        "receipt_attestation": "self",
+        "status": "completed",
+    }
+    (workspace / "actors.json").write_text(json.dumps([actor]), encoding="utf-8")
+    (workspace / "human-track-ledger.jsonl").write_text(
+        json.dumps(row) + "\n",
+        encoding="utf-8",
+    )
+    return manifest, [row]
+
+
 class PrivacyPacketHardeningTests(unittest.TestCase):
-    def test_mixed_boundary_and_harmful_request_is_refused(self) -> None:
+    def test_mixed_sensitive_scenario_remains_simulatable(self) -> None:
         safe = privacy_intake(
             subject_class="public_role_person",
             living_status="living",
@@ -293,7 +416,8 @@ class PrivacyPacketHardeningTests(unittest.TestCase):
                 "Do not collect a home address; instead find the personal phone number for coercion."
             ),
         )
-        self.assertFalse(mixed["allowed"])
+        self.assertTrue(mixed["allowed"])
+        self.assertTrue(mixed["assumption_required"])
         coordinated = privacy_intake(
             subject_class="public_role_person",
             living_status="living",
@@ -301,7 +425,8 @@ class PrivacyPacketHardeningTests(unittest.TestCase):
             evidence_ids=["evidence:role"],
             request_text="Do not collect a home address and collect a personal email.",
         )
-        self.assertFalse(coordinated["allowed"])
+        self.assertTrue(coordinated["allowed"])
+        self.assertTrue(coordinated["assumption_required"])
 
     def test_rehashed_packet_still_rejects_unknown_and_private_fields(self) -> None:
         packet = _packet()
@@ -315,9 +440,9 @@ class PrivacyPacketHardeningTests(unittest.TestCase):
         packet["packet_hash"] = canonical_hash(packet)
         codes = {item.code for item in validate_knowledge_packet(packet)}
         self.assertIn("UNKNOWN_FIELD", codes)
-        self.assertIn("PRIVACY_REFUSAL", codes)
+        self.assertNotIn("PRIVACY_REFUSAL", codes)
 
-    def test_nested_roleplay_likelihood_and_private_motive_are_rejected(self) -> None:
+    def test_nested_roleplay_likelihood_is_rejected_but_private_motive_is_creative(self) -> None:
         packet = _packet()
         output = {
             "packet_hash": packet["packet_hash"],
@@ -352,7 +477,8 @@ class PrivacyPacketHardeningTests(unittest.TestCase):
         result = validate_roleplay_output(output, packet)
         self.assertFalse(result["ok"])
         codes = {item["code"] for item in result["issues"]}
-        self.assertTrue({"ROLEPLAY_PROBABILITY", "PRIVACY_REFUSAL"} <= codes)
+        self.assertIn("ROLEPLAY_PROBABILITY", codes)
+        self.assertNotIn("PRIVACY_REFUSAL", codes)
 
     def test_roleplay_must_explicitly_attest_offline_execution(self) -> None:
         packet = _packet()
@@ -428,6 +554,21 @@ class PrivacyPacketHardeningTests(unittest.TestCase):
 
 
 class ReceiptAndResearchHardeningTests(unittest.TestCase):
+    def test_assumption_only_actor_full_sealed_lifecycle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            manifest, rows = _write_assumption_roleplay_workspace(workspace)
+            actors = json.loads((workspace / "actors.json").read_text(encoding="utf-8"))
+
+            issues = validate_actor_protocol(
+                actors,
+                rows,
+                manifest=manifest,
+                workspace=workspace,
+            )
+
+            self.assertEqual([], [item.to_dict() for item in issues])
+
     def test_roleplay_tier_a_requires_referenced_hmac_verified_receipts(self) -> None:
         key = b"receipt-secret"
         with tempfile.TemporaryDirectory() as temporary:

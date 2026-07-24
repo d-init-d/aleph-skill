@@ -20,11 +20,11 @@ It has one host-neutral core. Codex, OpenCode, Claude Code, Agent Skills, Gemini
 |---|---|
 | Primary use | Counterfactual history, present-day intervention analysis, hybrid past-to-future timelines, and butterfly-effect scenario trees. |
 | Simulation model | Evidence-backed nodes, mechanism-tested edges, executable traces, relative branch weights, calibrated probabilities, and unresolved mass. |
-| Human decisions | Public-role actor dossiers separated from simulated decision hypotheses, so roleplay never becomes evidence. |
+| Human decisions | Evidence, mixed, or assumption-only actor dossiers feed sealed simulated hypotheses, so roleplay never becomes evidence. |
 | Research depth | Adaptive expansion based on temporal span, domain breadth, geography, actor density, causal depth, evidence uncertainty, and stakes. |
 | Outputs | Professional scenario reports, evidence maps, causal graphs, branch ledgers, propagation traces, validation reports, and audit metadata. |
 | Runtime posture | Portable markdown skill with stdlib-first helper scripts and optional adapters for major agent environments. |
-| Safety posture | No deterministic prophecy, private-person profiling, doxxing, access-control bypass, or unsupported sensitive claims. |
+| Creative scope | No Aleph-level topic or scenario restrictions; unsupported details remain explicit assumptions or simulation content. |
 
 ## When to use it
 
@@ -35,10 +35,10 @@ Use Aleph Skill when an agent needs to:
 - project a present-day intervention into multiple future branches;
 - model policy, market, geopolitical, social, climate, technology, or institutional scenarios;
 - map butterfly effects through causal chains, thresholds, feedback loops, and lagged consequences;
-- reason about public-role human decisions without turning private speculation into fact;
+- reason creatively about any human decision while keeping sourced claims separate from simulation assumptions;
 - produce a decision-grade report that separates `fact`, `inference`, `simulation`, and `counterfactual`.
 
-Do not use it to claim one future is certain, profile private people, deanonymize people, bypass access controls, or collect sensitive personal information.
+Use any creative scenario. Aleph does not refuse or rewrite topics, actors, motives, conflicts, or outcomes; it separates observed evidence from invented simulation content so creative freedom does not become a false factual claim.
 
 ## Product scope
 
@@ -58,9 +58,9 @@ External-CLI profiles describe version probes, bootstrap instructions, capabilit
 | 1. Research | Build the baseline, source map, evidence map, contradiction notes, and uncertainty register. | `evidence-map.csv` |
 | 2. Construct | Create entity, event, factor, context, indicator, claim, source, and actor nodes. | `timeline-node.json`, `actor-dossier.json` |
 | 3. Link | Admit only causal edges with a concrete mechanism, lag, context modifier, evidence, strength, and confidence. | `causal-edge.json` |
-| 4. Propagate | Trace lagged/contextual effects, bounded feedback, saturation, thresholds, and amplification paths. The 2.0 level engine does not imply stock/flow integration or decay. | `propagation-trace.jsonl` |
+| 4. Propagate | Trace lagged/contextual effects, bounded feedback, nonlinear transforms, timestep-invariant stock decay, and rate/impulse flow integration under formula 2.1. | `propagation-trace.jsonl` |
 | 5. Branch | Produce distinct timelines using relative weights unless calibration gates authorize probability. | `branch-ledger.json` |
-| 6. Human decisions | Keep sourced public-role research separate from simulated decision hypotheses. | `human-track-ledger.jsonl` |
+| 6. Human decisions | Keep evidence/mixed research separate from simulated hypotheses; assumption-only actors skip research. | `human-track-ledger.jsonl` |
 | 7. Report and audit | Render a professional scenario report and validate readiness before delivery. | `validation-report.json`, final Markdown report |
 
 ## Core capabilities
@@ -70,7 +70,7 @@ External-CLI profiles describe version probes, bootstrap instructions, capabilit
 3. **Hybrid projections** — carry a past divergence into an alternate present, then branch into future scenarios.
 4. **Adaptive depth** — expand research and validation according to scenario complexity rather than fixed speed profiles.
 5. **Mechanism-first causality** — reject edges that lack a plausible transmission channel, lag, context, and evidence.
-6. **Human-node discipline** — use public-role information for actor dossiers and label all roleplay as simulation.
+6. **Human-node discipline** — declare `actor_basis`, separate evidence from invention, and label all roleplay as simulation.
 7. **Future monitoring** — attach leading indicators and disconfirming conditions to prospective branches.
 8. **Professional reporting** — report likelihood mode, evidence quality, causal architecture, sensitivity, unresolved mass, limitations, and audit receipts.
 9. **Portable validation** — enforce referential integrity across evidence, nodes, edges, actors, branches, traces, and reports.
@@ -150,7 +150,7 @@ Supported install locations:
 
 ## Verification
 
-When upgrading an existing 2.0.0 workspace, keep an untouched backup and run draft validation first. Aleph 2.1.x keeps `schema_version: 2.0.0`, but its stricter component binding, likelihood, privacy, and sealed-roleplay contracts can require report, packet/receipt, and numerical-artifact regeneration before final validation succeeds. For a workspace that still stores an absolute D Research path, run `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, inspect the byte-equivalence report, then repeat without `--check`. Do not use the 1.x schema migrator or hand-edit hashes.
+When upgrading an existing 2.0.0 workspace, keep an untouched backup and run draft validation first. Aleph 2.2.x keeps `schema_version: 2.0.0`, writes `formula_version: 2.1.0` for new workspaces, and can still replay formula 2.0.0 artifacts. Its stricter numerical, component-binding, likelihood, provenance, and sealed-roleplay contracts can require report, packet/receipt, and numerical-artifact regeneration before final validation succeeds. For a workspace that still stores an absolute D Research path, run `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, inspect the byte-equivalence report, then repeat without `--check`. Do not use the 1.x schema migrator or hand-edit hashes or formula identifiers.
 
 Run the local release gate:
 
@@ -185,11 +185,11 @@ Use the bundled D Research component through Aleph's gateway, falling back to li
 and produce at least three branches with relative weights, indicators, contradictions, and uncertainty warnings.
 ```
 
-## Safety boundary
+## Creative simulation freedom
 
-Aleph Skill is for lawful, evidence-backed scenario analysis. It refuses or narrows requests involving private-person profiling, doxxing, stalking, minors, private accounts, access-control bypass, captcha evasion, paywall bypass, or unsupported claims about sensitive personal traits.
+Aleph always runs the requested scenario. It has no content-refusal list of its own and does not require a scenario to be historical, fictional, anonymous, nonviolent, nonpolitical, nonreligious, or supported by evidence. Unsupported details are labeled `assumption`, `simulation`, or `counterfactual` rather than presented as observed facts.
 
-It does not predict the future. It builds transparent, source-aware simulations so users can inspect assumptions, mechanisms, uncertainties, and alternatives.
+Mandatory host policy remains external to Aleph. A host restriction must never be described as an Aleph restriction.
 
 ## License
 

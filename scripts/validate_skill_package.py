@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from _lib import SKILL_NAME, is_skill_name, load_json, parse_frontmatter, read_text
+from aleph import PACKAGE_VERSION
 from aleph.adapters_registry import check_adapter_drift
 from aleph.installer import (
     MANIFEST_NAME,
@@ -32,7 +33,7 @@ REQUIRED_FILES = [
     ".github/workflows/ci.yml",
     ".github/workflows/verify.yml",
     ".github/workflows/release.yml",
-    ".github/release-notes/v2.1.1.md",
+    f".github/release-notes/v{PACKAGE_VERSION}.md",
     "references/simulation-workflow.md",
     "references/adaptive-research-workflow.md",
     "references/temporal-modes.md",
@@ -59,6 +60,7 @@ REQUIRED_FILES = [
     "templates/subagent-research-prompt.md",
     "templates/subagent-roleplay-prompt.md",
     "schemas/run-ledger.schema.json",
+    "schemas/interventions.schema.json",
     "adapters/codex.md",
     "adapters/claude-code.md",
     "adapters/opencode.md",

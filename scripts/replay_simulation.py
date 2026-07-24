@@ -6,7 +6,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from aleph import EXIT_OK, EXIT_SEMANTIC, EXIT_USAGE
+from aleph import (
+    EXIT_OK,
+    EXIT_SEMANTIC,
+    EXIT_USAGE,
+    FORMULA_VERSION,
+    LEGACY_FORMULA_VERSION,
+    SUPPORTED_FORMULA_VERSIONS,
+)
 from aleph.engine import (
     EngineConfig,
     compile_model,
@@ -15,7 +22,6 @@ from aleph.engine import (
     semantic_result_payload,
 )
 from aleph.execution_binding import build_trace_execution_binding
-from aleph.formula import formula_version
 from aleph.io import canonical_hash, load_json_secure, sha256_file, write_json_atomic
 from aleph.issues import Issue, issue
 from aleph.paths import output_alias_issues, resolve_in_workspace
@@ -100,7 +106,7 @@ def main() -> None:
     if (
         not isinstance(recorded, dict)
         or recorded.get("schema_version") != "2.0.0"
-        or recorded.get("run_contract_version") != "aleph-run-2.0"
+        or recorded.get("run_contract_version") not in {"aleph-run-2.0", "aleph-run-2.1"}
         or recorded.get("mode") not in {"deterministic", "monte_carlo"}
         or not isinstance(recorded.get("ticks"), int)
         or isinstance(recorded.get("ticks"), bool)
@@ -112,12 +118,38 @@ def main() -> None:
         print(json.dumps({"ok": False, "error": "invalid or unsupported run contract"}, indent=2))
         raise SystemExit(EXIT_SEMANTIC)
 
+    formula_version = recorded.get("formula_version", LEGACY_FORMULA_VERSION)
+    run_contract_version = str(recorded.get("run_contract_version"))
+    expected_formula_version = (
+        LEGACY_FORMULA_VERSION if run_contract_version == "aleph-run-2.0" else FORMULA_VERSION
+    )
+    expected_binding_version = (
+        "aleph-trace-execution-binding-v1"
+        if run_contract_version == "aleph-run-2.0"
+        else "aleph-trace-execution-binding-v2"
+    )
+    recorded_execution_binding = recorded.get("trace_execution_binding")
+    manifest_formula_version = manifest.get("formula_version") if isinstance(manifest, dict) else None
+    if (
+        formula_version not in SUPPORTED_FORMULA_VERSIONS
+        or formula_version != expected_formula_version
+        or (run_contract_version == "aleph-run-2.1" and "formula_version" not in recorded)
+        or not isinstance(recorded_execution_binding, dict)
+        or recorded_execution_binding.get("version") != expected_binding_version
+        or (
+            manifest_formula_version is not None
+            and manifest_formula_version != formula_version
+        )
+    ):
+        print(json.dumps({"ok": False, "error": "run, formula, manifest, and binding versions disagree"}, indent=2))
+        raise SystemExit(EXIT_SEMANTIC)
+
     declared_contract_hash = recorded.get("contract_hash")
     contract_body = {key: value for key, value in recorded.items() if key != "contract_hash"}
     contract_hash_ok = declared_contract_hash == canonical_hash(contract_body)
     raw_config = recorded.get("config")
     try:
-        compiled = compile_workspace(workspace)
+        compiled = compile_workspace(workspace, formula_version=str(formula_version))
         config = EngineConfig(**raw_config) if isinstance(raw_config, dict) else EngineConfig()
     except (TypeError, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc), "code": "MODEL_COMPILE"}, indent=2))
@@ -135,6 +167,7 @@ def main() -> None:
             nodes if isinstance(nodes, list) else [],
             edges if isinstance(edges, list) else [],
             load_interventions(workspace, manifest if isinstance(manifest, dict) else {}),
+            formula_version=str(formula_version),
         )
     except (TypeError, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc), "code": "MODEL_COMPILE"}, indent=2))
@@ -227,6 +260,21 @@ def main() -> None:
         trace_issues.extend(semantic_issues)
         trace_rows = len(rows)
         validated_rows = rows
+        trace_formula_versions = {
+            row.get("formula_version") for row in rows if isinstance(row, dict)
+        }
+        if trace_formula_versions != {formula_version}:
+            trace_contract_ok = False
+            trace_issues.append(
+                issue(
+                    "REPLAY_MISMATCH",
+                    artifact=str(recorded_trace.get("path")),
+                    pointer="formula_version",
+                    expected=formula_version,
+                    actual=sorted(str(value) for value in trace_formula_versions),
+                    message="trace formula version differs from the recorded run",
+                )
+            )
         expected_rows = recorded_trace.get("row_count")
         if trace_rows != expected_rows:
             trace_contract_ok = False
@@ -251,9 +299,13 @@ def main() -> None:
             ticks=ticks,
             result=replay,
             manifest=manifest if isinstance(manifest, dict) else {},
+            binding_version=(
+                str(recorded_execution_binding.get("version"))
+                if isinstance(recorded_execution_binding, dict)
+                else None
+            ),
         )
         trace_issues.extend(binding_issues)
-    recorded_execution_binding = recorded.get("trace_execution_binding")
     trace_execution_binding_ok = (
         current_execution_binding is not None
         and current_execution_binding == recorded_execution_binding
@@ -281,7 +333,7 @@ def main() -> None:
     )
     report = {
         "schema_version": "2.0.0",
-        "formula_version": formula_version(),
+        "formula_version": str(formula_version),
         "recorded_contract_hash": declared_contract_hash,
         "contract_hash_ok": contract_hash_ok,
         "recorded_model_hash": recorded.get("model_hash"),

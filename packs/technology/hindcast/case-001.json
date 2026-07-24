@@ -1,5 +1,6 @@
 {
   "schema_version": "2.0.0",
+  "formula_version": "2.1.0",
   "case_id": "hindcast:technology:synthetic-001",
   "cutoff": "2020-01-01",
   "evidence_snapshot_hash": "351e0367fb40c27ede0979c97a6179ee6a1431e4abc91ef92fc9b4a0dbefd05f",

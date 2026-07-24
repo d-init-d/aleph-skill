@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
 
+from . import FORMULA_VERSION, LEGACY_FORMULA_VERSION, SUPPORTED_FORMULA_VERSIONS
 from .engine import (
     EngineConfig,
     compile_model,
@@ -24,6 +25,7 @@ PACK_NAMES = ("economics", "policy", "history", "climate", "healthcare", "techno
 MATURITY = frozenset({"experimental", "validated", "calibrated"})
 RELATIONS = {"increases": 1, "decreases": -1, "enables": 1, "inhibits": -1, "correlates": 0}
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
+HINDCAST_COMMITMENT_VERSION = "aleph-hindcast-commitment-v3"
 
 
 def discover_pack_roots(
@@ -199,6 +201,7 @@ def evidence_snapshot_hash(evidence: list[dict[str, Any]]) -> str:
 def hindcast_commitment_payload(
     case: dict[str, Any],
     *,
+    formula_version: str,
     model_digest: str,
     config_digest: str,
     snapshot_digest: str,
@@ -207,11 +210,12 @@ def hindcast_commitment_payload(
     observations = case.get("observations")
     baselines = case.get("baselines")
     return {
-        "commitment_version": "aleph-hindcast-commitment-v2",
+        "commitment_version": HINDCAST_COMMITMENT_VERSION,
         "case_id": case.get("case_id"),
         "outcome_dataset": case.get("outcome_dataset"),
         "cutoff": case.get("cutoff"),
         "model_hash": model_digest,
+        "formula_version": formula_version,
         "config_hash": config_digest,
         "ticks": ticks,
         "evidence_snapshot_hash": snapshot_digest,
@@ -269,12 +273,12 @@ def evaluate_hindcast_case(case: dict[str, Any], *, policy: dict[str, Any] | Non
     if policy is not None:
         if policy.get("precommitted") is not True:
             problems.append(issue("PACK_MATURITY", pointer="/policy/precommitted", message="precommitted policy required"))
-        if policy.get("commitment_version") != "aleph-hindcast-commitment-v2":
+        if policy.get("commitment_version") != HINDCAST_COMMITMENT_VERSION:
             problems.append(
                 issue(
                     "PACK_MATURITY",
                     pointer="/policy/commitment_version",
-                    expected="aleph-hindcast-commitment-v2",
+                    expected=HINDCAST_COMMITMENT_VERSION,
                     actual=policy.get("commitment_version"),
                     message="current hindcast commitment contract required",
                 )
@@ -285,11 +289,28 @@ def evaluate_hindcast_case(case: dict[str, Any], *, policy: dict[str, Any] | Non
     raw_nodes = model_data.get("nodes")
     raw_edges = model_data.get("edges")
     raw_interventions = model_data.get("interventions")
+    case_formula_version = case.get("formula_version")
+    if case_formula_version not in SUPPORTED_FORMULA_VERSIONS:
+        problems.append(
+            issue(
+                "SCHEMA",
+                pointer="/formula_version",
+                expected=list(SUPPORTED_FORMULA_VERSIONS),
+                actual=case_formula_version,
+                message="hindcast case must bind a supported formula version",
+            )
+        )
+    resolved_formula_version = (
+        str(case_formula_version)
+        if case_formula_version in SUPPORTED_FORMULA_VERSIONS
+        else FORMULA_VERSION
+    )
     try:
         model = compile_model(
             raw_nodes if isinstance(raw_nodes, list) else [],
             raw_edges if isinstance(raw_edges, list) else [],
             raw_interventions if isinstance(raw_interventions, list) else [],
+            formula_version=resolved_formula_version,
         )
     except (TypeError, ValueError) as exc:
         problems.append(issue("SCHEMA", pointer="/model", message=str(exc)))
@@ -312,6 +333,7 @@ def evaluate_hindcast_case(case: dict[str, Any], *, policy: dict[str, Any] | Non
     config_digest = canonical_hash(config_payload(config))
     commitment_payload = hindcast_commitment_payload(
         case,
+        formula_version=model.formula_version,
         model_digest=model_digest,
         config_digest=config_digest,
         snapshot_digest=actual_snapshot,
@@ -362,7 +384,12 @@ def evaluate_hindcast_case(case: dict[str, Any], *, policy: dict[str, Any] | Non
         "case_id": case.get("case_id"),
         "cutoff": cutoff,
         "evidence_snapshot_hash": actual_snapshot,
-        "model_version": "aleph-engine-2.0",
+        "model_version": (
+            "aleph-engine-2.0"
+            if model.formula_version == LEGACY_FORMULA_VERSION
+            else "aleph-engine-2.1"
+        ),
+        "formula_version": model.formula_version,
         "model_hash": model_digest,
         "config_hash": config_digest,
         "commitment_hash": commitment_digest,
@@ -410,7 +437,7 @@ def validate_pack(pack_dir: Path) -> dict[str, Any]:
     if (
         not isinstance(policy, dict)
         or policy.get("precommitted") is not True
-        or policy.get("commitment_version") != "aleph-hindcast-commitment-v2"
+        or policy.get("commitment_version") != HINDCAST_COMMITMENT_VERSION
         or not isinstance(policy.get("metrics"), list)
         or not isinstance(policy.get("min_oos_cases"), int)
         or policy.get("min_oos_cases", 0) < 30

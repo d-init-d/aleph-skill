@@ -246,7 +246,7 @@ class FinalHindcastSensitivityHardeningTests(unittest.TestCase):
         case["evidence_snapshot_hash"] = evidence_snapshot_hash(case["evidence"])
         result = evaluate_hindcast_case(
             case,
-            policy={"precommitted": True, "commitment_version": "aleph-hindcast-commitment-v2"},
+            policy={"precommitted": True, "commitment_version": "aleph-hindcast-commitment-v3"},
         )
         self.assertTrue(result["ok"], result)
         self.assertFalse(result["policy_locked"])
@@ -270,6 +270,12 @@ class FinalHindcastSensitivityHardeningTests(unittest.TestCase):
         commitment_mismatch = evaluate_hindcast_case(model_tamper, policy=policy)
         self.assertFalse(commitment_mismatch["ok"])
         self.assertIn("STALE_ARTIFACT", {item["code"] for item in commitment_mismatch["issues"]})
+
+        formula_tamper = copy.deepcopy(case)
+        formula_tamper["formula_version"] = "2.0.0"
+        formula_mismatch = evaluate_hindcast_case(formula_tamper, policy=policy)
+        self.assertFalse(formula_mismatch["ok"])
+        self.assertIn("STALE_ARTIFACT", {item["code"] for item in formula_mismatch["issues"]})
 
         observation_tamper = copy.deepcopy(case)
         target = next(iter(observation_tamper["observations"]))

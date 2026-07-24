@@ -81,13 +81,14 @@
     "calibration": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["method", "sample_count", "interval", "calibration_policy_ref", "model_version", "model_hash", "hindcast_report_ref"],
+      "required": ["method", "sample_count", "interval", "calibration_policy_ref", "model_version", "formula_version", "model_hash", "hindcast_report_ref"],
       "properties": {
         "method": {"type": "string", "minLength": 1},
         "sample_count": {"type": "integer", "minimum": 1},
         "interval": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number", "minimum": 0, "maximum": 1}},
         "calibration_policy_ref": {"type": "string", "minLength": 1},
         "model_version": {"type": "string", "minLength": 1},
+        "formula_version": {"enum": ["2.0.0", "2.1.0"]},
         "model_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "hindcast_report_ref": {"type": "string", "minLength": 1}
       }

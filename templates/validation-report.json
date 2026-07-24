@@ -1,6 +1,6 @@
 {
   "schema_version": "2.0.0",
-  "validator_version": "2.1.1",
+  "validator_version": "2.2.0",
   "validated_at": "2026-07-01T00:00:00Z",
   "mode": "final",
   "status": "pass",
@@ -12,5 +12,5 @@
   "errors": [],
   "issues": [],
   "error_codes": [],
-  "formula_version": "2.0.0"
+  "formula_version": "2.1.0"
 }

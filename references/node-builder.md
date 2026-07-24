@@ -68,6 +68,12 @@ Add:
 
 Factors are the best carriers for propagation when the effect is measurable.
 
+For numerical dynamics, set `scale` explicitly:
+
+- `level`: recompute from baseline and active inputs on every tick;
+- `flow`: a per-day rate recomputed from baseline and active inputs; an edge from flow to stock defaults to rate integration;
+- `stock`: carry the prior state across ticks. Prefer non-negative `decay_rate` per day; alternatively use per-day `retention` in `[0,1]`. Either may be a scalar distribution, but do not declare both.
+
 ## Context nodes
 
 Contexts modulate causal edges.
@@ -136,4 +142,4 @@ Prefer primary data, official records, peer-reviewed research, institutional rep
 
 Node detail follows causal materiality and adaptive complexity rather than a named depth level. Critical-path nodes require type-specific fields, directly supported mechanisms, contradiction checks, rival explanations, sensitivity drivers, and calibration anchors. Peripheral nodes may remain compact but still require the complete artifact schema.
 
-Human decision makers on critical paths require full public-role dossiers and separated research/roleplay tracks.
+Human decision makers on critical paths require an explicit `actor_basis`, sealed packets, and roleplay labeled `simulation`. Evidence/mixed actors separate research from roleplay; assumption-only actors skip research and state assumptions/unknowns directly.

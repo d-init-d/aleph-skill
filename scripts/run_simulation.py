@@ -9,7 +9,13 @@ from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
-from aleph import EXIT_NUMERICAL, EXIT_OK, EXIT_SEMANTIC, EXIT_USAGE
+from aleph import (
+    EXIT_NUMERICAL,
+    EXIT_OK,
+    EXIT_SEMANTIC,
+    EXIT_USAGE,
+    LEGACY_FORMULA_VERSION,
+)
 from aleph.engine import (
     EngineConfig,
     compile_model,
@@ -18,11 +24,20 @@ from aleph.engine import (
     run_monte_carlo,
 )
 from aleph.execution_binding import build_trace_execution_binding
-from aleph.io import canonical_hash, load_json_secure, sha256_file, write_json_atomic
+from aleph.io import (
+    canonical_hash,
+    load_json_secure,
+    sha256_file,
+    write_json_atomic,
+)
 from aleph.issues import issue
 from aleph.paths import output_alias_issues, resolve_in_workspace
 from aleph.trace_contract import validate_declared_trace
-from compile_model import compile_workspace, load_interventions
+from compile_model import (
+    compile_workspace,
+    load_interventions,
+    resolve_workspace_formula_version,
+)
 
 
 def _load_json_or_exit(path: Path) -> Any:
@@ -112,6 +127,10 @@ def _config(workspace: Path, args: argparse.Namespace) -> EngineConfig:
     return EngineConfig(**values)
 
 
+def _formula_version(workspace: Path, manifest: dict[str, Any]) -> str:
+    return resolve_workspace_formula_version(workspace, manifest)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run a hashed deterministic or Monte Carlo simulation contract.")
     parser.add_argument("--workspace", required=True)
@@ -178,7 +197,17 @@ def main() -> None:
             path_issues.append(
                 issue("TYPE", artifact=str(candidate), message="declared output must be a regular file")
             )
-    protected = [node_path, edge_path, manifest_path, workspace / "interventions.json"]
+    protected = [
+        node_path,
+        edge_path,
+        manifest_path,
+        workspace
+        / str(
+            artifact_paths.get("interventions", "interventions.json")
+            if isinstance(artifact_paths, dict)
+            else "interventions.json"
+        ),
+    ]
     if out is not None and model_out is not None:
         path_issues.extend(output_alias_issues(out, [model_out, *protected]))
         path_issues.extend(output_alias_issues(model_out, [out, *protected]))
@@ -186,10 +215,12 @@ def main() -> None:
         print(json.dumps({"ok": False, "issues": [value.to_dict() for value in path_issues]}, indent=2))
         raise SystemExit(EXIT_USAGE)
     try:
+        formula_version = _formula_version(workspace, manifest if isinstance(manifest, dict) else {})
         model = compile_model(
             nodes if isinstance(nodes, list) else [],
             edges if isinstance(edges, list) else [],
             load_interventions(workspace, manifest if isinstance(manifest, dict) else {}),
+            formula_version=formula_version,
         )
         config = _config(workspace, args)
         ticks = args.ticks
@@ -235,7 +266,7 @@ def main() -> None:
         print(json.dumps(result, indent=2, default=str))
         raise SystemExit(EXIT_NUMERICAL)
     try:
-        compiled = compile_workspace(workspace)
+        compiled = compile_workspace(workspace, formula_version=formula_version)
     except (OSError, TypeError, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc), "code": "MODEL_COMPILE"}, indent=2))
         raise SystemExit(EXIT_SEMANTIC) from exc
@@ -258,6 +289,20 @@ def main() -> None:
                     "error": "declared propagation trace failed semantic validation",
                     "code": "TRACE_EMPTY",
                     "issues": [value.to_dict() for value in trace_issues],
+                },
+                indent=2,
+            )
+        )
+        raise SystemExit(EXIT_SEMANTIC)
+    if {row.get("formula_version") for row in trace_rows} != {formula_version}:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": "trace and run formula versions differ",
+                    "code": "FORMULA_VERSION_MISMATCH",
+                    "expected": formula_version,
+                    "actual": sorted({str(row.get("formula_version")) for row in trace_rows}),
                 },
                 indent=2,
             )
@@ -291,7 +336,7 @@ def main() -> None:
     }
     contract = {
         "schema_version": "2.0.0",
-        "run_contract_version": "aleph-run-2.0",
+        "run_contract_version": "aleph-run-2.0" if formula_version == LEGACY_FORMULA_VERSION else "aleph-run-2.1",
         "mode": config.mode,
         "ticks": ticks,
         "model_hash": compiled["model_hash"],
@@ -302,6 +347,8 @@ def main() -> None:
         "trace_contract": trace_contract,
         "trace_execution_binding": trace_execution_binding,
     }
+    if formula_version != LEGACY_FORMULA_VERSION:
+        contract["formula_version"] = formula_version
     contract["contract_hash"] = canonical_hash(contract)
     try:
         _commit_json_pair([(model_out, compiled), (out, contract)])

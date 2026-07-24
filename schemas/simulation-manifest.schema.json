@@ -12,14 +12,24 @@
     "assurance_tier": {"type": ["string", "null"], "enum": ["experimental", "limited", "verified", "calibrated", null]},
     "likelihood_mode": {"enum": ["deterministic", "relative_weight", "calibrated_probability"]},
     "simulation_mode": {"enum": ["qualitative", "deterministic", "monte_carlo"]},
+    "formula_version": {"enum": ["2.0.0", "2.1.0"]},
     "change_point": {
       "type": "object", "additionalProperties": false,
       "required": ["type", "target", "description", "magnitude", "time", "location", "assumption_ref"],
       "properties": {
         "type": {"type": "string"}, "target": {"type": "string"}, "description": {"type": "string"},
-        "magnitude": {"type": "number"}, "time": {"type": "string"}, "location": {"type": "string"},
+        "magnitude": {"type": "number"}, "value": {"type": "number"}, "time": {"type": "string"}, "location": {"type": "string"},
+        "op": {"enum": ["set", "add", "multiply"]}, "start_tick": {"type": "integer", "minimum": 0},
+        "end_tick": {"type": ["integer", "null"], "minimum": 0},
+        "release_policy": {"enum": ["retain", "reset_baseline"]},
         "assumption_ref": {"type": "string", "pattern": "^assumption:"}
-      }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"release_policy": {"const": "reset_baseline"}}, "required": ["release_policy"]},
+          "then": {"properties": {"op": {"const": "set"}}, "required": ["op"]}
+        }
+      ]
     },
     "temporal_frame": {
       "type": "object", "additionalProperties": false,
@@ -73,7 +83,7 @@
     "artifact_paths": {
       "type": "object", "additionalProperties": false,
       "properties": {
-        "nodes": {"type": "string"}, "edges": {"type": "string"}, "actors": {"type": "string"}, "human_track_ledger": {"type": "string"}, "evidence_map": {"type": "string"}, "branch_ledger": {"type": "string"}, "propagation_trace": {"type": "string"}, "validation_report": {"type": "string"}, "quality_report": {"type": "string"}, "final_report": {"type": "string"}, "computational_model": {"type": "string"}, "simulation_config": {"type": "string"}, "run_manifest": {"type": "string"}, "run_ledger": {"type": "string"}, "replay_report": {"type": "string"}, "sensitivity_report": {"type": "string"}, "calibration_report": {"type": "string"}, "roleplay_receipts": {"type": "string"}, "research_import_receipt": {"type": "string"}
+        "nodes": {"type": "string"}, "edges": {"type": "string"}, "interventions": {"type": "string"}, "actors": {"type": "string"}, "human_track_ledger": {"type": "string"}, "evidence_map": {"type": "string"}, "branch_ledger": {"type": "string"}, "propagation_trace": {"type": "string"}, "validation_report": {"type": "string"}, "quality_report": {"type": "string"}, "final_report": {"type": "string"}, "computational_model": {"type": "string"}, "simulation_config": {"type": "string"}, "run_manifest": {"type": "string"}, "run_ledger": {"type": "string"}, "replay_report": {"type": "string"}, "sensitivity_report": {"type": "string"}, "calibration_report": {"type": "string"}, "roleplay_receipts": {"type": "string"}, "research_import_receipt": {"type": "string"}
       }
     },
     "artifact_index": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["path", "media_type", "size", "sha256", "hash_scope"], "properties": {"path": {"type": "string"}, "media_type": {"type": "string"}, "size": {"type": "integer", "minimum": 0}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "hash_scope": {"enum": ["full_file", "manifest_input_contract"]}}}},

@@ -1,9 +1,9 @@
 {
   "policy_id": "cal:healthcare:v1",
   "precommitted": true,
-  "commitment_version": "aleph-hindcast-commitment-v2",
+  "commitment_version": "aleph-hindcast-commitment-v3",
   "case_commitments": {
-    "hindcast:healthcare:synthetic-001": "c1c1e343608d567b84651bdf988b44c9688315a03e4dfab54762d6868452836a"
+    "hindcast:healthcare:synthetic-001": "88384629b6f10083e3cb566357e4a2675bc4e6ebf62c743d34e4ed1c23b67afc"
   },
   "min_oos_cases": 30,
   "metrics": [

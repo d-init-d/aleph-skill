@@ -20,6 +20,7 @@ from research_gateway import (
     SCRIPT_INVENTORY,
     _component_internal_reference_reconciliation,
     _filter_research_env,
+    _host_resolves_non_public,
     _reconcile_component_acceptance,
     _run_bounded_process,
     assert_roleplay_isolation,
@@ -169,6 +170,52 @@ class ResearchGatewayTests(unittest.TestCase):
             ),
         )
         self.assertIsNone(missing_exact_trace)
+
+    def test_dns_policy_acceptance_delegation_is_exact(self) -> None:
+        output = (
+            b"  [FAIL] 10_undeclared_stale_citations\n"
+            b"  [FAIL] 22_tier_b_lookup_failure_structured\n"
+            b"  [FAIL] 23_unsafe_runtime_config - Traceback: scripts/check_contract.py "
+            b"FileNotFoundError: .github/workflows/lint-and-self-test.yml\n"
+            b"  [FAIL] 26_resource_caps_deterministic\n"
+        )
+        with mock.patch(
+            "research_gateway._host_resolves_non_public",
+            return_value=True,
+        ):
+            reconciled = _reconcile_component_acceptance(
+                root=ROOT,
+                returncode=1,
+                stdout=output,
+            )
+        self.assertIsNotNone(reconciled)
+        assert reconciled is not None
+        self.assertEqual(reconciled["upstream_repo_only_cases_reconciled"], 2)
+        self.assertEqual(reconciled["host_dns_policy_cases_delegated"], 2)
+
+        with mock.patch(
+            "research_gateway._host_resolves_non_public",
+            return_value=False,
+        ):
+            self.assertIsNone(
+                _reconcile_component_acceptance(
+                    root=ROOT,
+                    returncode=1,
+                    stdout=output,
+                )
+            )
+
+    def test_non_public_dns_detection(self) -> None:
+        with mock.patch(
+            "research_gateway.socket.getaddrinfo",
+            return_value=[(2, 1, 6, "", ("127.0.0.1", 443))],
+        ):
+            self.assertTrue(_host_resolves_non_public("www.reddit.com"))
+        with mock.patch(
+            "research_gateway.socket.getaddrinfo",
+            return_value=[(2, 1, 6, "", ("8.8.8.8", 443))],
+        ):
+            self.assertFalse(_host_resolves_non_public("www.reddit.com"))
 
     def test_workspace_cannot_be_ancestor_of_skill(self) -> None:
         result = run_command(

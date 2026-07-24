@@ -18,7 +18,7 @@ SIMULATION_MODE = frozenset({"qualitative", "deterministic", "monte_carlo"})
 LIKELIHOOD_MODE = frozenset({"deterministic", "relative_weight", "calibrated_probability"})
 ASSURANCE_TIER = frozenset({"experimental", "limited", "verified", "calibrated"})
 MATERIALITY = frozenset({"material", "non_material"})
-SUBJECT_CLASS = frozenset({"public_role_person", "private_person", "minor", "unknown"})
+SUBJECT_CLASS = frozenset({"public_role_person", "private_person", "minor", "fictional_person", "unknown"})
 NODE_TYPES = frozenset({"entity", "event", "factor", "context", "indicator", "claim", "source"})
 TIMELINE_MODES = frozenset({"retrospective_counterfactual", "prospective_intervention", "hybrid_projection"})
 TIMELINE_LABELS = frozenset({"shared_baseline", "observed_baseline", "simulated_branch"})
@@ -40,7 +40,7 @@ RELATION_ALLOWED = frozenset(
     }
 )
 LAG_TYPES = frozenset({"fixed", "uniform", "triangular", "truncated_exponential"})
-TRANSFORMS = frozenset({"linear", "elasticity"})
+TRANSFORMS = frozenset({"linear", "elasticity", "identity", "logistic", "threshold"})
 SOURCE_TIERS = frozenset({"primary", "authoritative-secondary", "secondary", "tertiary", "user-provided"})
 RETRIEVAL_STATUSES = frozenset(
     {"opened", "downloaded", "api", "local-file", "user-provided", "search-snippet", "blocked"}
@@ -96,6 +96,7 @@ KNOWN_MANIFEST_FIELDS = frozenset(
         "assurance_tier",
         "likelihood_mode",
         "simulation_mode",
+        "formula_version",
         "artifact_index",
         "validation_receipt",
         "quality_receipt",
@@ -110,6 +111,7 @@ ARTIFACT_PATH_FIELDS = frozenset(
     {
         "nodes",
         "edges",
+        "interventions",
         "actors",
         "human_track_ledger",
         "evidence_map",
@@ -165,6 +167,8 @@ NODE_FIELDS = frozenset(
         "scale",
         "baseline",
         "bounds",
+        "retention",
+        "decay_rate",
     }
 )
 
@@ -185,6 +189,9 @@ EDGE_FIELDS = frozenset(
         "assumption_ref",
         "status",
         "transform",
+        "transform_parameters",
+        "effect_distribution",
+        "integration",
         "effect_parameter",
         "existence_prob",
         "feedback_policy",
@@ -195,6 +202,9 @@ EDGE_FIELDS = frozenset(
 
 LAG_FIELDS = frozenset({"type", "min", "max", "mode", "fixed", "rate", "mean"})
 CONTEXT_MODIFIER_FIELDS = frozenset({"context", "multiplier", "rationale", "active"})
+TRANSFORM_PARAMETER_FIELDS = frozenset(
+    {"midpoint", "steepness", "mode", "threshold", "deadband", "theta_on", "theta_off"}
+)
 
 ACTOR_FIELDS = frozenset(
     {
@@ -204,6 +214,8 @@ ACTOR_FIELDS = frozenset(
         "scope_note",
         "materiality",
         "subject_class",
+        "actor_basis",
+        "assumptions",
         "living_status",
         "evidence_ids",
         "research_track",
@@ -288,6 +300,11 @@ TRACE_ROW_FIELDS = frozenset(
         "source_state",
         "target_state",
         "sampled_strength",
+        "resolved_transform_parameters",
+        "threshold_active_before",
+        "threshold_active_after",
+        "integrated_effect",
+        "target_retention_factor",
         "hash_chain",
     }
 )
@@ -316,6 +333,7 @@ CALIBRATION_FIELDS = frozenset(
         "interval",
         "calibration_policy_ref",
         "model_version",
+        "formula_version",
         "model_hash",
         "hindcast_report_ref",
     }
@@ -378,6 +396,11 @@ CHANGE_POINT_FIELDS = frozenset(
         "target",
         "description",
         "magnitude",
+        "value",
+        "op",
+        "start_tick",
+        "end_tick",
+        "release_policy",
         "time",
         "location",
         "assumption_ref",
@@ -518,6 +541,7 @@ ROLEPLAY_HYPOTHESIS_FIELDS = frozenset(
         "id",
         "action",
         "reasoning",
+        "private_motive",
         "status",
         "evidence_ids",
         "probability",

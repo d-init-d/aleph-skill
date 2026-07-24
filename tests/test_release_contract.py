@@ -76,6 +76,39 @@ class ReleaseContractTests(unittest.TestCase):
             identifiers.add(identifier)
             inspect(document, name, document)
 
+        self.assertEqual(
+            catalog["artifacts"]["interventions"], "interventions.schema.json"
+        )
+        for keyword in ("not", "propertyNames", "maxProperties"):
+            self.assertIn(keyword, catalog["supported_keywords"])
+
+    def test_distribution_and_intervention_schemas_match_runtime_shape(self) -> None:
+        schema_root = ROOT / "schemas"
+        for filename in ("timeline-node.schema.json", "causal-edge.schema.json"):
+            schema = json.loads((schema_root / filename).read_text(encoding="utf-8"))
+            scalar = schema["$defs"]["scalarDistribution"]
+            self.assertIn("oneOf", scalar)
+            self.assertEqual(len(scalar["allOf"]), 4)
+            required_sets = {
+                tuple(branch["then"]["required"]) for branch in scalar["allOf"]
+            }
+            self.assertEqual(
+                required_sets,
+                {("value",), ("min", "max"), ("min", "mode", "max"), ("mean", "sd")},
+            )
+
+        interventions = json.loads(
+            (schema_root / "interventions.schema.json").read_text(encoding="utf-8")
+        )
+        row = interventions["$defs"]["intervention"]
+        self.assertEqual(
+            set(row["required"]), {"id", "target", "op", "value", "start_tick"}
+        )
+        self.assertEqual(
+            row["properties"]["release_policy"]["enum"],
+            ["retain", "reset_baseline"],
+        )
+
     def test_assumption_contract_matches_template_and_fixture(self) -> None:
         schema = json.loads((ROOT / "schemas" / "simulation-manifest.schema.json").read_text(encoding="utf-8"))
         assumption_schema = schema["properties"]["assumptions"]

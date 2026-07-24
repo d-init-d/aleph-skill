@@ -1,5 +1,6 @@
 {
   "schema_version": "2.0.0",
+  "formula_version": "2.1.0",
   "case_id": "hindcast:geopolitics:synthetic-001",
   "cutoff": "2020-01-01",
   "evidence_snapshot_hash": "6c4b81ed988f7ee8aa2754f1958d20fc19ba4a9b5861bbeecaba81ac35eb2226",

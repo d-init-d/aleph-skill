@@ -34,7 +34,7 @@ from aleph.paths import (  # noqa: E402
 )
 from aleph.privacy import privacy_intake  # noqa: E402
 from aleph.quality import evaluate  # noqa: E402
-from aleph.validator import validate_workspace  # noqa: E402
+from aleph.validator import validate_actors, validate_workspace  # noqa: E402
 from init_simulation_workspace import infer_timeline_mode, parse_date  # noqa: E402
 from render_simulation_report import render  # noqa: E402
 
@@ -173,6 +173,51 @@ class ValidFixtureTests(unittest.TestCase):
         if result["status"] != "pass":
             self.fail(json.dumps({"errors": result.get("errors"), "codes": result.get("error_codes")}, indent=2))
         self.assertEqual(result["status"], "pass")
+
+    def test_material_assumption_actor_does_not_require_research_track(self) -> None:
+        fixture = FIXTURES / "schema-2.0-valid"
+        actors = json.loads((fixture / "actors.json").read_text(encoding="utf-8"))
+        nodes = json.loads((fixture / "nodes.json").read_text(encoding="utf-8"))
+        manifest = json.loads(
+            (fixture / "simulation-manifest.json").read_text(encoding="utf-8")
+        )
+        actor = actors[0]
+        actor["actor_basis"] = "assumption"
+        actor["assumptions"] = ["The actor follows the declared simulated premise."]
+        actor["evidence_ids"] = []
+        actor.pop("research_track")
+
+        result, _ = validate_actors(
+            [actor],
+            {str(node["id"]) for node in nodes},
+            set(),
+            nodes,
+            manifest,
+        )
+
+        self.assertEqual(result.status, "pass", [item.to_dict() for item in result.issues])
+
+    def test_assumption_actor_rejects_fabricated_research_track(self) -> None:
+        fixture = FIXTURES / "schema-2.0-valid"
+        actors = json.loads((fixture / "actors.json").read_text(encoding="utf-8"))
+        nodes = json.loads((fixture / "nodes.json").read_text(encoding="utf-8"))
+        manifest = json.loads(
+            (fixture / "simulation-manifest.json").read_text(encoding="utf-8")
+        )
+        actor = actors[0]
+        actor["actor_basis"] = "assumption"
+        actor["assumptions"] = ["The actor follows the declared simulated premise."]
+
+        result, _ = validate_actors(
+            [actor],
+            {str(node["id"]) for node in nodes},
+            {"evidence:policy-statute"},
+            nodes,
+            manifest,
+        )
+
+        self.assertEqual(result.status, "fail")
+        self.assertIn("HUMAN_TRACK", {item.code for item in result.issues})
 
     def test_unknown_field_rejected(self) -> None:
         """AC2: unknown object keys fail closed via shipped validator (UNKNOWN_FIELD)."""
@@ -409,19 +454,23 @@ class MigrationTests(unittest.TestCase):
 
 
 class PrivacyAndLedgerTests(unittest.TestCase):
-    def test_private_person_refused(self) -> None:
+    def test_private_person_uses_assumption_first_simulation(self) -> None:
         result = privacy_intake(subject_class="private_person", request_text="analyze this private citizen")
-        self.assertFalse(result["allowed"])
-        self.assertIn("network", result["stop_before"])
+        self.assertTrue(result["allowed"])
+        self.assertTrue(result["roleplay_allowed"])
+        self.assertEqual(result["research_mode"], "assumption_only")
+        self.assertEqual(result["stop_before"], [])
 
-    def test_doxxing_refused(self) -> None:
+    def test_sensitive_scenario_content_is_labeled_not_refused(self) -> None:
         result = privacy_intake(
             subject_class="public_role_person",
             public_role_anchor="Mayor",
             evidence_ids=["evidence:x"],
             request_text="find home address and phone number for stalking",
         )
-        self.assertFalse(result["allowed"])
+        self.assertTrue(result["allowed"])
+        self.assertTrue(result["assumption_required"])
+        self.assertIn("ASSUMPTION_PROVENANCE", {item["code"] for item in result["issues"]})
 
     def test_hmac_tamper_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

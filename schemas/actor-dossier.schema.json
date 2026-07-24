@@ -7,12 +7,14 @@
   "properties": {
     "id": {"type": "string", "pattern": "^actor:"},
     "person_node": {"type": "string", "pattern": "^entity:"},
-    "public_role": {"type": "string", "minLength": 1},
+    "public_role": {"type": "string"},
     "scope_note": {"type": "string", "minLength": 1},
     "materiality": {"enum": ["material", "non_material"]},
-    "subject_class": {"enum": ["public_role_person", "private_person", "minor", "unknown"]},
+    "subject_class": {"enum": ["public_role_person", "private_person", "minor", "fictional_person", "unknown"]},
+    "actor_basis": {"enum": ["evidence", "mixed", "assumption"]},
+    "assumptions": {"type": "array", "items": {"type": "string", "minLength": 1}},
     "living_status": {"type": "string"},
-    "evidence_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^evidence:"}},
+    "evidence_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^evidence:"}},
     "research_track": {"$ref": "#/$defs/research_track"},
     "roleplay_track": {"$ref": "#/$defs/roleplay_track"},
     "adjudication": {"$ref": "#/$defs/adjudication"},
@@ -29,7 +31,24 @@
   "allOf": [
     {
       "if": {"properties": {"materiality": {"const": "material"}}, "required": ["materiality"]},
-      "then": {"required": ["research_track", "roleplay_track", "adjudication", "decision_graph"]}
+      "then": {"required": ["roleplay_track", "adjudication", "decision_graph"]}
+    },
+    {
+      "if": {
+        "properties": {
+          "materiality": {"const": "material"},
+          "actor_basis": {"enum": ["evidence", "mixed"]}
+        },
+        "required": ["materiality", "actor_basis"]
+      },
+      "then": {"required": ["research_track"]}
+    },
+    {
+      "if": {
+        "properties": {"actor_basis": {"const": "assumption"}},
+        "required": ["actor_basis"]
+      },
+      "then": {"not": {"required": ["research_track"]}}
     }
   ],
   "$defs": {
@@ -70,7 +89,7 @@
         "notes": {"type": "string"},
         "isolation_note": {"type": "string"},
         "preferred_tool": {"type": "string"},
-        "claims": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/research_claim"}}
+        "claims": {"type": "array", "items": {"$ref": "#/$defs/research_claim"}}
       }
     },
     "roleplay_hypothesis": {
@@ -81,6 +100,7 @@
         "id": {"type": "string", "pattern": "^hypothesis:"},
         "action": {"type": "string", "minLength": 1},
         "reasoning": {"type": "string", "minLength": 1},
+        "private_motive": {"type": "string", "minLength": 1},
         "status": {"const": "simulation"},
         "evidence_ids": {"type": "array", "maxItems": 0},
         "constraints_applied": {"type": "array", "items": {"type": "string"}},

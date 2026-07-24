@@ -64,7 +64,7 @@ PUBLIC_CODES = frozenset(
         "MATERIALITY_GRAPH",
         "PERSON_NODE",
         "SUBJECT_CLASS",
-        "PRIVACY_REFUSAL",
+        "ASSUMPTION_PROVENANCE",
         "ROLEPLAY_EVIDENCE",
         "ROLEPLAY_PROBABILITY",
         "ROLEPLAY_NETWORK",

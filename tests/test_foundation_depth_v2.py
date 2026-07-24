@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import builtins
 import json
 import math
 import os
@@ -141,14 +140,12 @@ class RngAndSensitivityTests(unittest.TestCase):
         self.assertEqual(contrast["outcomes"], {"0.0": 0.0, "2.0": 4.0})
 
     def test_sobol_has_explicit_optional_dependency_degrade(self) -> None:
-        real_import = builtins.__import__
-
-        def without_numpy(name: str, *args: object, **kwargs: object) -> object:
-            if name == "numpy":
-                raise ImportError("deliberately absent")
-            return real_import(name, *args, **kwargs)
-
-        with mock.patch("builtins.__import__", side_effect=without_numpy):
+        # Patch the optional importer itself so this branch is deterministic
+        # even when NumPy was imported and cached by an earlier test.
+        with mock.patch(
+            "aleph.sensitivity.importlib.import_module",
+            side_effect=ImportError("deliberately absent"),
+        ):
             degraded = sobol_saltelli_optional({"x": (0.0, 1.0)}, lambda values: values["x"], n=8)
         self.assertFalse(degraded["available"])
         self.assertTrue(degraded["degraded"])
@@ -377,7 +374,7 @@ class PackAndInstallerGateTests(unittest.TestCase):
         case = json.loads((ROOT / "packs" / "economics" / "hindcast" / "case-001.json").read_text(encoding="utf-8"))
         valid = evaluate_hindcast_case(
             case,
-            policy={"precommitted": True, "commitment_version": "aleph-hindcast-commitment-v2"},
+            policy={"precommitted": True, "commitment_version": "aleph-hindcast-commitment-v3"},
         )
         self.assertTrue(valid["ok"], valid)
         leaked = json.loads(json.dumps(case))

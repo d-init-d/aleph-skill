@@ -17,10 +17,86 @@
     "confidence": {"type": "number", "minimum": 0, "maximum": 1}, "assumption_ref": {"type": "string"},
     "alternative_explanations": {"type": "array", "items": {"type": "string"}},
     "sensitivity": {"type": "object", "additionalProperties": false, "required": ["level", "drivers"], "properties": {"level": {"enum": ["low", "medium", "high"]}, "drivers": {"type": "array", "items": {"type": "string"}}}}, "role": {"type": "string"}, "datatype": {"type": "string"},
-    "unit": {"type": "string"}, "scale": {"type": "string"}, "baseline": {"type": "number"}, "bounds": {"type": "array"}
+    "unit": {"type": "string"}, "scale": {"enum": ["level", "flow", "stock"]}, "baseline": {"type": "number"}, "bounds": {"type": "array"},
+    "retention": {"oneOf": [{"type": "number", "minimum": 0, "maximum": 1}, {"$ref": "#/$defs/scalarDistribution"}]},
+    "decay_rate": {"oneOf": [{"type": "number", "minimum": 0}, {"$ref": "#/$defs/scalarDistribution"}]}
   },
+  "allOf": [
+    {"if": {"anyOf": [{"required": ["retention"]}, {"required": ["decay_rate"]}]}, "then": {"properties": {"scale": {"const": "stock"}}, "required": ["scale"]}},
+    {"not": {"required": ["retention", "decay_rate"]}}
+  ],
   "$defs": {
     "state": {"type": "object", "additionalProperties": false, "required": ["summary"], "properties": {"summary": {"type": "string"}, "value": {"type": "number"}, "unit": {"type": "string"}, "category": {"type": "string"}, "lower": {"type": "number"}, "upper": {"type": "number"}}},
-    "trigger": {"type": "object", "additionalProperties": false, "required": ["kind", "description"], "properties": {"kind": {"type": "string"}, "description": {"type": "string"}, "source": {"type": "string"}, "magnitude": {"type": "number"}}}
+    "trigger": {"type": "object", "additionalProperties": false, "required": ["kind", "description"], "properties": {"kind": {"type": "string"}, "description": {"type": "string"}, "source": {"type": "string"}, "magnitude": {"type": "number"}}},
+    "scalarDistribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Scalar uncertainty distribution. Semantic validation additionally enforces min < max, min <= mode <= max, and agreement between aliases.",
+      "properties": {
+        "distribution": {"enum": ["fixed", "uniform", "triangular", "normal"]},
+        "type": {"enum": ["fixed", "uniform", "triangular", "normal"]},
+        "value": {"type": "number"},
+        "min": {"type": "number"},
+        "mode": {"type": "number"},
+        "max": {"type": "number"},
+        "mean": {"type": "number"},
+        "sd": {"type": "number", "exclusiveMinimum": 0}
+      },
+      "oneOf": [
+        {"required": ["distribution"], "not": {"required": ["type"]}},
+        {"required": ["type"], "not": {"required": ["distribution"]}},
+        {
+          "required": ["distribution", "type"],
+          "oneOf": [
+            {"properties": {"distribution": {"const": "fixed"}, "type": {"const": "fixed"}}},
+            {"properties": {"distribution": {"const": "uniform"}, "type": {"const": "uniform"}}},
+            {"properties": {"distribution": {"const": "triangular"}, "type": {"const": "triangular"}}},
+            {"properties": {"distribution": {"const": "normal"}, "type": {"const": "normal"}}}
+          ]
+        }
+      ],
+      "allOf": [
+        {
+          "if": {"anyOf": [
+            {"properties": {"distribution": {"const": "fixed"}}, "required": ["distribution"]},
+            {"properties": {"type": {"const": "fixed"}}, "required": ["type"]}
+          ]},
+          "then": {
+            "required": ["value"],
+            "propertyNames": {"enum": ["distribution", "type", "value"]}
+          }
+        },
+        {
+          "if": {"anyOf": [
+            {"properties": {"distribution": {"const": "uniform"}}, "required": ["distribution"]},
+            {"properties": {"type": {"const": "uniform"}}, "required": ["type"]}
+          ]},
+          "then": {
+            "required": ["min", "max"],
+            "propertyNames": {"enum": ["distribution", "type", "min", "max"]}
+          }
+        },
+        {
+          "if": {"anyOf": [
+            {"properties": {"distribution": {"const": "triangular"}}, "required": ["distribution"]},
+            {"properties": {"type": {"const": "triangular"}}, "required": ["type"]}
+          ]},
+          "then": {
+            "required": ["min", "mode", "max"],
+            "propertyNames": {"enum": ["distribution", "type", "min", "mode", "max"]}
+          }
+        },
+        {
+          "if": {"anyOf": [
+            {"properties": {"distribution": {"const": "normal"}}, "required": ["distribution"]},
+            {"properties": {"type": {"const": "normal"}}, "required": ["type"]}
+          ]},
+          "then": {
+            "required": ["mean", "sd"],
+            "propertyNames": {"enum": ["distribution", "type", "mean", "sd"]}
+          }
+        }
+      ]
+    }
   }
 }

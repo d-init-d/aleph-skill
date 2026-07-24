@@ -26,6 +26,15 @@ Edges are directed causal hypotheses. Every edge must be traceable and auditable
 }
 ```
 
+## Transform selection
+
+- Use `linear` for proportional effects. Use `elasticity` only when `input_effect` is a log-change; formula 2.1 converts `base_strength * input_effect` with `expm1`.
+- Use `identity` for direct passthrough without a strength coefficient.
+- Use `logistic` for a bounded S-shaped response; set `transform_parameters.midpoint` and positive `steepness` when defaults `0` and `1` are not appropriate.
+- Use `threshold` with `mode: above|below|deadband|hysteresis`. Declare `theta_on` and `theta_off` for hysteresis; numeric parameters may use scalar distributions.
+- Use optional positive `saturation` when the final edge contribution needs a symmetric hardening cap.
+- For edges into a stock, use `integration: rate` for a per-day flow integrated by the timestep or `integration: impulse` for an instantaneous increment. Flow→stock defaults to `rate`.
+
 ## Mechanism test
 
 Before admitting an edge, answer:
@@ -33,7 +42,7 @@ Before admitting an edge, answer:
 1. What is the transmission channel?
 2. How does the change physically, socially, institutionally, financially, or psychologically reach the target?
 3. Why is the relation causal rather than merely correlated?
-4. When does the effect arrive? If fade or stock dynamics matter, is a level-model limitation declared?
+4. When does the effect arrive? If accumulation or fade matters, is the target declared as a stock with `decay_rate`/`retention` and the edge integration mode?
 5. Which contexts amplify or dampen it?
 
 If any answer is missing, mark the edge `incomplete` and do not use it as a strong propagation path.
@@ -84,7 +93,7 @@ Use:
 - `uniform` when timing is uncertain within a range,
 - `truncated_exponential` for uncertain hazard-like arrival time bounded by the declared range.
 
-Aleph 2.0 samples arrival lag; it does not implement post-arrival decay kernels or stock/flow integration. Declare that limitation when it is material.
+Aleph samples arrival lag and supports explicit stock accumulation with timestep-invariant exponential decay. Declare a limitation when the scenario needs an arbitrary non-exponential memory kernel.
 
 ## Admission decision
 
@@ -95,4 +104,4 @@ Admit an edge into propagation only if:
 - strength and confidence are both present,
 - lag is explicit,
 - status is not `deprecated`,
-- safety/privacy boundaries are respected.
+- every unsupported premise is explicitly labeled as an assumption or simulation.

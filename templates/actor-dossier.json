@@ -2,9 +2,10 @@
   "id": "actor:example",
   "person_node": "entity:example",
   "public_role": "public decision maker",
-  "scope_note": "Public-role behavior only; private personal data is out of scope.",
+  "scope_note": "Any creative behavior may be simulated; unsupported details are explicit assumptions.",
   "materiality": "material",
   "subject_class": "public_role_person",
+  "actor_basis": "evidence",
   "living_status": "living",
   "evidence_ids": ["evidence:example"],
   "decision_graph": {

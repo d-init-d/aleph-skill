@@ -92,7 +92,7 @@ Search snippets are discovery aids, not strong evidence. Prefer opened primary/a
 
 ## 8. Run human tracks
 
-For each material actor, complete a dedicated public-role research dossier through the bundled D Research gateway or, after a capability blocker, the limited host-native fallback before dispatching the separate roleplay track. Freeze the dossier and simulated-time knowledge cutoff. Roleplay cannot browse, call research tools, inspect the evidence map, or add evidence.
+For each evidence/mixed material actor, complete a dedicated public-role research dossier through the bundled D Research gateway or, after a capability blocker, the limited host-native fallback before dispatching the separate roleplay track. Assumption-only and fictional actors skip research and use a packet of explicit premises and unknowns. Freeze the dossier and simulated-time knowledge cutoff. Roleplay cannot browse, call research tools, inspect the evidence map, or add evidence.
 
 ## 9. Construct and challenge the causal graph
 

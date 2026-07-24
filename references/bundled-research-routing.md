@@ -150,6 +150,13 @@ Missing optional Node/browser capability is reported as `degraded` or
 real failure. `research:acceptance` and `research:browser-smoke` remain separate
 release jobs so a no-browser job cannot masquerade as a browser pass.
 
+The upstream 3.2.1 acceptance matrix also calls the social-snapshot self-test,
+which resolves `www.reddit.com` before its mocked HTTP layer runs. If a host DNS
+policy maps that public name to a non-public address, the SSRF guard must remain
+fail closed. Aleph may reconcile only the exact two resulting wrapper failures
+(`22` and `26`) as `CAPABILITY_DNS_POLICY`, alongside the exact repository-only
+cases, and delegate them to CI. Any other failure set remains a hard failure.
+
 ## External compatibility mode
 
 The bundle wins by default. `D_RESEARCH_SKILL` never silently overrides it.

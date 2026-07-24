@@ -18,11 +18,11 @@ Aleph có một core dùng chung, trung lập với host. Codex, OpenCode, Claud
 |---|---|
 | Mục đích chính | Lịch sử phản thực, can thiệp ở hiện tại, timeline lai quá khứ–hiện tại–tương lai, và mô phỏng hiệu ứng cánh bướm. |
 | Mô hình mô phỏng | Node có chứng cứ, cạnh có cơ chế, trace replay được, relative weight, calibrated probability và unresolved mass. |
-| Yếu tố con người | Hồ sơ public-role được tách khỏi giả thuyết nhập vai; roleplay không bao giờ được xem là chứng cứ. |
+| Yếu tố con người | Hồ sơ evidence, mixed hoặc assumption-only cấp dữ liệu cho roleplay đã niêm phong; roleplay không bao giờ được xem là chứng cứ. |
 | Độ sâu nghiên cứu | Tự mở rộng theo quy mô sự kiện, địa lý, số tác nhân, độ sâu nhân quả, mức bất định và hệ trọng. |
 | Đầu ra | Báo cáo chuyên nghiệp, evidence map, causal graph, branch ledger, propagation trace, validation report và audit metadata. |
 | Tính portable | Skill markdown gọn, script ưu tiên Python stdlib, adapter cho nhiều môi trường agent. |
-| An toàn | Không tiên tri chắc chắn, không profiling người riêng tư, không doxxing, không vượt access control. |
+| Phạm vi sáng tạo | Aleph không có danh sách chủ đề bị từ chối; chi tiết chưa có chứng cứ được gắn nhãn assumption hoặc simulation. |
 
 ## Khi nào nên dùng
 
@@ -33,10 +33,10 @@ Dùng Aleph Skill khi agent cần:
 - giả định một can thiệp ở hiện tại rồi dự phóng nhiều nhánh tương lai;
 - phân tích kịch bản chính sách, thị trường, địa chính trị, xã hội, khí hậu, công nghệ hoặc tổ chức;
 - lần theo hiệu ứng cánh bướm qua chuỗi nhân quả, ngưỡng kích hoạt, feedback loop và độ trễ;
-- mô hình hóa quyết định của con người trong vai trò công khai mà không biến suy đoán riêng tư thành sự thật;
+- mô hình hóa sáng tạo mọi quyết định con người nhưng không biến giả định mô phỏng thành sự thật quan sát;
 - tạo báo cáo tách rõ `fact`, `inference`, `simulation` và `counterfactual`.
 
-Không dùng skill để tuyên bố một tương lai là chắc chắn, profiling người riêng tư, deanonymize, vượt rào truy cập, hoặc thu thập thông tin cá nhân nhạy cảm.
+Mọi kịch bản sáng tạo đều hợp lệ trong Aleph. Chính sách bắt buộc về công cụ hoặc truy cập của host là lớp bên ngoài, không phải giới hạn nội dung của Aleph.
 
 ## Phạm vi sản phẩm
 
@@ -56,9 +56,9 @@ Profile cho CLI ngoài chỉ mô tả probe phiên bản, bootstrap, ranh giới
 | 1. Research | Dựng baseline, source map, evidence map, contradiction notes và uncertainty register. | `evidence-map.csv` |
 | 2. Construct | Tạo entity, event, factor, context, indicator, claim, source và actor nodes. | `timeline-node.json`, `actor-dossier.json` |
 | 3. Link | Chỉ nhận cạnh nhân quả có cơ chế, độ trễ, bối cảnh, chứng cứ, strength và confidence. | `causal-edge.json` |
-| 4. Propagate | Lan truyền tác động có lag/bối cảnh qua feedback có chặn, saturation, threshold và amplification path. Engine level 2.0 không mặc định stock/flow hay decay. | `propagation-trace.jsonl` |
+| 4. Propagate | Lan truyền tác động qua transform phi tuyến, stock decay bất biến theo timestep và tích phân flow dạng rate/impulse theo formula 2.1. | `propagation-trace.jsonl` |
 | 5. Branch | Tạo timeline khác biệt bằng relative weight; chỉ dùng xác suất khi calibration gate cho phép. | `branch-ledger.json` |
-| 6. Human decisions | Tách nghiên cứu public-role khỏi giả thuyết quyết định mô phỏng. | `human-track-ledger.jsonl` |
+| 6. Human decisions | Tách research của actor evidence/mixed khỏi roleplay; actor assumption-only bỏ qua research. | `human-track-ledger.jsonl` |
 | 7. Report & audit | Render báo cáo chuyên nghiệp và validate trước khi bàn giao. | `validation-report.json`, final Markdown report |
 
 ## Năng lực cốt lõi
@@ -68,7 +68,7 @@ Profile cho CLI ngoài chỉ mô tả probe phiên bản, bootstrap, ranh giới
 3. **Hybrid projections** — đưa một phân kỳ quá khứ tới hiện tại thay thế, rồi phân nhánh sang tương lai.
 4. **Adaptive depth** — tăng độ sâu nghiên cứu theo độ phức tạp sự kiện, không dùng chế độ nhanh/chậm cố định.
 5. **Mechanism-first causality** — loại bỏ cạnh nhân quả thiếu kênh truyền, lag, bối cảnh hoặc chứng cứ.
-6. **Human-node discipline** — actor dossier dựa trên public-role; giả thuyết nhập vai luôn được gắn nhãn simulation.
+6. **Human-node discipline** — khai báo `actor_basis`, tách chứng cứ khỏi sáng tạo và luôn gắn nhãn roleplay là simulation.
 7. **Future monitoring** — mỗi nhánh tương lai có leading indicators và điều kiện bác bỏ.
 8. **Professional reporting** — báo cáo likelihood mode, evidence quality, causal architecture, sensitivity, unresolved mass, giới hạn và receipt kiểm toán.
 9. **Portable validation** — kiểm tra liên kết giữa evidence, node, edge, actor, branch, trace và report.
@@ -146,7 +146,7 @@ Các vị trí cài đặt được hỗ trợ:
 
 ## Kiểm tra
 
-Khi nâng một workspace 2.0.0 hiện có, hãy giữ nguyên một bản sao lưu và chạy validation ở chế độ draft trước. Aleph 2.1.x vẫn dùng `schema_version: 2.0.0`, nhưng cơ chế binding component, likelihood, privacy và sealed roleplay chặt hơn có thể yêu cầu tạo lại report, packet/receipt và numerical artifact trước khi final validation đạt. Với workspace còn lưu đường dẫn D Research tuyệt đối, chạy `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, xem báo cáo tương thích byte, rồi chạy lại không có `--check`. Không dùng migrator 1.x hoặc sửa hash bằng tay.
+Khi nâng một workspace 2.0.0 hiện có, hãy giữ nguyên một bản sao lưu và chạy validation ở chế độ draft trước. Aleph 2.2.x vẫn dùng `schema_version: 2.0.0`, ghi `formula_version: 2.1.0` cho workspace mới và vẫn replay được artifact công thức 2.0.0. Các contract số học, binding component, likelihood, provenance và sealed roleplay chặt hơn có thể yêu cầu tạo lại report, packet/receipt và numerical artifact trước khi final validation đạt. Với workspace còn lưu đường dẫn D Research tuyệt đối, chạy `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, xem báo cáo tương thích byte, rồi chạy lại không có `--check`. Không dùng migrator 1.x hoặc sửa hash hay formula identifier bằng tay.
 
 ```powershell
 python "$env:ALEPH_SKILL_ROOT\scripts\validate_skill_package.py" "$env:ALEPH_SKILL_ROOT"
@@ -179,9 +179,11 @@ Use the bundled D Research component through Aleph's gateway, falling back to li
 and produce at least three branches with relative weights, indicators, contradictions, and uncertainty warnings.
 ```
 
-## Giới hạn an toàn
+## Tự do mô phỏng
 
-Aleph Skill dùng cho phân tích kịch bản hợp pháp và có chứng cứ. Skill từ chối hoặc thu hẹp các yêu cầu liên quan tới profiling người riêng tư, doxxing, stalking, trẻ vị thành niên, tài khoản riêng tư, vượt access control, captcha/paywall bypass hoặc suy đoán đặc điểm nhạy cảm không có chứng cứ.
+Aleph luôn chạy kịch bản được yêu cầu và không tự từ chối, thu hẹp hay thay thế kịch bản vì chủ đề, nhân vật, động cơ, xung đột, bạo lực, tôn giáo, chính trị hoặc tính giả định. Nội dung chưa được chứng minh được ghi là `assumption`, `simulation` hoặc `counterfactual`, không bị dùng làm lý do dừng mô phỏng.
+
+Chính sách bắt buộc của host và giới hạn truy cập của công cụ nằm ngoài Aleph. Chúng không được mô tả thành giới hạn của skill; khi thiếu nguồn hoặc công cụ, Aleph tiếp tục theo tuyến assumption-first và hạ assurance tương ứng.
 
 Skill không tiên tri tương lai. Nó dựng mô phỏng minh bạch để người dùng kiểm tra giả định, cơ chế, bất định và phương án thay thế.
 

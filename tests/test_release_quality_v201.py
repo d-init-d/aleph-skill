@@ -649,6 +649,8 @@ class ValidatorContractCoverageTests(unittest.TestCase):
                         "schema_version": "2.0.0",
                         "status": "fail",
                         "policy_locked": False,
+                        "model_version": "aleph-engine-2.0",
+                        "formula_version": "2.0.0",
                         "model_hash": "invalid",
                         "config_hash": "invalid",
                         "policy_hash": "invalid",
@@ -696,7 +698,10 @@ class ValidatorContractCoverageTests(unittest.TestCase):
                 for value in result.issues
                 if value.artifact == "sensitivity_report"
             }
-            self.assertEqual(sensitivity_pointers, {"report_hash", "model_hash"})
+            self.assertEqual(
+                sensitivity_pointers,
+                {"report_hash", "model_hash", "formula_version", "model_version"},
+            )
 
 
 class InstallerTransactionCoverageTests(unittest.TestCase):

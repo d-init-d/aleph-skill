@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from . import SCHEMA_VERSION
+from . import LEGACY_FORMULA_VERSION, SCHEMA_VERSION
 from .discovery import discover_d_research
 from .import_ledger import import_d_research_ledger, render_evidence_csv
 from .io import canonical_hash, load_json_secure, load_jsonl_secure, sha256_file
@@ -432,6 +432,8 @@ def evaluate(
         and calibration.get("status") == "pass"
         and calibration.get("policy_locked") is True
         and calibration.get("beats_baseline") is True
+        and calibration.get("formula_version")
+        == manifest.get("formula_version", LEGACY_FORMULA_VERSION)
         and calibration.get("case_count") == calibration.get("unique_case_count")
         and isinstance(calibration.get("case_count"), int)
         and calibration.get("case_count", 0) >= 30
@@ -448,7 +450,6 @@ def evaluate(
             "STALE_ARTIFACT",
             "HMAC_TAMPER",
             "LEDGER_TAMPER",
-            "PRIVACY_REFUSAL",
         }
     )
 

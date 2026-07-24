@@ -1,5 +1,6 @@
 {
   "schema_version": "2.0.0",
+  "formula_version": "2.1.0",
   "case_id": "hindcast:healthcare:synthetic-001",
   "cutoff": "2020-01-01",
   "evidence_snapshot_hash": "4c198787fef17962011015449306dbe911e88f74be18f5e8c5fa689cf0d43bad",

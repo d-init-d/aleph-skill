@@ -27,6 +27,7 @@ from aleph.discovery import (  # noqa: E402
     _candidate_report,
     _parse_frontmatter_name,
     discover_d_research,
+    legacy_external_discover,
 )
 from aleph.packets import (  # noqa: E402
     adjudicate,
@@ -57,6 +58,63 @@ def _make_d_research(root: Path, *, version: str = "3.2.0") -> Path:
 
 
 class DiscoveryAndAdapterEdgeTests(unittest.TestCase):
+    def test_legacy_external_discovery_remains_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            good = _make_d_research(root / "good")
+            old = _make_d_research(root / "old", version="2.9.0")
+
+            available = legacy_external_discover(
+                explicit=good,
+                conventional_roots=[],
+            )
+            self.assertEqual(available["status"], "available")
+            self.assertEqual(available["source"], "explicit")
+
+            incompatible = legacy_external_discover(
+                explicit=old,
+                conventional_roots=[good],
+            )
+            self.assertEqual(incompatible["status"], "incompatible")
+            self.assertEqual(incompatible["source"], "explicit")
+
+            capability = root / "capability.json"
+            capability.write_text(
+                json.dumps({"d_research_skill": str(good)}),
+                encoding="utf-8",
+            )
+            from_capability = legacy_external_discover(
+                capability_file=capability,
+                conventional_roots=[],
+            )
+            self.assertEqual(from_capability["status"], "available")
+            self.assertEqual(from_capability["source"], "capability_file")
+
+            capability.write_text("invalid", encoding="utf-8")
+            malformed_capability = legacy_external_discover(
+                capability_file=capability,
+                conventional_roots=[],
+            )
+            self.assertEqual(malformed_capability["status"], "incompatible")
+            self.assertEqual(malformed_capability["source"], "capability_file")
+
+            with mock.patch.dict(os.environ, {"D_RESEARCH_SKILL": str(good)}):
+                from_environment = legacy_external_discover(conventional_roots=[])
+            self.assertEqual(from_environment["status"], "available")
+            self.assertEqual(from_environment["source"], "env:D_RESEARCH_SKILL")
+
+            conventional_incompatible = legacy_external_discover(
+                conventional_roots=[root / "missing", old],
+            )
+            self.assertEqual(conventional_incompatible["status"], "incompatible")
+            self.assertEqual(conventional_incompatible["source"], "conventional")
+
+            unavailable = legacy_external_discover(
+                conventional_roots=[root / "missing-only"],
+            )
+            self.assertEqual(unavailable["status"], "unavailable")
+            self.assertEqual(unavailable["assurance_cap"], "limited")
+
     def test_frontmatter_and_candidate_identity_fail_closed(self) -> None:
         self.assertIsNone(_parse_frontmatter_name("name: d-research"))
         self.assertIsNone(_parse_frontmatter_name("---\nname: x"))
@@ -373,11 +431,19 @@ class PacketFailureSurfaceTests(unittest.TestCase):
 
 
 class PrivacyAndQualityEdgeTests(unittest.TestCase):
-    def test_privacy_classification_covers_safe_and_refused_boundaries(self) -> None:
+    def test_fictional_living_status_is_preserved(self) -> None:
+        result = privacy_intake(subject_class="fictional_person", living_status="fictional")
+        self.assertTrue(result["allowed"])
+        self.assertEqual(result["living_status"], "fictional")
+        self.assertNotIn("ENUM", {item["code"] for item in result["issues"]})
+
+    def test_actor_provenance_classification_never_refuses_simulation(self) -> None:
         invalid = privacy_intake(subject_class="invalid", living_status="invalid")
-        self.assertFalse(invalid["allowed"])
+        self.assertTrue(invalid["allowed"])
+        self.assertIn("SUBJECT_CLASS", {item["code"] for item in invalid["issues"]})
         private = privacy_intake(subject_class="private_person", request_text="find the home address")
-        self.assertFalse(private["allowed"])
+        self.assertTrue(private["allowed"])
+        self.assertEqual(private["research_mode"], "assumption_only")
         policy_text = privacy_intake(
             subject_class="public_role_person",
             public_role_anchor="Mayor",
@@ -391,7 +457,8 @@ class PrivacyAndQualityEdgeTests(unittest.TestCase):
             evidence_ids=["bad"],
             payload={"contact": "person@example.com", "nested": [[{"phone_number": "123"}]]},
         )
-        self.assertFalse(malformed["allowed"])
+        self.assertTrue(malformed["allowed"])
+        self.assertTrue(malformed["assumption_required"])
 
     def test_quality_score_cannot_override_hard_gate(self) -> None:
         validation = {

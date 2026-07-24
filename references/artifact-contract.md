@@ -43,15 +43,17 @@ Use `"pass"` as a machine-readable overall result only when every applicable sch
 
 `edges.json` admits only declared transforms with mechanism, endpoints, relation/sign, effect parameter, evidence confidence, lag distribution, context modifiers, evidence or assumption, and status.
 
-`actors.json` contains public-role dossiers. Every material actor declares a decision graph, sourced research claims, a sealed packet hash, at least two evidence-free roleplay hypotheses, and adjudicator-owned relative weights/calibrated likelihood.
+`interventions.json` is an optional array of schema-validated `set`, `add`, or `multiply` operations with finite values and non-negative integer tick bounds. A `reset_baseline` release policy is valid only for a `set` intervention on a stock; `retain` is the canonical default. The manifest may declare a workspace-relative `artifact_paths.interventions` path.
 
-`human-track-ledger.jsonl` contains exactly one research and one roleplay row per material actor. Rows bind agent/execution IDs, timestamps, hashed input/output, receipt chain, attestation class, and optional receipt artifact path.
+`actors.json` contains evidence, mixed, or assumption-based dossiers. Every material actor declares `actor_basis`, a decision graph, a sealed packet hash, at least two evidence-free roleplay hypotheses, and adjudicator-owned relative weights/calibrated likelihood. Evidence/mixed actors carry sourced research claims. Assumption actors carry no `research_track`; their claim-free packet preserves explicit assumptions and unknowns as distinct sealed fields.
+
+`human-track-ledger.jsonl` contains exactly one research and one roleplay row for evidence/mixed material actors, or one sealed roleplay row for assumption-only actors. Rows bind agent/execution IDs, timestamps, hashed input/output, receipt chain, attestation class, and optional receipt artifact path.
 
 `branch-ledger.json` declares one likelihood mode and never mixes field types. Uncalibrated runs require a positive `relative_weight` on every branch and normalize weights plus `unresolved_mass` to one. Calibrated non-stress branches require probability only with model/config hashes, calibration policy, hindcast report, sample count, and interval; their probabilities plus unresolved mass normalize to one. Deterministic likelihood has one non-stress branch, no probability, and no unresolved mass. Numerical ledgers declare one branch derivation: analyst-authored branches bind the trace but claim no run metadata; engine-derived branches exactly bind deterministic `run:0` or every Monte Carlo cluster.
 
 `simulation-run.json` binds the compiled model hash, normalized execution configuration, numerical result hash, a `trace_contract` containing the workspace-relative trace path, raw SHA-256, and positive row count, and a `trace_execution_binding` digest produced by independently matching every trace row to the engine trajectory. Replay must reject missing, empty, changed, or self-consistent-but-fabricated trace content.
 
-Hindcast evidence uses an order-independent canonical snapshot digest. A precommitted calibration policy maps each case ID to a commitment hash binding the cutoff, model hash, configuration hash, tick count, evidence snapshot, target IDs, and baselines. A boolean `precommitted` flag without a matching case commitment is not policy-locked and cannot support calibrated maturity.
+Hindcast evidence uses an order-independent canonical snapshot digest. Hindcast commitment v3 maps each case ID to a commitment hash binding the formula version, cutoff, model hash, configuration hash, tick count, evidence snapshot, target IDs, and baselines. A boolean `precommitted` flag without a matching case commitment is not policy-locked and cannot support calibrated maturity.
 
 `propagation-trace.jsonl` is ordered, formula-versioned, hash-chained, and replayable. It retains sample references and temporal endpoints. Numerical rows additionally bind one `run:N`, source/target states, source tick, and sampled strength to the reconstructed run.
 
@@ -59,7 +61,7 @@ Hindcast evidence uses an order-independent canonical snapshot digest. A precomm
 
 ## Human seal
 
-Roleplay receives a packet, not a dossier or raw evidence ledger. Each admitted claim has valid `available_at` and established actor access no later than the cutoff. Excluded content stays outside the packet. Roleplay emits no evidence, facts, probability, confidence, or relative weight and can choose only decision-graph actions.
+Roleplay receives a packet, not a dossier or raw evidence ledger. Each admitted claim has valid `available_at` and established actor access no later than the cutoff. A claim-free assumption packet must contain at least one explicit assumption or unknown and must bind exactly to the assumption dossier. Excluded content stays outside the packet. Roleplay emits no evidence, facts, probability, confidence, or relative weight and can choose only decision-graph actions.
 
 ## Completion
 

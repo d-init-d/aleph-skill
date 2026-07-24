@@ -1,6 +1,6 @@
 {
   "name": "aleph-skill-tools",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "Portable causal timeline simulation skill with bundled D Research, strict validation, numerical engine, domain packs, and thin adapters.",
   "private": true,
   "license": "CC-BY-NC-4.0",

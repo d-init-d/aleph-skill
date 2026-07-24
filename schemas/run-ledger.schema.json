@@ -19,7 +19,8 @@
   ],
   "properties": {
     "schema_version": {"const": "2.0.0"},
-    "run_contract_version": {"const": "aleph-run-2.0"},
+    "run_contract_version": {"enum": ["aleph-run-2.0", "aleph-run-2.1"]},
+    "formula_version": {"enum": ["2.0.0", "2.1.0"]},
     "mode": {"enum": ["deterministic", "monte_carlo"]},
     "ticks": {"type": "integer", "minimum": 0},
     "model_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -42,7 +43,10 @@
       "additionalProperties": false,
       "required": ["version", "mode", "ticks", "rows", "binding_hash"],
       "properties": {
-        "version": {"const": "aleph-trace-execution-binding-v1"},
+        "version": {"enum": ["aleph-trace-execution-binding-v1", "aleph-trace-execution-binding-v2"]},
+        "formula_version": {"enum": ["2.0.0", "2.1.0"]},
+        "dynamics_hashes": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+        "resolved_parameters_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "mode": {"enum": ["deterministic", "monte_carlo"]},
         "ticks": {"type": "integer", "minimum": 0},
         "rows": {
@@ -61,6 +65,17 @@
               "source_state": {"type": "number"},
               "target_state": {"type": "number"},
               "sampled_strength": {"type": "number"},
+              "formula_version": {"enum": ["2.0.0", "2.1.0"]},
+              "sampled_lag_ticks": {"type": "integer", "minimum": 0},
+              "resolved_transform_parameters": {"type": "object"},
+              "target_scale": {"enum": ["level", "flow", "stock"]},
+              "target_retention_factor": {"type": "number", "minimum": 0, "maximum": 1},
+              "integration": {"enum": ["rate", "impulse"]},
+              "integration_factor": {"type": "number", "exclusiveMinimum": 0},
+              "integrated_effect": {"type": "number"},
+              "threshold_active_before": {"type": "boolean"},
+              "threshold_active_after": {"type": "boolean"},
+              "dynamics_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
               "run_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
               "history_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
             }
@@ -70,5 +85,59 @@
       }
     },
     "contract_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"run_contract_version": {"const": "aleph-run-2.0"}}},
+      "then": {
+        "properties": {
+          "formula_version": {"const": "2.0.0"},
+          "trace_execution_binding": {
+            "properties": {
+              "version": {"const": "aleph-trace-execution-binding-v1"},
+              "formula_version": {"const": "2.0.0"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"run_contract_version": {"const": "aleph-run-2.1"}}},
+      "then": {
+        "required": ["formula_version"],
+        "properties": {
+          "formula_version": {"const": "2.1.0"},
+          "trace_execution_binding": {
+            "required": ["formula_version", "dynamics_hashes", "resolved_parameters_hash"],
+            "properties": {
+              "version": {"const": "aleph-trace-execution-binding-v2"},
+              "formula_version": {"const": "2.1.0"},
+              "rows": {
+                "items": {
+                  "required": [
+                    "formula_version", "sampled_lag_ticks", "resolved_transform_parameters",
+                    "target_scale", "target_retention_factor", "integration",
+                    "integration_factor", "integrated_effect", "dynamics_hash"
+                  ],
+                  "allOf": [
+                    {
+                      "if": {
+                        "properties": {
+                          "resolved_transform_parameters": {
+                            "properties": {"mode": {"const": "hysteresis"}},
+                            "required": ["mode"]
+                          }
+                        }
+                      },
+                      "then": {"required": ["threshold_active_before", "threshold_active_after"]}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

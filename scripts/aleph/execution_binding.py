@@ -6,18 +6,24 @@ import math
 import re
 from typing import Any
 
+from . import LEGACY_FORMULA_VERSION
 from .engine import (
     ComputationalModel,
     EngineConfig,
+    ModelEdge,
     run_deterministic,
     sampled_edge_parameters,
+    sampled_retention_factor,
+    sampled_transform_parameters,
 )
-from .formula import nearly_equal
+from .formula import evaluate_output_effect, nearly_equal
 from .io import canonical_hash
 from .issues import Issue, issue
 from .schema import parse_time
 
 RUN_REF_RE = re.compile(r"^run:(\d{1,20})$")
+BINDING_V1 = "aleph-trace-execution-binding-v1"
+BINDING_V2 = "aleph-trace-execution-binding-v2"
 
 
 def _trajectory_value_equal(actual: Any, expected: Any) -> bool:
@@ -53,6 +59,45 @@ def _target_is_blocked(model: ComputationalModel, target: str, tick: int) -> boo
     return False
 
 
+def _hysteresis_timeline(
+    model: ComputationalModel,
+    edge: ModelEdge,
+    history: list[dict[str, Any]],
+    *,
+    sampled_strength: float,
+    sampled_lag_ticks: int,
+    resolved_parameters: dict[str, Any],
+) -> list[tuple[bool, bool]]:
+    """Reconstruct the once-per-tick hysteresis latch independently from the trace."""
+    active = False
+    timeline: list[tuple[bool, bool]] = []
+    for tick, state in enumerate(history):
+        before = active
+        if sampled_lag_ticks == 0 and _target_is_blocked(model, edge.target, tick):
+            after = before
+        else:
+            source_state = state.get(edge.source)
+            if isinstance(source_state, bool) or not isinstance(source_state, (int, float)):
+                raise ValueError(f"missing numeric source state for {edge.source} at tick {tick}")
+            _, next_active = evaluate_output_effect(
+                base_strength=sampled_strength,
+                sign=edge.sign,
+                context_mult=edge.context_multiplier,
+                input_effect=float(source_state),
+                transform=edge.transform,
+                transform_parameters=resolved_parameters,
+                saturation=edge.saturation,
+                formula_version=model.formula_version,
+                threshold_active=before,
+            )
+            if next_active is None:
+                raise ValueError(f"edge {edge.id} did not produce a hysteresis latch transition")
+            after = next_active
+        timeline.append((before, after))
+        active = after
+    return timeline
+
+
 def build_trace_execution_binding(
     rows: list[dict[str, Any]],
     model: ComputationalModel,
@@ -61,9 +106,24 @@ def build_trace_execution_binding(
     ticks: int,
     result: dict[str, Any],
     manifest: dict[str, Any],
+    binding_version: str | None = None,
 ) -> tuple[dict[str, Any] | None, list[Issue]]:
     """Verify trace inputs against engine histories and return a hashed binding."""
     problems: list[Issue] = []
+    expected_version = BINDING_V1 if model.formula_version == LEGACY_FORMULA_VERSION else BINDING_V2
+    version = binding_version or expected_version
+    if version not in {BINDING_V1, BINDING_V2}:
+        return None, [issue("TRACE_EXECUTION_BINDING", message="unsupported execution binding version", actual=version)]
+    if version != expected_version:
+        return None, [
+            issue(
+                "TRACE_EXECUTION_BINDING",
+                pointer="/trace_execution_binding/version",
+                message="execution binding version does not match formula version",
+                expected=expected_version,
+                actual=version,
+            )
+        ]
     frame = manifest.get("temporal_frame")
     start = parse_time(frame.get("simulation_start")) if isinstance(frame, dict) else None
     if start is None:
@@ -84,6 +144,7 @@ def build_trace_execution_binding(
         n_runs = int(summary.get("n_runs", 0)) if isinstance(summary, dict) else 0
 
     bound_rows: list[dict[str, Any]] = []
+    hysteresis_timelines: dict[tuple[int, str], list[tuple[bool, bool]]] = {}
     for index, row in enumerate(rows):
         pointer = f"/propagation_trace/{index}"
         refs = row.get("sample_refs")
@@ -114,7 +175,25 @@ def build_trace_execution_binding(
         if edge is None:
             problems.append(issue("UNKNOWN_REF", pointer=f"{pointer}/edge_id", actual=row.get("edge_id")))
             continue
-        strength, lag_ticks, exists = sampled_edge_parameters(edge, config, run_id)
+        row_formula_version = row.get("formula_version")
+        if row_formula_version is not None and row_formula_version != model.formula_version:
+            problems.append(
+                issue(
+                    "TRACE_EXECUTION_BINDING",
+                    pointer=f"{pointer}/formula_version",
+                    message="trace row formula version differs from the engine run",
+                    expected=model.formula_version,
+                    actual=row_formula_version,
+                )
+            )
+            continue
+        try:
+            strength, lag_ticks, exists = sampled_edge_parameters(edge, config, run_id)
+            resolved_parameters = sampled_transform_parameters(edge, config, run_id)
+            target_retention_factor = sampled_retention_factor(model.variables[edge.target], config, run_id)
+        except (OverflowError, TypeError, ValueError, ZeroDivisionError) as exc:
+            problems.append(issue("TRACE_EXECUTION_BINDING", pointer=pointer, message=f"parameter sampling failed: {exc}"))
+            continue
         if not exists:
             problems.append(issue("TRACE_EXECUTION_BINDING", pointer=pointer, message="trace references an absent sampled edge"))
             continue
@@ -189,26 +268,155 @@ def build_trace_execution_binding(
                     )
                 )
         if row_ok:
-            bound_rows.append(
-                {
-                    "step": row.get("step"),
-                    "edge_id": edge.id,
-                    "run_id": run_id,
-                    "tick": effect_tick,
-                    "source_tick": source_tick,
-                    "source_state": source_state,
-                    "target_state": target_state,
-                    "sampled_strength": strength,
-                    "run_hash": run.get("run_hash"),
-                    "history_hash": (run.get("payload") or {}).get("history_hash"),
-                }
-            )
+            bound_row: dict[str, Any] = {
+                "step": row.get("step"),
+                "edge_id": edge.id,
+                "run_id": run_id,
+                "tick": effect_tick,
+                "source_tick": source_tick,
+                "source_state": source_state,
+                "target_state": target_state,
+                "sampled_strength": strength,
+                "run_hash": run.get("run_hash"),
+                "history_hash": (run.get("payload") or {}).get("history_hash"),
+            }
+            if version == BINDING_V2:
+                declared_parameters = row.get("resolved_transform_parameters")
+                if declared_parameters is not None and declared_parameters != resolved_parameters:
+                    problems.append(
+                        issue(
+                            "TRACE_EXECUTION_BINDING",
+                            pointer=f"{pointer}/resolved_transform_parameters",
+                            expected=resolved_parameters,
+                            actual=declared_parameters,
+                        )
+                    )
+                    continue
+                if model.variables[edge.target].scale == "stock":
+                    declared_retention = row.get("target_retention_factor")
+                    if declared_retention is not None and not _trajectory_value_equal(
+                        declared_retention, target_retention_factor
+                    ):
+                        problems.append(
+                            issue(
+                                "TRACE_EXECUTION_BINDING",
+                                pointer=f"{pointer}/target_retention_factor",
+                                expected=target_retention_factor,
+                                actual=declared_retention,
+                            )
+                        )
+                        continue
+                integration_factor = (
+                    float(config.timestep)
+                    if model.variables[edge.target].scale == "stock" and edge.integration == "rate"
+                    else 1.0
+                )
+                declared_integrated = row.get("integrated_effect")
+                expected_integrated = float(row.get("output_effect", 0.0)) * integration_factor
+                if declared_integrated is not None and not _trajectory_value_equal(
+                    declared_integrated, expected_integrated
+                ):
+                    problems.append(
+                        issue(
+                            "TRACE_EXECUTION_BINDING",
+                            pointer=f"{pointer}/integrated_effect",
+                            expected=expected_integrated,
+                            actual=declared_integrated,
+                        )
+                    )
+                    continue
+                bound_row.update(
+                    {
+                        "formula_version": model.formula_version,
+                        "sampled_lag_ticks": lag_ticks,
+                        "resolved_transform_parameters": resolved_parameters,
+                        "target_scale": model.variables[edge.target].scale,
+                        "target_retention_factor": target_retention_factor,
+                        "integration": edge.integration,
+                        "integration_factor": integration_factor,
+                        "integrated_effect": expected_integrated,
+                        "dynamics_hash": (run.get("payload") or {}).get("dynamics_hash"),
+                    }
+                )
+                is_hysteresis = (
+                    edge.transform == "threshold"
+                    and resolved_parameters.get("mode", "above") == "hysteresis"
+                )
+                if is_hysteresis:
+                    cache_key = (run_id, edge.id)
+                    try:
+                        timeline = hysteresis_timelines.get(cache_key)
+                        if timeline is None:
+                            timeline = _hysteresis_timeline(
+                                model,
+                                edge,
+                                history,
+                                sampled_strength=strength,
+                                sampled_lag_ticks=lag_ticks,
+                                resolved_parameters=resolved_parameters,
+                            )
+                            hysteresis_timelines[cache_key] = timeline
+                        expected_before, expected_after = timeline[source_tick]
+                    except (IndexError, OverflowError, TypeError, ValueError) as exc:
+                        problems.append(
+                            issue(
+                                "TRACE_EXECUTION_BINDING",
+                                pointer=pointer,
+                                message=f"hysteresis reconstruction failed: {exc}",
+                            )
+                        )
+                        continue
+                    latch_mismatch = False
+                    for field, expected in (
+                        ("threshold_active_before", expected_before),
+                        ("threshold_active_after", expected_after),
+                    ):
+                        actual = row.get(field)
+                        if not isinstance(actual, bool) or actual != expected:
+                            latch_mismatch = True
+                            problems.append(
+                                issue(
+                                    "TRACE_EXECUTION_BINDING",
+                                    pointer=f"{pointer}/{field}",
+                                    message="trace hysteresis latch differs from the addressed engine trajectory",
+                                    expected=expected,
+                                    actual=actual,
+                                )
+                            )
+                    if latch_mismatch:
+                        continue
+                    bound_row.update(
+                        {
+                            "threshold_active_before": expected_before,
+                            "threshold_active_after": expected_after,
+                        }
+                    )
+            bound_rows.append(bound_row)
     if problems:
         return None, problems
     body = {
-        "version": "aleph-trace-execution-binding-v1",
+        "version": version,
         "mode": config.mode,
         "ticks": ticks,
         "rows": bound_rows,
     }
+    if version == BINDING_V2:
+        body["formula_version"] = model.formula_version
+        body["dynamics_hashes"] = {
+            f"run:{run_id}": (run.get("payload") or {}).get("dynamics_hash")
+            for run_id, run in sorted(runs.items())
+        }
+        body["resolved_parameters_hash"] = canonical_hash(
+            [
+                {
+                    "edge_id": row["edge_id"],
+                    "run_id": row["run_id"],
+                    "sampled_strength": row["sampled_strength"],
+                    "sampled_lag_ticks": row["sampled_lag_ticks"],
+                    "transform_parameters": row["resolved_transform_parameters"],
+                    "target_retention_factor": row["target_retention_factor"],
+                }
+                for row in bound_rows
+            ]
+        )
     return {**body, "binding_hash": canonical_hash(body)}, []

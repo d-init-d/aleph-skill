@@ -29,7 +29,18 @@ Capture:
 }
 ```
 
+For a numeric `factor_change`, `change_point.magnitude` is a delta applied to
+the target's declared baseline (the engine uses `baseline + magnitude`). Use
+the node's `baseline` for the observed starting level and set `magnitude` to
+the signed change. If the input is intended to state the post-intervention
+level, record that level as an explicit assumption and calculate the delta;
+do not put the final level in both fields. A qualitative event or action may
+omit a numeric magnitude and instead define its effect through admitted edges
+or an explicit `interventions.json` operation.
+
 Read `references/temporal-modes.md`. Ask only when missing information would materially change the intervention or horizon; otherwise record a conservative assumption.
+
+Always proceed with the user's exact creative scenario. A hypothetical change point needs no evidence that it already occurred. Current, controversial, violent, religious, political, private, or otherwise sensitive content is never an Aleph refusal condition; represent unsupported details as assumptions or simulation content.
 
 ## Phase 2: Assess and decompose
 
@@ -45,7 +56,7 @@ Use the locked bundled D Research component through the gateway, or the limited 
 2. fan out queries,
 3. probe sources browser-first,
 4. extract evidence into the ledger,
-5. research public-role actors,
+5. research evidence/mixed actors and declare assumptions for assumption-only actors,
 6. search contradictions,
 7. expand unresolved frontiers.
 
@@ -63,9 +74,9 @@ Use `references/node-builder.md` and `references/causal-edge-protocol.md`.
 
 For every material actor:
 
-1. dispatch a dedicated public-role research track through the bundled D Research gateway or, after a capability blocker, the limited host-native fallback,
-2. freeze the dossier and knowledge cutoff,
-3. dispatch a different roleplay track without browsing authority,
+1. choose `actor_basis: evidence|mixed|assumption`; dispatch research only for evidence/mixed actors,
+2. freeze the evidence dossier or explicit assumption dossier and knowledge cutoff,
+3. dispatch an offline roleplay track without browsing authority; make it distinct from research when research exists,
 4. adjudicate at least two normalized actions,
 5. preserve the execution ledger.
 

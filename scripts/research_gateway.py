@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -568,8 +570,10 @@ def _reconcile_component_acceptance(
     if reconciliation.get("ok") is not True:
         return None
     expected_failures = ["10_undeclared_stale_citations"]
+    repo_only_cases = 1
+    dns_policy_cases = 0
     if reconciliation.get("component_version") == "3.2.1":
-        expected_failures.append("23_unsafe_runtime_config")
+        repo_only_cases = 2
         required = ".github/workflows/lint-and-self-test.yml"
         normalized = re.sub(r"/+", "/", text.replace("\\", "/"))
         if (
@@ -579,6 +583,21 @@ def _reconcile_component_acceptance(
             or "FileNotFoundError" not in text
         ):
             return None
+        dns_failures = {
+            "22_tier_b_lookup_failure_structured",
+            "26_resource_caps_deterministic",
+        }
+        if dns_failures <= set(failed) and _host_resolves_non_public("www.reddit.com"):
+            expected_failures.extend(
+                [
+                    "22_tier_b_lookup_failure_structured",
+                    "23_unsafe_runtime_config",
+                    "26_resource_caps_deterministic",
+                ]
+            )
+            dns_policy_cases = 2
+        else:
+            expected_failures.append("23_unsafe_runtime_config")
     if failed != expected_failures:
         return None
     reconciliation.update(
@@ -586,13 +605,31 @@ def _reconcile_component_acceptance(
             "upstream_runtime_cases_passed": len(
                 re.findall(r"^\s*\[PASS\]", text, flags=re.MULTILINE)
             ),
-            "upstream_repo_only_cases_reconciled": len(expected_failures),
+            "upstream_repo_only_cases_reconciled": repo_only_cases,
+            "host_dns_policy_cases_delegated": dns_policy_cases,
             "browser_cases_delegated": len(
                 re.findall(r"^\s*\[DELEGATED\]", text, flags=re.MULTILINE)
             ),
         }
     )
     return reconciliation
+
+
+def _host_resolves_non_public(host: str) -> bool:
+    """Return whether a public test host is locally remapped to a non-public IP."""
+    try:
+        results = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+    except OSError:
+        return False
+    for result in results:
+        raw_address = str(result[4][0]).split("%", 1)[0]
+        try:
+            address = ipaddress.ip_address(raw_address)
+        except ValueError:
+            continue
+        if not address.is_global:
+            return True
+    return False
 
 
 def _probe_capabilities(
@@ -1743,14 +1780,26 @@ def run_command(
         reconciled_count = int(
             acceptance_reconciliation.get("upstream_repo_only_cases_reconciled", 0)
         )
+        dns_delegated_count = int(
+            acceptance_reconciliation.get("host_dns_policy_cases_delegated", 0)
+        )
         noun = "case" if reconciled_count == 1 else "cases"
         verb = "was" if reconciled_count == 1 else "were"
         completed_status = "degraded"
-        completed_error = "COMPONENT_REPO_CHECK_DELEGATED"
+        completed_error = (
+            "COMPONENT_ACCEPTANCE_DELEGATED"
+            if dns_delegated_count
+            else "COMPONENT_REPO_CHECK_DELEGATED"
+        )
         completed_message = (
             f"runtime acceptance passed; {reconciled_count} repository-only {noun} {verb} "
             "reconciled against exact snapshot exclusions"
         )
+        if dns_delegated_count:
+            completed_message += (
+                f"; {dns_delegated_count} offline self-test cases were delegated because the "
+                "host DNS policy remaps www.reddit.com to a non-public address"
+            )
         completed_exit = EXIT_OK
     elif returncode == 3:
         completed_status = "degraded"
@@ -1783,6 +1832,17 @@ def run_command(
                 {
                     "code": "CAPABILITY_BROWSER",
                     "message": "Browser acceptance remains delegated to the browser CI job.",
+                }
+            )
+        if acceptance_reconciliation.get("host_dns_policy_cases_delegated"):
+            completed_blockers.append(
+                {
+                    "code": "CAPABILITY_DNS_POLICY",
+                    "message": (
+                        "The host remaps www.reddit.com to a non-public address; the two "
+                        "social-snapshot offline self-test wrappers are delegated to CI, while "
+                        "the SSRF guard remains fail closed locally."
+                    ),
                 }
             )
     elif returncode == 0 and acceptance_browser_delegated:

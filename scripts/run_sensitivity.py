@@ -13,7 +13,7 @@ from aleph.engine import EngineConfig, compile_model, model_hash, run_determinis
 from aleph.io import canonical_hash, write_json_atomic
 from aleph.paths import output_alias_issues, resolve_in_workspace
 from aleph.sensitivity import morris_screening, one_at_a_time, sobol_saltelli_optional
-from compile_model import load_interventions
+from compile_model import load_interventions, resolve_workspace_formula_version
 
 
 def main() -> None:
@@ -37,6 +37,7 @@ def main() -> None:
                 [
                     spec_path if spec_path is not None else workspace / args.spec,
                     workspace / "simulation-manifest.json",
+                    workspace / "interventions.json",
                 ],
             )
         )
@@ -50,6 +51,13 @@ def main() -> None:
     manifest = load_json(workspace / "simulation-manifest.json") if (workspace / "simulation-manifest.json").is_file() else {}
     raw_paths = manifest.get("artifact_paths") if isinstance(manifest, dict) else None
     artifact_paths = raw_paths if isinstance(raw_paths, dict) else {}
+    if out_path is not None:
+        out_issues.extend(
+            output_alias_issues(
+                out_path,
+                [workspace / str(artifact_paths.get("interventions", "interventions.json"))],
+            )
+        )
     node_path, node_issues = resolve_in_workspace(
         workspace, str(artifact_paths.get("nodes", "nodes.json")), must_exist=True
     )
@@ -69,10 +77,14 @@ def main() -> None:
     nodes = load_json(node_path)
     edges = load_json(edge_path)
     try:
+        formula_version = resolve_workspace_formula_version(
+            workspace, manifest if isinstance(manifest, dict) else {}
+        )
         model = compile_model(
             nodes if isinstance(nodes, list) else [],
             edges if isinstance(edges, list) else [],
             load_interventions(workspace, manifest if isinstance(manifest, dict) else {}),
+            formula_version=formula_version,
         )
     except (TypeError, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc), "code": "MODEL_COMPILE"}, indent=2))
@@ -151,6 +163,12 @@ def main() -> None:
         raise SystemExit(EXIT_SEMANTIC) from exc
     report = {
         "schema_version": "2.0.0",
+        "model_version": (
+            "aleph-engine-2.0"
+            if model.formula_version == "2.0.0"
+            else "aleph-engine-2.1"
+        ),
+        "formula_version": model.formula_version,
         "model_hash": model_hash(model),
         "spec_hash": canonical_hash(spec),
         "output": output_id,

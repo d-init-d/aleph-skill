@@ -8,7 +8,13 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, cast
 
-from . import FORMULA_VERSION, SCHEMA_VERSION, VALIDATOR_VERSION
+from . import (
+    FORMULA_VERSION,
+    LEGACY_FORMULA_VERSION,
+    SCHEMA_VERSION,
+    SUPPORTED_FORMULA_VERSIONS,
+    VALIDATOR_VERSION,
+)
 from .engine import (
     ComputationalModel,
     EngineConfig,
@@ -18,7 +24,7 @@ from .engine import (
     run_monte_carlo,
     semantic_result_payload,
 )
-from .execution_binding import build_trace_execution_binding
+from .execution_binding import BINDING_V1, BINDING_V2, build_trace_execution_binding
 from .formula import replay_trace_row
 from .io import (
     ResourceLimitError,
@@ -88,6 +94,7 @@ from .schema import (
     TIMELINE_LABELS,
     TIMELINE_MODES,
     TRACE_ROW_FIELDS,
+    TRANSFORM_PARAMETER_FIELDS,
     TRANSFORMS,
     ensure_list,
     has_id_prefix,
@@ -109,6 +116,72 @@ def _check(cid: str, issues: list[Issue], metrics: dict[str, Any] | None = None)
 
 def _mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _validate_scalar_spec(
+    value: Any,
+    pointer: str,
+    issues: list[Issue],
+) -> tuple[float | None, tuple[float, float] | None]:
+    """Validate a number/distribution and return representative plus support."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        parsed = refuse_string_number(value, pointer, issues)
+        return parsed, (parsed, parsed) if parsed is not None else None
+    if not isinstance(value, dict):
+        issues.append(issue("TYPE", pointer=pointer, message="must be a number or scalar distribution"))
+        return None, None
+    distribution_name = value.get("distribution")
+    type_name = value.get("type")
+    if (
+        distribution_name is not None
+        and type_name is not None
+        and distribution_name != type_name
+    ):
+        issues.append(
+            issue(
+                "SCHEMA",
+                pointer=pointer,
+                message="distribution and type aliases must agree",
+                expected=distribution_name,
+                actual=type_name,
+            )
+        )
+        return None, None
+    kind = distribution_name if distribution_name is not None else type_name
+    if not isinstance(kind, str) or kind not in {"fixed", "uniform", "triangular", "normal"}:
+        issues.append(issue("ENUM", pointer=f"{pointer}/distribution", actual=kind))
+        return None, None
+    required = {
+        "fixed": {"value"},
+        "uniform": {"min", "max"},
+        "triangular": {"min", "mode", "max"},
+        "normal": {"mean", "sd"},
+    }[kind]
+    allowed = required | {"distribution", "type"}
+    reject_unknown_fields(value, frozenset(allowed), pointer, issues)
+    numbers: dict[str, float] = {}
+    for field in required:
+        if field not in value:
+            issues.append(issue("MISSING_FIELD", pointer=f"{pointer}/{field}", message="required"))
+            continue
+        parsed = refuse_string_number(value.get(field), f"{pointer}/{field}", issues)
+        if parsed is not None:
+            numbers[field] = parsed
+    if len(numbers) != len(required):
+        return None, None
+    if kind == "fixed":
+        return numbers["value"], (numbers["value"], numbers["value"])
+    if kind == "uniform":
+        if not numbers["min"] < numbers["max"]:
+            issues.append(issue("RANGE", pointer=pointer, message="uniform requires min < max"))
+        return (numbers["min"] + numbers["max"]) / 2.0, (numbers["min"], numbers["max"])
+    if kind == "triangular":
+        if not numbers["min"] <= numbers["mode"] <= numbers["max"] or numbers["min"] == numbers["max"]:
+            issues.append(issue("RANGE", pointer=pointer, message="triangular requires min <= mode <= max and non-degenerate support"))
+        return numbers["mode"], (numbers["min"], numbers["max"])
+    if numbers["sd"] <= 0:
+        issues.append(issue("RANGE", pointer=f"{pointer}/sd", message="must be positive"))
+    return numbers["mean"], None
 
 
 def validate_paths(manifest: dict[str, Any], workspace: Path) -> CheckResult:
@@ -336,6 +409,51 @@ def _validate_v2_manifest_contract(manifest: dict[str, Any], issues: list[Issue]
                 issues.append(issue("TYPE", pointer=f"change_point.{field}", message="must be non-empty string"))
         if "magnitude" in change:
             refuse_string_number(change.get("magnitude"), "change_point.magnitude", issues)
+        if "value" in change:
+            refuse_string_number(change.get("value"), "change_point.value", issues)
+        if "op" in change and change.get("op") not in {"set", "add", "multiply"}:
+            issues.append(issue("ENUM", pointer="change_point.op", actual=change.get("op")))
+        for field in ("start_tick", "end_tick"):
+            tick = change.get(field)
+            if field == "end_tick" and tick is None:
+                continue
+            if field in change and (
+                not isinstance(tick, int) or isinstance(tick, bool) or tick < 0
+            ):
+                issues.append(
+                    issue(
+                        "TYPE",
+                        pointer=f"change_point.{field}",
+                        message="must be a non-negative integer",
+                    )
+                )
+        if (
+            isinstance(change.get("start_tick", 0), int)
+            and not isinstance(change.get("start_tick", 0), bool)
+            and isinstance(change.get("end_tick"), int)
+            and not isinstance(change.get("end_tick"), bool)
+            and change["end_tick"] < change.get("start_tick", 0)
+        ):
+            issues.append(
+                issue(
+                    "RANGE",
+                    pointer="change_point.end_tick",
+                    message="must be at least start_tick",
+                )
+            )
+        release_policy = change.get("release_policy")
+        if release_policy is not None and release_policy not in {"retain", "reset_baseline"}:
+            issues.append(
+                issue("ENUM", pointer="change_point.release_policy", actual=release_policy)
+            )
+        if release_policy == "reset_baseline" and change.get("op") != "set":
+            issues.append(
+                issue(
+                    "SCHEMA",
+                    pointer="change_point.release_policy",
+                    message="reset_baseline requires op=set",
+                )
+            )
         if parse_time(change.get("time")) is None:
             issues.append(issue("TEMPORAL_FRAME", pointer="change_point.time", message="must be valid ISO date/time"))
         assumption_ref = change.get("assumption_ref")
@@ -860,6 +978,8 @@ def validate_manifest_core(manifest: dict[str, Any], mode: str) -> CheckResult:
         simulation_mode = "qualitative"
     if not isinstance(simulation_mode, str) or simulation_mode not in {"qualitative", "deterministic", "monte_carlo"}:
         issues.append(issue("ENUM", pointer="simulation_mode", message="invalid simulation mode", actual=simulation_mode))
+    if "formula_version" in manifest and manifest.get("formula_version") not in SUPPORTED_FORMULA_VERSIONS:
+        issues.append(issue("ENUM", pointer="formula_version", message="unsupported formula version", actual=manifest.get("formula_version")))
     return _check("manifest", issues)
 
 
@@ -1046,6 +1166,46 @@ def validate_nodes(nodes: list[Any], evidence_ids: set[str], manifest: dict[str,
                 refuse_string_number(trigger.get("magnitude"), f"{p}/trigger/magnitude", issues)
         if "baseline" in raw:
             refuse_string_number(raw.get("baseline"), f"{p}/baseline", issues)
+        if "scale" in raw and raw.get("scale") not in {"level", "flow", "stock"}:
+            issues.append(
+                issue(
+                    "ENUM",
+                    pointer=f"{p}/scale",
+                    message="must be level, flow, or stock",
+                    actual=raw.get("scale"),
+                )
+            )
+        if "retention" in raw and "decay_rate" in raw:
+            issues.append(issue("SCHEMA", pointer=p, message="stock declares both retention and decay_rate"))
+        if "retention" in raw:
+            retention, support = _validate_scalar_spec(raw.get("retention"), f"{p}/retention", issues)
+            if retention is not None and not 0 <= retention <= 1:
+                issues.append(
+                    issue(
+                        "RANGE",
+                        pointer=f"{p}/retention",
+                        message="must be in [0,1]",
+                        actual=retention,
+                    )
+                )
+            if support is not None and not 0 <= support[0] <= support[1] <= 1:
+                issues.append(issue("RANGE", pointer=f"{p}/retention", message="distribution support must stay in [0,1]"))
+            if raw.get("scale") != "stock":
+                issues.append(
+                    issue(
+                        "SCHEMA",
+                        pointer=f"{p}/retention",
+                        message="retention is only valid for stock variables",
+                    )
+                )
+        if "decay_rate" in raw:
+            decay_rate, support = _validate_scalar_spec(raw.get("decay_rate"), f"{p}/decay_rate", issues)
+            if decay_rate is not None and decay_rate < 0:
+                issues.append(issue("RANGE", pointer=f"{p}/decay_rate", message="must be non-negative"))
+            if support is not None and support[0] < 0:
+                issues.append(issue("RANGE", pointer=f"{p}/decay_rate", message="distribution support must be non-negative"))
+            if raw.get("scale") != "stock":
+                issues.append(issue("SCHEMA", pointer=f"{p}/decay_rate", message="decay_rate is only valid for stock variables"))
     return _check("nodes", issues, {"nodes": len(ids)}), ids
 
 
@@ -1054,6 +1214,7 @@ def validate_edges(
     node_ids: set[str],
     evidence_ids: set[str],
     node_types: dict[str, Any] | None = None,
+    node_scales: dict[str, Any] | None = None,
 ) -> tuple[CheckResult, dict[str, dict[str, Any]]]:
     issues: list[Issue] = []
     by_id: dict[str, dict[str, Any]] = {}
@@ -1117,6 +1278,72 @@ def validate_edges(
         transform = raw.get("transform")
         if not isinstance(transform, str) or transform not in TRANSFORMS:
             issues.append(issue("SCHEMA", pointer=f"{p}/transform", message="unsupported transform", actual=raw.get("transform")))
+        parameters = raw.get("transform_parameters")
+        if parameters is not None:
+            if not isinstance(parameters, dict):
+                issues.append(issue("TYPE", pointer=f"{p}/transform_parameters", message="must be object"))
+            else:
+                reject_unknown_fields(
+                    parameters,
+                    TRANSFORM_PARAMETER_FIELDS,
+                    f"{p}/transform_parameters",
+                    issues,
+                )
+                allowed_by_transform = {
+                    "linear": set(),
+                    "elasticity": set(),
+                    "identity": set(),
+                    "logistic": {"midpoint", "steepness"},
+                    "threshold": {"mode", "threshold", "deadband", "theta_on", "theta_off"},
+                }
+                unsupported = set(parameters) - allowed_by_transform.get(str(transform), set())
+                if unsupported:
+                    issues.append(issue("SCHEMA", pointer=f"{p}/transform_parameters", message=f"unsupported parameters: {', '.join(sorted(unsupported))}"))
+                parsed_parameters: dict[str, float] = {}
+                for field, value in parameters.items():
+                    if field == "mode":
+                        if value not in {"above", "below", "deadband", "hysteresis"}:
+                            issues.append(issue("ENUM", pointer=f"{p}/transform_parameters/mode", actual=value))
+                        continue
+                    parsed_parameter, support = _validate_scalar_spec(
+                        value, f"{p}/transform_parameters/{field}", issues
+                    )
+                    if parsed_parameter is not None:
+                        parsed_parameters[field] = parsed_parameter
+                    if field == "steepness" and parsed_parameter is not None and parsed_parameter <= 0:
+                        issues.append(
+                            issue(
+                                "RANGE",
+                                pointer=f"{p}/transform_parameters/steepness",
+                                message="must be positive",
+                                actual=parsed_parameter,
+                            )
+                        )
+                    if field in {"steepness", "deadband", "theta_on", "theta_off"} and support is not None and support[0] < 0:
+                        issues.append(issue("RANGE", pointer=f"{p}/transform_parameters/{field}", message="distribution support must be non-negative"))
+                threshold_mode = str(parameters.get("mode", "above"))
+                if transform == "threshold" and threshold_mode == "hysteresis":
+                    if not {"theta_on", "theta_off"} <= set(parsed_parameters):
+                        issues.append(issue("MISSING_FIELD", pointer=f"{p}/transform_parameters", message="hysteresis requires theta_on and theta_off"))
+                    elif not parsed_parameters["theta_on"] >= parsed_parameters["theta_off"] >= 0:
+                        issues.append(issue("RANGE", pointer=f"{p}/transform_parameters", message="hysteresis requires theta_on >= theta_off >= 0"))
+        if transform in {"linear", "elasticity", "identity"} and parameters not in (None, {}):
+            issues.append(
+                issue(
+                    "SCHEMA",
+                    pointer=f"{p}/transform_parameters",
+                    message=f"{transform} does not accept transform parameters",
+                )
+            )
+        if transform == "identity" and raw.get("effect_distribution") is not None:
+            issues.append(issue("SCHEMA", pointer=f"{p}/effect_distribution", message="identity cannot use effect_distribution"))
+        if "effect_distribution" in raw:
+            _validate_scalar_spec(raw.get("effect_distribution"), f"{p}/effect_distribution", issues)
+        integration = raw.get("integration")
+        if integration is not None and integration not in {"rate", "impulse"}:
+            issues.append(issue("ENUM", pointer=f"{p}/integration", actual=integration))
+        if integration == "rate" and node_scales is not None and node_scales.get(str(raw.get("to")), "level") != "stock":
+            issues.append(issue("SCHEMA", pointer=f"{p}/integration", message="rate integration requires stock target"))
         if not nonempty_str(raw.get("mechanism")) or len(str(raw.get("mechanism", "")).split()) < 10:
             issues.append(issue("MECHANISM", pointer=f"{p}/mechanism", message="mechanism required"))
         lag = raw.get("lag_distribution")
@@ -1216,6 +1443,7 @@ def validate_trace(
     start = parse_time(frame.get("simulation_start"))
     end = parse_time(frame.get("simulation_end"))
     previous_hash: str | None = None
+    trace_formula_versions: set[str] = set()
     for idx, row in enumerate(rows):
         p = f"/propagation_trace/{idx}"
         if not isinstance(row, dict):
@@ -1227,16 +1455,19 @@ def validate_trace(
             issues.append(issue("TRACE_STEP", pointer=f"{p}/step", message="step must be positive int", actual=step))
         else:
             steps.append(step)
-        if row.get("formula_version") != FORMULA_VERSION:
+        row_formula_version = row.get("formula_version")
+        if row_formula_version not in SUPPORTED_FORMULA_VERSIONS:
             issues.append(
                 issue(
                     "SCHEMA",
                     pointer=f"{p}/formula_version",
-                    message="trace formula version must match validator",
-                    expected=FORMULA_VERSION,
-                    actual=row.get("formula_version"),
+                    message="unsupported trace formula version",
+                    expected=list(SUPPORTED_FORMULA_VERSIONS),
+                    actual=row_formula_version,
                 )
             )
+        else:
+            trace_formula_versions.add(str(row_formula_version))
         if "input_effect" not in row and "input_change" not in row:
             issues.append(issue("MISSING_FIELD", pointer=p, message="trace row requires input_effect or input_change"))
         sample_refs = row.get("sample_refs")
@@ -1303,7 +1534,31 @@ def validate_trace(
         expected = list(range(1, len(rows) + 1))
         if steps != expected:
             issues.append(issue("TRACE_STEP", message="steps must be ordered and continuous from 1", expected=expected, actual=steps))
-    return _check("trace", issues, {"trace_rows": len(rows), "formula_version": FORMULA_VERSION})
+    if len(trace_formula_versions) > 1:
+        issues.append(issue("SCHEMA", pointer="/propagation_trace", message="a trace cannot mix formula versions", actual=sorted(trace_formula_versions)))
+    manifest_formula_version = manifest.get("formula_version")
+    if (
+        manifest_formula_version in SUPPORTED_FORMULA_VERSIONS
+        and trace_formula_versions
+        and trace_formula_versions != {str(manifest_formula_version)}
+    ):
+        issues.append(
+            issue(
+                "TRACK_MISMATCH",
+                pointer="/propagation_trace/formula_version",
+                message="trace formula version must match the simulation manifest",
+                expected=manifest_formula_version,
+                actual=sorted(trace_formula_versions),
+            )
+        )
+    return _check(
+        "trace",
+        issues,
+        {
+            "trace_rows": len(rows),
+            "formula_version": next(iter(trace_formula_versions), FORMULA_VERSION),
+        },
+    )
 
 
 def validate_actors(
@@ -1351,21 +1606,28 @@ def validate_actors(
         sc = raw.get("subject_class")
         if sc is not None and (not isinstance(sc, str) or sc not in SUBJECT_CLASS):
             issues.append(issue("SUBJECT_CLASS", pointer=f"{p}/subject_class", actual=sc))
-        if isinstance(sc, str) and sc in {"private_person", "minor", "unknown"}:
-            issues.append(issue("PRIVACY_REFUSAL", pointer=f"{p}/subject_class", message="cannot roleplay private/minor/unknown", actual=sc))
-        # Forbidden dossier fields
-        for banned in ("address", "phone", "email", "family", "diagnosis", "whereabouts", "ssn"):
-            if banned in raw:
-                issues.append(issue("PRIVACY_REFUSAL", pointer=f"{p}/{banned}", message="forbidden personal field"))
+        actor_basis = raw.get("actor_basis", "evidence" if raw.get("evidence_ids") else "assumption")
+        if actor_basis not in {"evidence", "mixed", "assumption"}:
+            issues.append(issue("ENUM", pointer=f"{p}/actor_basis", actual=actor_basis))
+        assumptions = raw.get("assumptions")
+        if assumptions is not None and (
+            not isinstance(assumptions, list)
+            or not all(isinstance(value, str) and value.strip() for value in assumptions)
+        ):
+            issues.append(issue("TYPE", pointer=f"{p}/assumptions", message="must be a string array"))
         actor_evidence = raw.get("evidence_ids")
-        if not isinstance(actor_evidence, list) or not actor_evidence:
-            issues.append(issue("MISSING_FIELD", pointer=f"{p}/evidence_ids", message="actor dossier requires evidence"))
+        if not isinstance(actor_evidence, list):
+            issues.append(issue("TYPE", pointer=f"{p}/evidence_ids", message="must be an array"))
         else:
             for ref in actor_evidence:
                 if not nonempty_str(ref):
                     issues.append(issue("TYPE", pointer=f"{p}/evidence_ids", actual=ref))
                 elif ref not in evidence_ids:
                     issues.append(issue("UNKNOWN_REF", pointer=f"{p}/evidence_ids", actual=ref))
+        if actor_basis == "evidence" and isinstance(actor_evidence, list) and not actor_evidence:
+            issues.append(issue("MISSING_FIELD", pointer=f"{p}/evidence_ids", message="evidence actor basis requires evidence"))
+        if actor_basis in {"mixed", "assumption"} and not assumptions and not raw.get("uncertainty_factors"):
+            issues.append(issue("MISSING_FIELD", pointer=f"{p}/assumptions", message="assumption-based actor requires assumptions or explicit unknowns"))
         privacy = privacy_intake(
             subject_class=str(sc) if isinstance(sc, str) else "unknown",
             living_status=str(raw.get("living_status") or "unknown"),
@@ -1377,7 +1639,7 @@ def validate_actors(
             if isinstance(raw_issue, dict):
                 issues.append(
                     issue(
-                        str(raw_issue.get("code") or "PRIVACY_REFUSAL"),
+                        str(raw_issue.get("code") or "ASSUMPTION_PROVENANCE"),
                         severity=str(raw_issue.get("severity") or "error"),
                         pointer=f"{p}/{raw_issue.get('pointer')}" if raw_issue.get("pointer") else p,
                         message=str(raw_issue.get("message") or "actor privacy intake failed"),
@@ -1387,7 +1649,15 @@ def validate_actors(
 
         # Nested tracks — every object forbids unknown fields (AC2)
         research = raw.get("research_track")
-        if isinstance(research, dict):
+        if actor_basis == "assumption" and research is not None:
+            issues.append(
+                issue(
+                    "HUMAN_TRACK",
+                    pointer=f"{p}/research_track",
+                    message="assumption-only actor must not include a research track",
+                )
+            )
+        elif isinstance(research, dict):
             reject_unknown_fields(research, RESEARCH_TRACK_FIELDS, f"{p}/research_track", issues)
             for ci, claim in enumerate(ensure_list(research.get("claims"))):
                 if isinstance(claim, dict):
@@ -1419,8 +1689,22 @@ def validate_actors(
                                 )
                             elif ref not in evidence_ids:
                                 issues.append(issue("UNKNOWN_REF", pointer=f"{p}/research_track/claims/{ci}/evidence_ids", actual=ref))
-        elif mat == "material":
-            issues.append(issue("HUMAN_TRACK", pointer=f"{p}/research_track", message="material actor requires research track"))
+        elif mat == "material" and actor_basis in {"evidence", "mixed"}:
+            issues.append(
+                issue(
+                    "HUMAN_TRACK",
+                    pointer=f"{p}/research_track",
+                    message="material evidence or mixed actor requires a research track",
+                )
+            )
+        elif research is not None:
+            issues.append(
+                issue(
+                    "TYPE",
+                    pointer=f"{p}/research_track",
+                    message="must be an object",
+                )
+            )
 
         roleplay = raw.get("roleplay_track")
         hypothesis_actions: dict[str, str] = {}
@@ -2036,6 +2320,7 @@ def validate_branches(
                 "interval",
                 "calibration_policy_ref",
                 "model_version",
+                "formula_version",
                 "model_hash",
                 "hindcast_report_ref",
             ):
@@ -2050,6 +2335,19 @@ def validate_branches(
             for field in ("method", "calibration_policy_ref", "model_version", "hindcast_report_ref"):
                 if field in calibration and not nonempty_str(calibration.get(field)):
                     issues.append(issue("TYPE", pointer=f"branch_ledger.calibration.{field}", message="must be a non-empty string"))
+            expected_formula_version = manifest.get(
+                "formula_version", LEGACY_FORMULA_VERSION
+            )
+            if calibration.get("formula_version") != expected_formula_version:
+                issues.append(
+                    issue(
+                        "TRACK_MISMATCH",
+                        pointer="branch_ledger.calibration.formula_version",
+                        message="calibration formula version must match the simulation manifest",
+                        expected=expected_formula_version,
+                        actual=calibration.get("formula_version"),
+                    )
+                )
             sample_count = calibration.get("sample_count")
             if "sample_count" in calibration and (
                 not isinstance(sample_count, int) or isinstance(sample_count, bool) or sample_count < 1
@@ -2568,8 +2866,8 @@ def validate_stale(
             issues.append(issue("SCHEMA", artifact="validation-receipt.json", pointer="schema_version", expected=SCHEMA_VERSION, actual=validation_receipt.get("schema_version")))
         if validation_receipt.get("validator_version") != VALIDATOR_VERSION:
             issues.append(issue("STALE_ARTIFACT", artifact="validation-receipt.json", pointer="validator_version", message="receipt produced by a different validator", expected=VALIDATOR_VERSION, actual=validation_receipt.get("validator_version")))
-        if validation_receipt.get("formula_version") != FORMULA_VERSION:
-            issues.append(issue("STALE_ARTIFACT", artifact="validation-receipt.json", pointer="formula_version", message="formula version changed", expected=FORMULA_VERSION, actual=validation_receipt.get("formula_version")))
+        if validation_receipt.get("formula_version") not in SUPPORTED_FORMULA_VERSIONS:
+            issues.append(issue("STALE_ARTIFACT", artifact="validation-receipt.json", pointer="formula_version", message="unsupported formula version", expected=list(SUPPORTED_FORMULA_VERSIONS), actual=validation_receipt.get("formula_version")))
         expected_schema_digest = _current_schema_digest()
         if validation_receipt.get("schema_digest") != expected_schema_digest:
             issues.append(issue("STALE_ARTIFACT", artifact="validation-receipt.json", pointer="schema_digest", message="schema bundle changed", expected=expected_schema_digest, actual=validation_receipt.get("schema_digest")))
@@ -2705,6 +3003,7 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
     sensitivity = load_declared("sensitivity_report")
     calibration_report = load_declared("calibration_report")
     model_digest: str | None = None
+    model_formula_version = LEGACY_FORMULA_VERSION
     independent_replay_passed = False
     independent_result_hash: str | None = None
     independent_result: dict[str, Any] | None = None
@@ -2713,7 +3012,7 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
     if model is not None:
         reject_unknown_fields(
             model,
-            frozenset({"schema_version", "model_version", "model_hash", "variables", "edges", "interventions", "source_hashes", "source_set_hash"}),
+            frozenset({"schema_version", "model_version", "formula_version", "model_hash", "variables", "edges", "interventions", "source_hashes", "source_set_hash"}),
             "computational_model",
             issues,
         )
@@ -2721,6 +3020,10 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
             if field not in model:
                 issues.append(issue("MISSING_FIELD", artifact="computational_model", pointer=field, message="required"))
         model_body = {key: model.get(key) for key in ("variables", "edges", "interventions")}
+        model_formula_version = str(model.get("formula_version", LEGACY_FORMULA_VERSION))
+        if model_formula_version not in SUPPORTED_FORMULA_VERSIONS:
+            issues.append(issue("SCHEMA", artifact="computational_model", pointer="formula_version", actual=model_formula_version))
+            model_formula_version = FORMULA_VERSION
         model_digest = canonical_hash(model_body)
         if model.get("model_hash") != model_digest:
             issues.append(issue("REPLAY_MISMATCH", artifact="computational_model", pointer="model_hash", expected=model_digest, actual=model.get("model_hash")))
@@ -2746,6 +3049,7 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                 {
                     "schema_version",
                     "run_contract_version",
+                    "formula_version",
                     "mode",
                     "ticks",
                     "model_hash",
@@ -2787,8 +3091,53 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                     actual=run.get("schema_version"),
                 )
             )
-        if run.get("run_contract_version") != "aleph-run-2.0":
-            issues.append(issue("SCHEMA", artifact="run_ledger", pointer="run_contract_version", actual=run.get("run_contract_version")))
+        run_contract_version = run.get("run_contract_version")
+        if run_contract_version not in {"aleph-run-2.0", "aleph-run-2.1"}:
+            issues.append(issue("SCHEMA", artifact="run_ledger", pointer="run_contract_version", actual=run_contract_version))
+        expected_run_formula = (
+            LEGACY_FORMULA_VERSION
+            if run_contract_version == "aleph-run-2.0"
+            else FORMULA_VERSION if run_contract_version == "aleph-run-2.1" else None
+        )
+        expected_binding_version = (
+            BINDING_V1
+            if run_contract_version == "aleph-run-2.0"
+            else BINDING_V2 if run_contract_version == "aleph-run-2.1" else None
+        )
+        run_formula_version = run.get("formula_version", LEGACY_FORMULA_VERSION)
+        if run_formula_version not in SUPPORTED_FORMULA_VERSIONS:
+            issues.append(issue("SCHEMA", artifact="run_ledger", pointer="formula_version", actual=run_formula_version))
+            run_formula_version = FORMULA_VERSION
+        if run.get("run_contract_version") == "aleph-run-2.1" and "formula_version" not in run:
+            issues.append(issue("MISSING_FIELD", artifact="run_ledger", pointer="formula_version", message="required for aleph-run-2.1"))
+        if expected_run_formula is not None and run_formula_version != expected_run_formula:
+            issues.append(
+                issue(
+                    "TRACK_MISMATCH",
+                    artifact="run_ledger",
+                    pointer="formula_version",
+                    message="run contract and formula versions are incompatible",
+                    expected=expected_run_formula,
+                    actual=run_formula_version,
+                )
+            )
+        manifest_formula_version = manifest.get("formula_version")
+        if (
+            manifest_formula_version in SUPPORTED_FORMULA_VERSIONS
+            and run_formula_version != manifest_formula_version
+        ):
+            issues.append(
+                issue(
+                    "TRACK_MISMATCH",
+                    artifact="run_ledger",
+                    pointer="formula_version",
+                    message="run formula version differs from the simulation manifest",
+                    expected=manifest_formula_version,
+                    actual=run_formula_version,
+                )
+            )
+        if model is not None and str(run_formula_version) != model_formula_version:
+            issues.append(issue("REPLAY_MISMATCH", artifact="run_ledger", pointer="formula_version", expected=model_formula_version, actual=run_formula_version))
         run_mode = run.get("mode")
         if not isinstance(run_mode, str) or run_mode not in {"deterministic", "monte_carlo"}:
             issues.append(issue("ENUM", artifact="run_ledger", pointer="mode", actual=run.get("mode")))
@@ -2857,6 +3206,7 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                     },
                     edges=[ModelEdge(**value) for value in raw_edges if isinstance(value, dict)],
                     interventions=[value for value in raw_interventions if isinstance(value, dict)],
+                    formula_version=str(run_formula_version),
                 )
                 replay_config = EngineConfig(**config)
                 if replay_config.mode != run.get("mode"):
@@ -3012,6 +3362,20 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                         )
                     if isinstance(trace_rows, list) and all(isinstance(row, dict) for row in trace_rows):
                         trace_rows_for_binding = cast(list[dict[str, Any]], trace_rows)
+                        trace_formula_versions = {
+                            row.get("formula_version") for row in trace_rows_for_binding
+                        }
+                        if trace_formula_versions != {run_formula_version}:
+                            issues.append(
+                                issue(
+                                    "TRACK_MISMATCH",
+                                    artifact=str(trace_relative),
+                                    pointer="formula_version",
+                                    message="trace formula version differs from the numerical run",
+                                    expected=run_formula_version,
+                                    actual=sorted(str(value) for value in trace_formula_versions),
+                                )
+                            )
 
         execution_binding = run.get("trace_execution_binding")
         if not isinstance(execution_binding, dict):
@@ -3026,7 +3390,18 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
         else:
             reject_unknown_fields(
                 execution_binding,
-                frozenset({"version", "mode", "ticks", "rows", "binding_hash"}),
+                frozenset(
+                    {
+                        "version",
+                        "mode",
+                        "ticks",
+                        "rows",
+                        "formula_version",
+                        "dynamics_hashes",
+                        "resolved_parameters_hash",
+                        "binding_hash",
+                    }
+                ),
                 "run_ledger.trace_execution_binding",
                 issues,
             )
@@ -3052,8 +3427,9 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                         message="trace execution binding hash mismatch",
                     )
                 )
+            binding_version = execution_binding.get("version")
             if (
-                execution_binding.get("version") != "aleph-trace-execution-binding-v1"
+                binding_version not in {"aleph-trace-execution-binding-v1", "aleph-trace-execution-binding-v2"}
                 or execution_binding.get("mode") != run.get("mode")
                 or execution_binding.get("ticks") != run.get("ticks")
             ):
@@ -3065,6 +3441,23 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                         message="trace execution binding header differs from run contract",
                     )
                 )
+            if expected_binding_version is not None and binding_version != expected_binding_version:
+                issues.append(
+                    issue(
+                        "TRACK_MISMATCH",
+                        artifact="run_ledger",
+                        pointer="trace_execution_binding.version",
+                        message="execution binding version is incompatible with the run contract",
+                        expected=expected_binding_version,
+                        actual=binding_version,
+                    )
+                )
+            if binding_version == "aleph-trace-execution-binding-v2":
+                for field in ("formula_version", "dynamics_hashes", "resolved_parameters_hash"):
+                    if field not in execution_binding:
+                        issues.append(issue("MISSING_FIELD", artifact="run_ledger", pointer=f"trace_execution_binding.{field}", message="required for binding v2"))
+                if execution_binding.get("formula_version") != run_formula_version:
+                    issues.append(issue("REPLAY_MISMATCH", artifact="run_ledger", pointer="trace_execution_binding.formula_version", expected=run_formula_version, actual=execution_binding.get("formula_version")))
             if (
                 independent_model is not None
                 and independent_config is not None
@@ -3080,6 +3473,7 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                     ticks=ticks,
                     result=independent_result,
                     manifest=manifest,
+                    binding_version=str(binding_version) if isinstance(binding_version, str) else None,
                 )
                 issues.extend(binding_issues)
                 if expected_binding != execution_binding:
@@ -3248,7 +3642,12 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
         replay_body = {key: value for key, value in replay.items() if key != "report_hash"}
         if replay.get("report_hash") != canonical_hash(replay_body):
             issues.append(issue("REPLAY_MISMATCH", artifact="replay_report", pointer="report_hash", message="replay report hash mismatch"))
-        if replay.get("schema_version") != SCHEMA_VERSION or replay.get("formula_version") != FORMULA_VERSION:
+        expected_replay_formula = (
+            run.get("formula_version", LEGACY_FORMULA_VERSION)
+            if isinstance(run, dict)
+            else FORMULA_VERSION
+        )
+        if replay.get("schema_version") != SCHEMA_VERSION or replay.get("formula_version") != expected_replay_formula:
             issues.append(issue("SCHEMA", artifact="replay_report", message="replay schema/formula version mismatch"))
         required_flags = (
             "contract_hash_ok",
@@ -3303,6 +3702,8 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
             "schema_version",
             "status",
             "policy_locked",
+            "model_version",
+            "formula_version",
             "model_hash",
             "config_hash",
             "policy_hash",
@@ -3334,6 +3735,28 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
             issues.append(issue("PACK_MATURITY", artifact="calibration_report", message="calibration gates did not pass"))
         if model_digest is not None and calibration_report.get("model_hash") != model_digest:
             issues.append(issue("REPLAY_MISMATCH", artifact="calibration_report", pointer="model_hash", message="calibration/model hash mismatch"))
+        if calibration_report.get("formula_version") != model_formula_version:
+            issues.append(
+                issue(
+                    "REPLAY_MISMATCH",
+                    artifact="calibration_report",
+                    pointer="formula_version",
+                    message="calibration formula version differs from the compiled model",
+                    expected=model_formula_version,
+                    actual=calibration_report.get("formula_version"),
+                )
+            )
+        if model is not None and calibration_report.get("model_version") != model.get("model_version"):
+            issues.append(
+                issue(
+                    "REPLAY_MISMATCH",
+                    artifact="calibration_report",
+                    pointer="model_version",
+                    message="calibration model version differs from the compiled model",
+                    expected=model.get("model_version"),
+                    actual=calibration_report.get("model_version"),
+                )
+            )
 
     if sensitivity is not None:
         declared_hash = sensitivity.get("report_hash")
@@ -3342,6 +3765,28 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
             issues.append(issue("REPLAY_MISMATCH", artifact="sensitivity_report", pointer="report_hash", message="sensitivity report hash mismatch"))
         if model_digest is not None and sensitivity.get("model_hash") != model_digest:
             issues.append(issue("REPLAY_MISMATCH", artifact="sensitivity_report", pointer="model_hash", message="sensitivity/model hash mismatch"))
+        if sensitivity.get("formula_version") != model_formula_version:
+            issues.append(
+                issue(
+                    "REPLAY_MISMATCH",
+                    artifact="sensitivity_report",
+                    pointer="formula_version",
+                    message="sensitivity formula version differs from the compiled model",
+                    expected=model_formula_version,
+                    actual=sensitivity.get("formula_version"),
+                )
+            )
+        if model is not None and sensitivity.get("model_version") != model.get("model_version"):
+            issues.append(
+                issue(
+                    "REPLAY_MISMATCH",
+                    artifact="sensitivity_report",
+                    pointer="model_version",
+                    message="sensitivity model version differs from the compiled model",
+                    expected=model.get("model_version"),
+                    actual=sensitivity.get("model_version"),
+                )
+            )
     return _check(
         "numerical_artifacts",
         issues,
@@ -3422,8 +3867,9 @@ def validate_workspace(
     else:
         edges = edges_raw
     node_types = {str(node.get("id")): node.get("type") for node in nodes if isinstance(node, dict)}
+    node_scales = {str(node.get("id")): node.get("scale", "level") for node in nodes if isinstance(node, dict)}
     nodes_by_id = {str(node.get("id")): node for node in nodes if isinstance(node, dict) and nonempty_str(node.get("id"))}
-    c_edges, edge_by_id = validate_edges(edges, node_ids, evidence_ids, node_types)
+    c_edges, edge_by_id = validate_edges(edges, node_ids, evidence_ids, node_types, node_scales)
     checks["edges"] = c_edges.to_dict()
     checks["graph"] = c_edges.to_dict()  # alias
     all_issues.extend(c_edges.issues)

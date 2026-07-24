@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from . import FORMULA_VERSION, SCHEMA_VERSION, VALIDATOR_VERSION
+from . import FORMULA_VERSION, SCHEMA_VERSION, SUPPORTED_FORMULA_VERSIONS, VALIDATOR_VERSION
 from .io import (
     canonical_hash,
     load_json_secure,
@@ -158,11 +158,20 @@ def finalize_workspace(workspace: Path, *, require_report: bool = True) -> dict[
     index = _stable_manifest_index(workspace, manifest, paths)
     manifest["artifact_index"] = index
     artifact_hashes = {entry["path"]: entry["sha256"] for entry in index}
+    receipt_formula_version = manifest.get("formula_version", FORMULA_VERSION)
+    raw_paths = manifest.get("artifact_paths")
+    run_relative = raw_paths.get("run_ledger") if isinstance(raw_paths, dict) else None
+    if isinstance(run_relative, str):
+        run_contract, run_issues = load_json_secure(workspace / run_relative)
+        if not run_issues and isinstance(run_contract, dict):
+            receipt_formula_version = run_contract.get("formula_version", "2.0.0")
+    if receipt_formula_version not in SUPPORTED_FORMULA_VERSIONS:
+        receipt_formula_version = FORMULA_VERSION
 
     validation_receipt = {
         "schema_version": SCHEMA_VERSION,
         "validator_version": VALIDATOR_VERSION,
-        "formula_version": FORMULA_VERSION,
+        "formula_version": receipt_formula_version,
         "schema_digest": _schema_digest(workspace),
         "bundle_digest": canonical_hash(artifact_hashes),
         "artifact_hashes": artifact_hashes,

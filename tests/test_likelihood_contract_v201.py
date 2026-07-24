@@ -81,6 +81,7 @@ class LikelihoodContractV201Tests(unittest.TestCase):
                     "interval": [0.05, 0.95],
                     "calibration_policy_ref": "policy:calibration-v1",
                     "model_version": "model-v1",
+                    "formula_version": "2.0.0",
                     "model_hash": "a" * 64,
                     "hindcast_report_ref": "hindcast-report.json",
                 },
@@ -92,6 +93,10 @@ class LikelihoodContractV201Tests(unittest.TestCase):
         ledger["branches"][1]["probability"] = 0.4
         ledger["branches"][2].pop("relative_weight")
         self.assertEqual(self.validate_branch_ledger(ledger, manifest), set())
+
+        wrong_formula = copy.deepcopy(ledger)
+        wrong_formula["calibration"]["formula_version"] = "2.1.0"
+        self.assertIn("TRACK_MISMATCH", self.validate_branch_ledger(wrong_formula, manifest))
 
         missing_probability = copy.deepcopy(ledger)
         missing_probability["branches"][0].pop("probability")
@@ -139,14 +144,14 @@ class LikelihoodContractV201Tests(unittest.TestCase):
         ]
         self.assertIn("TRACK_MISMATCH", self.validate_actor_dossiers(different_action_set))
 
-    def test_nested_private_actor_data_is_rejected_before_roleplay(self) -> None:
+    def test_nested_private_actor_data_is_allowed_as_simulation_content(self) -> None:
         actors = copy.deepcopy(self.actors)
         actors[0]["biographical_foundation"] = {"personal_email": "private@example.com"}
-        self.assertIn("PRIVACY_REFUSAL", self.validate_actor_dossiers(actors))
+        self.assertNotIn("PRIVACY_REFUSAL", self.validate_actor_dossiers(actors))
 
         diagnosis = copy.deepcopy(self.actors)
         diagnosis[0]["biographical_foundation"] = {"diagnosis": "bipolar disorder"}
-        self.assertIn("PRIVACY_REFUSAL", self.validate_actor_dossiers(diagnosis))
+        self.assertNotIn("PRIVACY_REFUSAL", self.validate_actor_dossiers(diagnosis))
 
     def test_adjudication_hypothesis_references_are_resolved_and_disjoint(self) -> None:
         actors = copy.deepcopy(self.actors)

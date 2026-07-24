@@ -40,7 +40,7 @@ def _allowed_actions(actor: dict[str, object]) -> list[str]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Freeze a public-role dossier and build a sealed temporal packet.")
+    parser = argparse.ArgumentParser(description="Freeze an actor dossier and build a sealed temporal packet.")
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--actor-id", required=True)
     parser.add_argument("--decision-id", default="decision:main")
@@ -81,9 +81,28 @@ def main() -> None:
         print(json.dumps(intake, indent=2))
         raise SystemExit(EXIT_SECURITY)
 
+    actor_basis = actor.get(
+        "actor_basis",
+        "evidence" if actor.get("evidence_ids") else "assumption",
+    )
+    research_track = actor.get("research_track")
+    if actor_basis == "assumption" and research_track is not None:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "code": "HUMAN_TRACK",
+                    "error": "assumption-only actor must not include a research track",
+                },
+                indent=2,
+            )
+        )
+        raise SystemExit(EXIT_SEMANTIC)
+
     dossier_hash = dossier_contract_hash(actor)
     claims = []
-    for claim in (actor.get("research_track") or {}).get("claims") or []:
+    raw_claims = research_track.get("claims") if isinstance(research_track, dict) else []
+    for claim in raw_claims if isinstance(raw_claims, list) else []:
         if isinstance(claim, dict):
             claims.append(
                 {
@@ -94,6 +113,10 @@ def main() -> None:
                     "access_basis": claim.get("access_basis") or "",
                 }
             )
+    raw_unknowns = actor.get("uncertainty_factors")
+    unknowns = raw_unknowns if isinstance(raw_unknowns, list) else []
+    raw_assumptions = actor.get("assumptions")
+    assumptions = raw_assumptions if isinstance(raw_assumptions, list) else []
     packet_result = build_knowledge_packet(
         actor_id=args.actor_id,
         decision_id=args.decision_id,
@@ -104,7 +127,8 @@ def main() -> None:
         claims=claims,
         institutional_constraints=list(actor.get("institutional_constraints") or []),
         allowed_actions=_allowed_actions(actor),
-        unknowns=list(actor.get("uncertainty_factors") or []),
+        unknowns=unknowns,
+        assumptions=assumptions,
     )
     if not packet_result.get("ok"):
         print(json.dumps(packet_result, indent=2, ensure_ascii=False))

@@ -11,6 +11,7 @@ import re
 from pathlib import Path
 
 from _lib import load_json, skill_root, utc_now, write_json
+from aleph import FORMULA_VERSION
 from aleph.io import canonical_hash
 
 ISO_DURATION = re.compile(r"^P(?:(?P<years>\d+)Y)?(?:(?P<months>\d+)M)?(?:(?P<days>\d+)D)?$")
@@ -75,6 +76,7 @@ def build_workspace(args: argparse.Namespace) -> Path:
     manifest["status"] = "draft"
     manifest["likelihood_mode"] = "relative_weight"
     manifest["simulation_mode"] = "qualitative"
+    manifest["formula_version"] = FORMULA_VERSION
     manifest["assurance_tier"] = None
     manifest["change_point"]["description"] = args.change_point
     manifest["change_point"]["time"] = change_date.isoformat()

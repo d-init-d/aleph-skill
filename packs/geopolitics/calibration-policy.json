@@ -1,9 +1,9 @@
 {
   "policy_id": "cal:geopolitics:v1",
   "precommitted": true,
-  "commitment_version": "aleph-hindcast-commitment-v2",
+  "commitment_version": "aleph-hindcast-commitment-v3",
   "case_commitments": {
-    "hindcast:geopolitics:synthetic-001": "47a8d0c39c3521aad7d1b82c34f65b43cc6852c00d128758e8f114433959014b"
+    "hindcast:geopolitics:synthetic-001": "982775cf5a0934d411caacc934a1fb39e6e6f868649217d245c826edc1ce077a"
   },
   "min_oos_cases": 30,
   "metrics": [

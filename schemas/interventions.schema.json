@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aleph.local/schemas/2.0/interventions.schema.json",
+  "type": "array",
+  "items": {"$ref": "#/$defs/intervention"},
+  "$defs": {
+    "intervention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "target", "op", "value", "start_tick"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "target": {"type": "string", "minLength": 1},
+        "op": {"enum": ["set", "add", "multiply"]},
+        "value": {"type": "number"},
+        "start_tick": {"type": "integer", "minimum": 0},
+        "end_tick": {"type": ["integer", "null"], "minimum": 0},
+        "release_policy": {"enum": ["retain", "reset_baseline"]}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"release_policy": {"const": "reset_baseline"}},
+            "required": ["release_policy"]
+          },
+          "then": {"properties": {"op": {"const": "set"}}}
+        }
+      ]
+    }
+  }
+}

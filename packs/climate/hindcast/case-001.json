@@ -1,5 +1,6 @@
 {
   "schema_version": "2.0.0",
+  "formula_version": "2.1.0",
   "case_id": "hindcast:climate:synthetic-001",
   "cutoff": "2020-01-01",
   "evidence_snapshot_hash": "8c18b941538cce4d2c0827edde28e0a0aec648d483962d4e40958ca85e0081dc",

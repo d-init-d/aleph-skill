@@ -17,5 +17,6 @@
   "evidence_ids": ["evidence:example"],
   "probability": null,
   "alternative_explanations": ["The movement may partly reflect an omitted contextual factor."],
-  "sensitivity": {"level": "medium", "drivers": ["example driver"]}
+  "sensitivity": {"level": "medium", "drivers": ["example driver"]},
+  "scale": "level"
 }

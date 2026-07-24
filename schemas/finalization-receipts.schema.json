@@ -6,7 +6,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["schema_version", "validator_version", "formula_version", "schema_digest", "bundle_digest", "artifact_hashes", "status", "created_at", "transaction_id"],
       "properties": {
-        "schema_version": {"const": "2.0.0"}, "validator_version": {"type": "string"}, "formula_version": {"const": "2.0.0"},
+        "schema_version": {"const": "2.0.0"}, "validator_version": {"type": "string"}, "formula_version": {"enum": ["2.0.0", "2.1.0"]},
         "schema_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "bundle_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "artifact_hashes": {"type": "object"}, "status": {"const": "pass"}, "assurance_status": {"type": "string"},
         "created_at": {"type": "string", "format": "date-time"}, "transaction_id": {"type": "string"}

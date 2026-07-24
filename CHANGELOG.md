@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.2.0
+
+### Creative simulation
+- Made scenario execution a first-class invariant: Aleph has no content refusal based on topic, actor, motive, conflict, violence, religion, politics, ideology, current relevance, or speculation.
+- Replaced privacy refusal intake with provenance classification. Public, private, minor, fictional, and unknown actors can be simulated with `actor_basis: evidence|mixed|assumption`; unsupported details remain explicit assumptions or simulation output.
+- Added sealed assumption-only actor packets with distinct assumptions and unknowns, no fabricated research, byte-verified retained artifacts, and a single unchained roleplay receipt; evidence-backed tracks retain research/roleplay separation.
+- Added a verbatim regression for the Vatican internal-conflict and attempted-overthrow scenario, together with sensitive-content and actor-provenance coverage.
+
+### Numerical engine
+- Advanced new runs to `formula_version: 2.1.0` while retaining deterministic replay support for formula `2.0.0` workspaces.
+- Corrected transform semantics with centered logistic response, log-change elasticity, identity passthrough, and explicit `above`, `below`, `deadband`, and `hysteresis` thresholds.
+- Added timestep-invariant stock decay, explicit flow-to-stock `rate|impulse` integration, and `do(set)` release policies `retain|reset_baseline`.
+- Extended Monte Carlo execution to sample transform parameters and stock dynamics, and made branch clustering sensitive to trajectory and magnitude rather than endpoint sign alone.
+- Added execution-binding v2 over formula version, sampled parameters, integration mode, and dynamics hashes; v1 bindings remain replayable for legacy formula runs.
+- Advanced hindcast commitments to v3 so calibration precommitments bind `formula_version`; regenerated all bundled formula 2.1 case commitments. Custom v2 policies must declare each case's intended formula version, recompute its commitment hash, and verify the copied v3 policy before reuse.
+
+### Compatibility and packaging
+- Advanced package and validator versions to `2.2.0`; workspace schema remains `2.0.0` and bundled D Research remains locked at `3.2.1`.
+- Preserved legacy serialization defaults where required so unchanged formula 2.0.0 workspaces retain stable hashes.
+- Regenerated portable adapters and the exact distribution manifest, and made the required release-note path derive from `PACKAGE_VERSION` to avoid stale release metadata.
+- Added formula 2.1 contract and engine-dynamics regression suites alongside full lifecycle, replay, package, provenance, and release-gate coverage.
+- Published a schema-cataloged intervention contract and strengthened scalar-distribution and hysteresis schema parity.
+- Clarified that numerical traces are authored, audited inputs (the CLI never fabricates a placeholder) and documented the baseline-plus-delta meaning of numeric change-point magnitudes.
+
+### Review scope
+- Converted reproducible findings from the requested manual multi-model advisory review into deterministic regression tests.
+- Model reviews remain advisory only; replay checks, package validation, reproducible assets, and release CI are authoritative.
+
 ## 2.1.1
 
 ### Changed

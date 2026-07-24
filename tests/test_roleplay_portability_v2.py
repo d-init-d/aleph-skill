@@ -101,7 +101,7 @@ class SealedPacketTests(unittest.TestCase):
         self.assertNotIn(secret_text, json.dumps(result["packet"]))
         self.assertNotIn(secret_text, json.dumps(result["exclusion_ledger"]))
 
-    def test_roleplay_rejects_probability_private_motive_and_out_of_graph_action(self) -> None:
+    def test_roleplay_rejects_probability_evidence_and_out_of_graph_action_but_allows_motive(self) -> None:
         packet = _valid_packet()
         output = {
             "packet_hash": packet["packet_hash"],
@@ -137,7 +137,8 @@ class SealedPacketTests(unittest.TestCase):
         result = validate_roleplay_output(output, packet)
         self.assertFalse(result["ok"])
         codes = {value["code"] for value in result["issues"]}
-        self.assertTrue({"ROLEPLAY_PROBABILITY", "ROLEPLAY_EVIDENCE", "PRIVACY_REFUSAL", "ENUM"} <= codes)
+        self.assertTrue({"ROLEPLAY_PROBABILITY", "ROLEPLAY_EVIDENCE", "ENUM"} <= codes)
+        self.assertNotIn("PRIVACY_REFUSAL", codes)
 
     def test_valid_offline_roleplay_passes(self) -> None:
         packet = _valid_packet()
@@ -213,15 +214,16 @@ class ReceiptTests(unittest.TestCase):
 
 
 class PrivacyTests(unittest.TestCase):
-    def test_nested_sensitive_data_fails_before_network(self) -> None:
+    def test_nested_sensitive_scenario_data_switches_to_assumption_mode(self) -> None:
         result = privacy_intake(
             subject_class="public_role_person",
             public_role_anchor="Mayor",
             evidence_ids=["evidence:role"],
             payload={"safe": {"deeper": {"home_address": "1 Private Lane"}}},
         )
-        self.assertFalse(result["allowed"])
-        self.assertEqual(result["stop_before"], ["network", "roleplay"])
+        self.assertTrue(result["allowed"])
+        self.assertEqual(result["research_mode"], "assumption_only")
+        self.assertEqual(result["stop_before"], [])
 
 
 class DResearchInteropTests(unittest.TestCase):
@@ -424,6 +426,60 @@ class InstallerAdapterTests(unittest.TestCase):
             self.assertNotIn("packet", retained)
             self.assertNotIn("exclusion_ledger", retained)
             self.assertNotIn("privacy", retained)
+
+    def test_actor_packet_seals_assumptions_without_research_track(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            workspace.mkdir()
+            actors = [
+                {
+                    "id": "actor:fictional",
+                    "actor_basis": "assumption",
+                    "subject_class": "fictional_person",
+                    "living_status": "fictional",
+                    "public_role": "",
+                    "scope_note": "Creative assumption-only simulation",
+                    "evidence_ids": [],
+                    "assumptions": ["The actor prioritizes continuity."],
+                    "decision_graph": {"allowed_actions": ["continue", "change"]},
+                    "institutional_constraints": [],
+                }
+            ]
+            (workspace / "actors.json").write_text(json.dumps(actors), encoding="utf-8")
+            (workspace / "simulation-manifest.json").write_text(
+                '{"schema_version":"2.0.0"}\n', encoding="utf-8"
+            )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "actor_packet.py"),
+                    "--workspace",
+                    str(workspace),
+                    "--actor-id",
+                    "actor:fictional",
+                    "--decision-time",
+                    "2026-07-01T00:00:00Z",
+                    "--cutoff",
+                    "2026-06-30T00:00:00Z",
+                    "--out",
+                    "packets/fictional.json",
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            packet = json.loads(completed.stdout)["packet"]
+            self.assertEqual(packet["claims"], [])
+            self.assertEqual(
+                packet["explicit_assumptions"],
+                ["The actor prioritizes continuity."],
+            )
+            self.assertEqual(packet["explicit_unknowns"], [])
 
     def test_actor_packet_refuses_output_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

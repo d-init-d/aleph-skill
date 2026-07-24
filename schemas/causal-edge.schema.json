@@ -11,9 +11,19 @@
       "type": "object", "additionalProperties": false, "required": ["type"],
       "properties": {
         "type": {"enum": ["fixed", "uniform", "triangular", "truncated_exponential"]},
-        "fixed": {"type": "string"}, "min": {"type": "string"}, "mode": {"type": "string"}, "max": {"type": "string"},
-        "rate": {"type": "number", "exclusiveMinimum": 0}, "mean": {"type": "string"}
-      }
+        "fixed": {"oneOf": [{"type": "string"}, {"type": "number", "minimum": 0}]},
+        "min": {"oneOf": [{"type": "string"}, {"type": "number", "minimum": 0}]},
+        "mode": {"oneOf": [{"type": "string"}, {"type": "number", "minimum": 0}]},
+        "max": {"oneOf": [{"type": "string"}, {"type": "number", "minimum": 0}]},
+        "rate": {"type": "number", "exclusiveMinimum": 0},
+        "mean": {"oneOf": [{"type": "string"}, {"type": "number", "exclusiveMinimum": 0}]}
+      },
+      "allOf": [
+        {"if": {"properties": {"type": {"const": "fixed"}}}, "then": {"required": ["fixed"], "propertyNames": {"enum": ["type", "fixed"]}}},
+        {"if": {"properties": {"type": {"const": "uniform"}}}, "then": {"required": ["min", "max"], "propertyNames": {"enum": ["type", "min", "max"]}}},
+        {"if": {"properties": {"type": {"const": "triangular"}}}, "then": {"required": ["min", "mode", "max"], "propertyNames": {"enum": ["type", "min", "mode", "max"]}}},
+        {"if": {"properties": {"type": {"const": "truncated_exponential"}}}, "then": {"anyOf": [{"required": ["rate"]}, {"required": ["mean"]}], "propertyNames": {"enum": ["type", "min", "max", "rate", "mean"]}}}
+      ]
     },
     "context_modifiers": {
       "type": "array", "minItems": 1,
@@ -21,7 +31,21 @@
     },
     "evidence": {"type": "array", "items": {"type": "string", "pattern": "^evidence:"}}, "assumption_ref": {"type": "string"},
     "status": {"enum": ["proposed", "admitted", "incomplete", "rejected", "deprecated"]},
-    "transform": {"enum": ["linear", "elasticity"]},
+    "transform": {"enum": ["linear", "elasticity", "identity", "logistic", "threshold"]},
+    "transform_parameters": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "midpoint": {"oneOf": [{"type": "number"}, {"$ref": "#/$defs/scalarDistribution"}]},
+        "steepness": {"oneOf": [{"type": "number", "exclusiveMinimum": 0}, {"$ref": "#/$defs/scalarDistribution"}]},
+        "mode": {"enum": ["above", "below", "deadband", "hysteresis"]},
+        "threshold": {"oneOf": [{"type": "number"}, {"$ref": "#/$defs/scalarDistribution"}]},
+        "deadband": {"oneOf": [{"type": "number", "minimum": 0}, {"$ref": "#/$defs/scalarDistribution"}]},
+        "theta_on": {"oneOf": [{"type": "number", "minimum": 0}, {"$ref": "#/$defs/scalarDistribution"}]},
+        "theta_off": {"oneOf": [{"type": "number", "minimum": 0}, {"$ref": "#/$defs/scalarDistribution"}]}
+      }
+    },
+    "effect_distribution": {"$ref": "#/$defs/scalarDistribution"},
+    "integration": {"enum": ["rate", "impulse"]},
     "effect_parameter": {
       "type": "object", "additionalProperties": false, "required": ["kind"],
       "properties": {"kind": {"type": "string"}, "reference_value": {"type": "number"}, "distribution": {"type": "string"}, "parameters": {"type": "array"}, "unit": {"type": "string"}, "source_ref": {"type": "string"}, "lower": {"type": "number"}, "upper": {"type": "number"}}
@@ -29,5 +53,93 @@
     "existence_prob": {"type": "number", "minimum": 0, "maximum": 1},
     "feedback_policy": {"type": "object", "additionalProperties": false, "properties": {"method": {"type": "string"}, "max_iterations": {"type": "integer", "minimum": 1}, "tolerance": {"type": "number", "exclusiveMinimum": 0}}},
     "saturation": {"type": "number", "exclusiveMinimum": 0}, "effect_size": {"type": "number"}
+  },
+  "allOf": [
+    {"if": {"properties": {"transform": {"enum": ["linear", "elasticity", "identity"]}}}, "then": {"properties": {"transform_parameters": {"maxProperties": 0}}}},
+    {"if": {"properties": {"transform": {"const": "logistic"}}}, "then": {"properties": {"transform_parameters": {"propertyNames": {"enum": ["midpoint", "steepness"]}}}}},
+    {"if": {"properties": {"transform": {"const": "threshold"}}}, "then": {"properties": {"transform_parameters": {"propertyNames": {"enum": ["mode", "threshold", "deadband", "theta_on", "theta_off"]}}}}},
+    {
+      "if": {
+        "properties": {
+          "transform": {"const": "threshold"},
+          "transform_parameters": {"properties": {"mode": {"const": "hysteresis"}}, "required": ["mode"]}
+        },
+        "required": ["transform", "transform_parameters"]
+      },
+      "then": {"properties": {"transform_parameters": {"required": ["theta_on", "theta_off"]}}}
+    },
+    {"if": {"properties": {"transform": {"const": "identity"}}}, "then": {"not": {"required": ["effect_distribution"]}}}
+  ],
+  "$defs": {
+    "scalarDistribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Scalar uncertainty distribution. Semantic validation additionally enforces min < max, min <= mode <= max, and agreement between aliases.",
+      "properties": {
+        "distribution": {"enum": ["fixed", "uniform", "triangular", "normal"]},
+        "type": {"enum": ["fixed", "uniform", "triangular", "normal"]},
+        "value": {"type": "number"},
+        "min": {"type": "number"},
+        "mode": {"type": "number"},
+        "max": {"type": "number"},
+        "mean": {"type": "number"},
+        "sd": {"type": "number", "exclusiveMinimum": 0}
+      },
+      "oneOf": [
+        {"required": ["distribution"], "not": {"required": ["type"]}},
+        {"required": ["type"], "not": {"required": ["distribution"]}},
+        {
+          "required": ["distribution", "type"],
+          "oneOf": [
+            {"properties": {"distribution": {"const": "fixed"}, "type": {"const": "fixed"}}},
+            {"properties": {"distribution": {"const": "uniform"}, "type": {"const": "uniform"}}},
+            {"properties": {"distribution": {"const": "triangular"}, "type": {"const": "triangular"}}},
+            {"properties": {"distribution": {"const": "normal"}, "type": {"const": "normal"}}}
+          ]
+        }
+      ],
+      "allOf": [
+        {
+          "if": {"anyOf": [
+            {"properties": {"distribution": {"const": "fixed"}}, "required": ["distribution"]},
+            {"properties": {"type": {"const": "fixed"}}, "required": ["type"]}
+          ]},
+          "then": {
+            "required": ["value"],
+            "propertyNames": {"enum": ["distribution", "type", "value"]}
+          }
+        },
+        {
+          "if": {"anyOf": [
+            {"properties": {"distribution": {"const": "uniform"}}, "required": ["distribution"]},
+            {"properties": {"type": {"const": "uniform"}}, "required": ["type"]}
+          ]},
+          "then": {
+            "required": ["min", "max"],
+            "propertyNames": {"enum": ["distribution", "type", "min", "max"]}
+          }
+        },
+        {
+          "if": {"anyOf": [
+            {"properties": {"distribution": {"const": "triangular"}}, "required": ["distribution"]},
+            {"properties": {"type": {"const": "triangular"}}, "required": ["type"]}
+          ]},
+          "then": {
+            "required": ["min", "mode", "max"],
+            "propertyNames": {"enum": ["distribution", "type", "min", "mode", "max"]}
+          }
+        },
+        {
+          "if": {"anyOf": [
+            {"properties": {"distribution": {"const": "normal"}}, "required": ["distribution"]},
+            {"properties": {"type": {"const": "normal"}}, "required": ["type"]}
+          ]},
+          "then": {
+            "required": ["mean", "sd"],
+            "propertyNames": {"enum": ["distribution", "type", "mean", "sd"]}
+          }
+        }
+      ]
+    }
   }
 }
