@@ -1,4 +1,4 @@
-"""Schema constants and strict type helpers for Aleph 2.0."""
+"""Schema constants and strict type helpers for the Aleph artifact schema."""
 
 from __future__ import annotations
 

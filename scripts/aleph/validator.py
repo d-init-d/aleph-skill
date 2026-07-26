@@ -1,4 +1,4 @@
-"""Strict semantic validation for Aleph workspaces (1.2 dual-read + 2.0 write path)."""
+"""Strict semantic validation for Aleph workspaces (1.2 dual-read + 2.0/2.1 write path)."""
 
 from __future__ import annotations
 
@@ -782,6 +782,26 @@ def validate_manifest_core(manifest: dict[str, Any], mode: str) -> CheckResult:
                     issues.append(issue("LEGACY_EXECUTION_CONTROL", pointer=f"execution.research_control.{legacy}", message="forbidden"))
             if mode == "final" and control.get("saturation_reached") is not True:
                 issues.append(issue("EVIDENCE_SATURATION", pointer="execution.research_control.saturation_reached", message="must be true"))
+            declared_tier = manifest.get("assurance_tier")
+            if (
+                mode != "final"
+                and control.get("saturation_reached") is False
+                and isinstance(declared_tier, str)
+                and declared_tier in {"verified", "calibrated"}
+            ):
+                # An unsaturated partial keeps its raw bytes but its final-tier
+                # claim is normalized: report stays non-fatal here while the
+                # final-mode saturation and receipt gates remain hard.
+                issues.append(
+                    issue(
+                        "PARTIAL_ASSURANCE_NORMALIZED",
+                        severity="warning",
+                        pointer="assurance_tier",
+                        message="unsaturated partial cannot hold a final assurance tier; claim normalized to limited",
+                        expected="limited",
+                        actual=declared_tier,
+                    )
+                )
             if control.get("policy") != "evidence-saturation":
                 issues.append(issue("EVIDENCE_SATURATION", pointer="execution.research_control.policy", message="must be evidence-saturation"))
             gaps = control.get("unresolved_critical_gaps")
@@ -4095,7 +4115,13 @@ def validate_workspace(
         "error_codes": sorted({i.code for i in errors}),
         "artifact_digests": digests,
         "bundle_digest": canonical_hash(digests),
-        "formula_version": FORMULA_VERSION,
+        # Report the workspace's resolved formula, not a hardcoded current
+        # value: legacy 2.0 workspaces report 2.0.0, new ones 2.1.0.
+        "formula_version": (
+            manifest.get("formula_version")
+            if manifest.get("formula_version") in SUPPORTED_FORMULA_VERSIONS
+            else FORMULA_VERSION
+        ),
     }
     return result
 

@@ -3,8 +3,8 @@
   "package_version": "2.3.1",
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
-  "file_count": 471,
-  "tree_sha256": "4e69807be5365f58eca9cd533a7f18e6132fbecfa50a9ed0c419993691c57737",
+  "file_count": 472,
+  "tree_sha256": "575f4cebe1214aac94dca8e6307121f607140009a20cdedb83de25a13b7eaf87",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -1608,8 +1608,8 @@
     },
     {
       "path": "references/adaptive-research-workflow.md",
-      "sha256": "a36ddd8ce30ca418cfef2c4ef302998be66d0a5b459f8072c2a2b26dc73a665a",
-      "size": 8073
+      "sha256": "4dfc29a1834a0cbfd0cea1c9649309605741a082f5e881fa89150513d1e4e463",
+      "size": 8187
     },
     {
       "path": "references/artifact-contract.md",
@@ -1633,8 +1633,8 @@
     },
     {
       "path": "references/d-research-integration.md",
-      "sha256": "3399313d8a6d3468282b0d0326d22cc77ee8b00643e4cf404e4628d30e8eac93",
-      "size": 7340
+      "sha256": "3389a15e36ca3ae86ec31002787177c77910befb5a0228cb6c664a6c05bc11f6",
+      "size": 7547
     },
     {
       "path": "references/evaluation-forward-tests.md",
@@ -1748,8 +1748,8 @@
     },
     {
       "path": "scripts/aleph/__init__.py",
-      "sha256": "3ad5fc00e3b6339fd7efb4be8cfb53bb1eab96712b26e3188e5ce492c6414a9c",
-      "size": 1131
+      "sha256": "938cf34b981b9d289a7321cb092fd685d56f7b4421bc3ae8244443187a572393",
+      "size": 1127
     },
     {
       "path": "scripts/aleph/adapters_registry.py",
@@ -1803,8 +1803,8 @@
     },
     {
       "path": "scripts/aleph/issues.py",
-      "sha256": "00ee415ac53d523aa62c0ea28253a66b54f149f83c046207b3e70f7c2189a870",
-      "size": 4971
+      "sha256": "1b519263baea44d6f0fa1b0f86abec9110463e56e00eec417a4fa356f4df2954",
+      "size": 5011
     },
     {
       "path": "scripts/aleph/migrate.py",
@@ -1843,8 +1843,8 @@
     },
     {
       "path": "scripts/aleph/schema.py",
-      "sha256": "a3d4e0a2845eac427362a261d0b19cf91807a3da7562abb95e58041f2bc253b1",
-      "size": 20980
+      "sha256": "91f8a3e3614c9fcad341dde1cd3661d8bf8b5c26fb43281ea95fbbf16f51e10d",
+      "size": 20996
     },
     {
       "path": "scripts/aleph/sensitivity.py",
@@ -1858,13 +1858,13 @@
     },
     {
       "path": "scripts/aleph/validator.py",
-      "sha256": "69ecab756d1d054f69676d64f4d55f00a91924f3de28cc963db65322a64fee7d",
-      "size": 215227
+      "sha256": "667054e528ecec899b3c3cdcd03e56acbee6ee1f7427dca19d210ce306109bda",
+      "size": 216511
     },
     {
       "path": "scripts/build_release_assets.py",
-      "sha256": "1216d5be39c0cab689ec14f2e7f7e524a9e2076fc360f5924de0fb1c9fff67ad",
-      "size": 9986
+      "sha256": "87aec495878aa0e2c992232ae892b4936df9dd6f8a022170225ed5727aeaac26",
+      "size": 21295
     },
     {
       "path": "scripts/check_adapters.py",
@@ -2277,9 +2277,14 @@
       "size": 9331
     },
     {
+      "path": "tests/test_release_dual_artifacts.py",
+      "sha256": "3da2794ec5a48da134bf28fb9e747008750449dd7c1da83167e496246771c2a0",
+      "size": 7724
+    },
+    {
       "path": "tests/test_release_packaging_v201.py",
-      "sha256": "9c2a24930235c52298b9e424d3c15105f4b156d4d7241251394f2a7f3a834faa",
-      "size": 12937
+      "sha256": "7423c2fdb354838cc78e46c1303bd8b7dd6ea69fb1c105a3e40d3a23c26b801a",
+      "size": 13302
     },
     {
       "path": "tests/test_release_quality_v201.py",

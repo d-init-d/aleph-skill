@@ -45,6 +45,7 @@ PUBLIC_CODES = frozenset(
         "CONTEXT_MISSING",
         "CONFIDENCE_ALIAS",
         "ACTOR_BASIS_INFERRED",
+        "PARTIAL_ASSURANCE_NORMALIZED",
         "MULTIPLIER",
         "SELF_EDGE",
         "TRACE_STEP",

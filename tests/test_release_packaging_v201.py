@@ -58,9 +58,17 @@ class ReleasePackagingV201Tests(unittest.TestCase):
             }
             expected.add(f"{ARCHIVE_ROOT}/{MANIFEST_NAME}")
             archive = Path(str(first["archive"]))
+            # Deterministic DEFLATE is the reproducible default; STORED stays
+            # the declared fallback when a rebuild is not byte-identical.
+            expected_compression = {
+                "deflate": zipfile.ZIP_DEFLATED,
+                "stored": zipfile.ZIP_STORED,
+            }[str(first["compression"])]
             with zipfile.ZipFile(archive) as bundle:
                 self.assertEqual(set(bundle.namelist()), expected)
-                self.assertTrue(all(item.compress_type == zipfile.ZIP_STORED for item in bundle.infolist()))
+                self.assertTrue(
+                    all(item.compress_type == expected_compression for item in bundle.infolist())
+                )
                 bundle.extractall(temporary / "extracted")
 
             extracted = temporary / "extracted" / ARCHIVE_ROOT

@@ -32,7 +32,7 @@ All research subprocesses use `scripts/research_gateway.py`:
 - `shell=False`;
 - absolute locked script paths with the child working directory set to an external user workspace;
 - filtered environment (`D_RESEARCH_*` allowlist; HMAC only when needed);
-- timeouts and output limits;
+- timeouts and output limits — these bounded per-invocation subprocess caps protect a single gateway call only; there is no total resumable-wave ceiling, and research continues across as many checkpointed waves as saturation requires;
 - JSON result with `component_binding`, capabilities, selected route, fallback chain, blockers, stdout/stderr digests.
 
 Use `research:manifest` as the machine-readable route inventory. Stable routes cover ledger, plan, investigative policy, browser, API/search, citations, archives, Wikidata, social snapshots, PDF/OCR, translation, semantic retrieval, multi-format extraction, data cleanup, scoring, reports, quality evaluation, acceptance, and package checks. `scripts/run_python.mjs` is deliberately not dispatchable.

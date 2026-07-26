@@ -80,7 +80,7 @@ Run research in waves and write findings immediately:
 6. prospective indicators and disconfirming evidence,
 7. frontier expansion for remaining critical gaps.
 
-Small, local, well-documented changes may saturate in one or two waves. Large, long-horizon, multi-domain, high-stakes, or weak-evidence changes should continue across as many waves and specialized subagents as necessary. The protocol imposes no source-count or elapsed-time ceiling.
+Small, local, well-documented changes may saturate in one or two waves. Large, long-horizon, multi-domain, high-stakes, or weak-evidence changes should continue across as many waves and specialized subagents as necessary. The protocol imposes no source-count or elapsed-time ceiling and no total resumable-wave ceiling; only individual subprocess invocations carry bounded timeout and output caps.
 
 After every wave, persist the research plan, completed subquestions, sources examined, atomic claims, contradictions, unresolved frontiers, complexity reassessment, and next-wave queue in the simulation workspace. Store resumable work items in `execution.research_control.next_wave_queue`. Update `research_waves_completed`, `sources_examined`, checkpoint flags, and `unresolved_critical_gaps` before dispatching more work. When D Research is available, preserve its plan and ledger too.
 

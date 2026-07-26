@@ -1,4 +1,4 @@
-"""Aleph 2.0 core library — stdlib-first causal simulation toolkit."""
+"""Aleph core library — stdlib-first causal simulation toolkit."""
 
 from __future__ import annotations
 
