@@ -140,7 +140,9 @@ SCRIPT_INVENTORY: tuple[str, ...] = (
     "scripts/api_fetch.mjs",
     "scripts/bench_harness_check.py",
     "scripts/browser_smoke.mjs",
+    "scripts/build_release_artifacts.py",
     "scripts/check_contract.py",
+    "scripts/check_doc_examples.py",
     "scripts/check_internal_refs.py",
     "scripts/check_no_plan_files.py",
     "scripts/check_node_syntax.py",
@@ -161,6 +163,7 @@ SCRIPT_INVENTORY: tuple[str, ...] = (
     "scripts/multi_extract.py",
     "scripts/ocr.py",
     "scripts/package_manifest_check.mjs",
+    "scripts/package_metadata.py",
     "scripts/pdf_extract.py",
     "scripts/playwright_crawl.mjs",
     "scripts/playwright_extract.mjs",
@@ -173,6 +176,7 @@ SCRIPT_INVENTORY: tuple[str, ...] = (
     "scripts/run_dogfood.py",
     "scripts/run_metadata.py",
     "scripts/run_python.mjs",
+    "scripts/runtime_self_test.mjs",
     "scripts/score_source.py",
     "scripts/social_snapshot.py",
     "scripts/translate.py",
@@ -181,8 +185,10 @@ SCRIPT_INVENTORY: tuple[str, ...] = (
     "scripts/wikidata.py",
     "scripts/lib/browser_limits.mjs",
     "scripts/lib/browser_ssrf.mjs",
+    "scripts/lib/config.mjs",
     "scripts/lib/credentials.mjs",
     "scripts/lib/http_cache.mjs",
+    "scripts/lib/package_metadata.mjs",
     "scripts/lib/ssrf_guards.mjs",
 )
 
@@ -195,10 +201,16 @@ NON_DISPATCHABLE_SCRIPTS = frozenset(
         "scripts/content_sanitize.py",
         "scripts/generate_test_pdf.py",  # hard-codes writes beside __file__
         "scripts/run_python.mjs",  # accepts an arbitrary script path
+        # v3.4.0 packed-artifact self-check: its capability:check probe expects
+        # repo-only release-evidence paths the npm snapshot recipe excludes, so
+        # inside the locked component it can only report that recipe gap.
+        "scripts/runtime_self_test.mjs",
         "scripts/lib/browser_limits.mjs",
         "scripts/lib/browser_ssrf.mjs",
+        "scripts/lib/config.mjs",
         "scripts/lib/credentials.mjs",
         "scripts/lib/http_cache.mjs",
+        "scripts/lib/package_metadata.mjs",
         "scripts/lib/ssrf_guards.mjs",
     }
 )
@@ -225,6 +237,7 @@ PATH_OPTIONS = frozenset(
         "--ci-evidence",
         "--csl",
         "--config",
+        "--extract-to",
         "--file",
         "--findings-ledger",
         "--fixtures",
@@ -239,8 +252,11 @@ PATH_OPTIONS = frozenset(
         "--out-dir",
         "--outDir",
         "--out-row",
+        "--output-dir",
+        "--profiles",
         "--repo",
         "--report",
+        "--root",
         "--run-result",
         "--run-dir",
         "--runs-dir",
@@ -249,6 +265,7 @@ PATH_OPTIONS = frozenset(
         "--scope",
         "--sig",
         "--source-file",
+        "--source-root",
         "--workspace",
         "--workflow-path",
     }
@@ -390,8 +407,10 @@ COMMAND_ROUTES: dict[str, dict[str, Any]] = {
     "research:plan": _route("scripts/research_plan.py", hmac=True),
     "research:policy": _route("scripts/investigation_policy.py"),
     "research:package-check": _route("scripts/package_manifest_check.mjs", kind="node"),
+    "research:package-metadata": _route("scripts/package_metadata.py"),
     "research:check-contract": _route("scripts/check_contract.py"),
     "research:check-refs": _route("scripts/check_internal_refs.py"),
+    "research:check-doc-examples": _route("scripts/check_doc_examples.py"),
     "research:quality": _route("scripts/quality_eval.py"),
     "research:report": _route("scripts/report_render.py", hmac=True),
     "research:citation-resolver": _route("scripts/citation_resolver.py", network=True),
@@ -422,6 +441,7 @@ COMMAND_ROUTES: dict[str, dict[str, Any]] = {
     "research:bench": _route("scripts/bench_harness_check.py"),
     "research:harvest": _route("scripts/harvest_terms.py"),
     "research:release-verify": _route("scripts/release_verify.py"),
+    "research:build-artifacts": _route("scripts/build_release_artifacts.py"),
     "research:adversarial": _route("scripts/adversarial_acceptance.py"),
 }
 
@@ -572,8 +592,17 @@ def _reconcile_component_acceptance(
     reconciliation = _component_internal_reference_reconciliation(root)
     if reconciliation.get("ok") is not True:
         return None
+    # Keyed on the exact locked component identity (the reconciliation reads
+    # the version from component-lock.json, never from an env override).
+    # Earlier locked identities remain reconciliable so re-locking an older
+    # snapshot never loses capability.
     component_version = str(reconciliation.get("component_version") or "")
-    if component_version == "3.3.0":
+    if component_version == "3.4.0":
+        # Empirically verified on the locked v3.4.0 snapshot: the only
+        # repository-only failure is check_contract's self-test reading the
+        # excluded CI workflow file.
+        repo_only_failures = ["23_unsafe_runtime_config"]
+    elif component_version == "3.3.0":
         repo_only_failures = ["23_unsafe_runtime_config"]
     elif component_version == "3.2.1":
         repo_only_failures = [

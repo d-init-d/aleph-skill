@@ -87,6 +87,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "component_binding": d_research.get("component_binding"),
             "component_lock_sha256": d_research.get("component_lock_sha256"),
             "component_tree_sha256": d_research.get("component_tree_sha256"),
+            "interop_contract": d_research.get("interop_contract"),
             "lock_ok": verification.ok,
             "lock_error": verification.error_code,
         },

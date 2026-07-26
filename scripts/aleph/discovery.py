@@ -14,6 +14,70 @@ SUPPORTED_MAJORS = frozenset({3})
 EXPECTED_SKILL_NAME = "d-research"
 EXPECTED_PACKAGE_NAMES = frozenset({"d-research-skill-tools", "d-research"})
 
+# Importer-side ledger contract (what this Aleph can actually consume). The
+# authoritative values live in import_ledger; read lazily to avoid cycles.
+
+
+def _importer_ledger_contract() -> dict[str, Any]:
+    from .import_ledger import (  # noqa: PLC0415
+        ACCEPTED_FIELD_SETS,
+        D_RESEARCH_SIGNATURE_VERSION,
+        VALID_RECORD_TYPES,
+    )
+
+    return {
+        "header_widths": sorted({len(fields) for fields in ACCEPTED_FIELD_SETS}),
+        "record_types": sorted(value for value in VALID_RECORD_TYPES if value),
+        "signature": D_RESEARCH_SIGNATURE_VERSION,
+    }
+
+
+def _read_interop_contract(resolved: Path) -> dict[str, Any] | None:
+    """Read the component's machine-checkable interop contract when present.
+
+    D Research >= 3.4.0 ships ``templates/interop-contract.json`` generated from
+    its live ledger constants. Candidates without the file (older versions,
+    external installs) keep the historical major-version acceptance, so this is
+    purely additive capability discovery, never a new gate on old inputs.
+    """
+    contract_path = resolved / "templates" / "interop-contract.json"
+    if not contract_path.is_file():
+        return None
+    contract, contract_issues = load_json_secure(contract_path)
+    if contract_issues or not isinstance(contract, dict):
+        return {"present": True, "readable": False}
+    ledger = contract.get("ledger") if isinstance(contract.get("ledger"), dict) else {}
+    importer = _importer_ledger_contract()
+    declared_widths = ledger.get("header_sizes")
+    declared_types = ledger.get("record_types")
+    widths_supported = (
+        isinstance(declared_widths, list)
+        and set(declared_widths) <= set(importer["header_widths"])
+    )
+    types_supported = (
+        isinstance(declared_types, list)
+        and set(declared_types) <= set(importer["record_types"])
+    )
+    signature_supported = ledger.get("signature") == importer["signature"]
+    return {
+        "present": True,
+        "readable": True,
+        "contract_version": contract.get("contract_version"),
+        "package_version": contract.get("package_version"),
+        "ledger": {
+            "header_sizes": declared_widths,
+            "record_types": declared_types,
+            "canonicalization": ledger.get("canonicalization"),
+            "signature": ledger.get("signature"),
+        },
+        "routes": contract.get("routes"),
+        "entrypoints": contract.get("entrypoints"),
+        "artifact_profiles": contract.get("artifact_profiles"),
+        "importer_supports_declared_headers": widths_supported,
+        "importer_supports_declared_record_types": types_supported,
+        "importer_supports_declared_signature": signature_supported,
+    }
+
 
 def _parse_frontmatter_name(text: str) -> str | None:
     if not text.startswith("---"):
@@ -62,7 +126,20 @@ def _candidate_report(source: str, path: Path) -> dict[str, Any]:
     except (TypeError, ValueError):
         major = None
     identity_ok = skill_name == EXPECTED_SKILL_NAME and package_name in EXPECTED_PACKAGE_NAMES
-    compatible = identity_ok and major in SUPPORTED_MAJORS
+    interop = _read_interop_contract(resolved)
+    if interop is not None and interop.get("readable"):
+        # Capability-based compatibility: the component declares its exact
+        # ledger contract and the importer must support every declared width,
+        # record type, and the signature scheme. Major-version acceptance
+        # remains only for candidates that predate the interop contract.
+        contract_supported = bool(
+            interop.get("importer_supports_declared_headers")
+            and interop.get("importer_supports_declared_record_types")
+            and interop.get("importer_supports_declared_signature")
+        )
+        compatible = identity_ok and contract_supported
+    else:
+        compatible = identity_ok and major in SUPPORTED_MAJORS
     entry.update(
         {
             "resolved_path": str(resolved),
@@ -75,10 +152,16 @@ def _candidate_report(source: str, path: Path) -> dict[str, Any]:
             "ok": compatible,
         }
     )
+    if interop is not None:
+        entry["interop_contract"] = interop
+        entry["importer_ledger_contract"] = _importer_ledger_contract()
     if not identity_ok:
         entry["reason"] = "D Research identity mismatch"
-    elif major not in SUPPORTED_MAJORS:
-        entry["reason"] = f"unsupported D Research major {major}"
+    elif not compatible:
+        if interop is not None and interop.get("readable"):
+            entry["reason"] = "declared interop ledger contract exceeds importer support"
+        else:
+            entry["reason"] = f"unsupported D Research major {major}"
     return entry
 
 

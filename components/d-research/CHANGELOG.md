@@ -7,6 +7,118 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-07-26
+
+Stable production promotion of the signed `v3.4.0-rc.1` monotonic-capability
+candidate. The executable implementation is unchanged from the candidate;
+stable-only changes are lifecycle metadata, documentation, the generated
+interop package version, and version-scoped release evidence. See
+[`docs/release-v3.4.0.md`](docs/release-v3.4.0.md).
+
+### Added
+
+- Published capability-complete `full` and clean `runtime` installation
+  profiles with archives deterministic for identical source bytes, embedded
+  and sidecar manifests, per-file/tree hashes, archive checksums,
+  extracted-profile self-tests, and trusted-contract verification.
+- Published a machine-readable downstream interop contract for ledger widths
+  `14/19/22/23/37`, record types, routes, entry points, and artifact profiles.
+- Added opt-in API pagination config and explicit POST/PUT/PATCH/DELETE request
+  construction while preserving the established GET CLI contract and defaults.
+- Added explicit Wayback save/dry-run/JSON interfaces and broad metadata secret
+  redaction.
+
+### Changed
+
+- Promoted package metadata from `3.4.0-rc.1` Beta to `3.4.0`
+  Production/Stable and regenerated only the interop `package_version` field.
+- Made all 52 references directly discoverable from `SKILL.md`, completed the
+  55-file script inventory, and replaced end-user clone instructions with the
+  checksummed runtime artifact path.
+
+### Fixed
+
+- Prevented implicit retries from duplicating mutation requests and corrected
+  redirect, credential forwarding, 204/205, empty-response, JSON-object, and
+  GraphQL response handling.
+- Closed CLI-option, bodyless content-type, stale User-Agent, mojibake, and
+  camelCase/URL/quoted-secret redaction defects.
+
+### Verification
+
+- Exact candidate CI passed Python 3.10-3.12, Node.js 18/20/22, Windows and
+  Ubuntu integration, real Chromium, optional backends, package checks, strict
+  benches, and capability/artifact gates.
+- The signed candidate tag, source archive replay, checksum, independent
+  reproduction, provenance attestation, and all 24 local promotion checks
+  passed before stable promotion.
+- No v3.3.0 command, option, route, reference, script, template, ledger schema,
+  record type, or recorded no-config default was removed.
+
+## [3.4.0-rc.1] - 2026-07-26
+
+Release candidate for the v3.4.0 monotonic-capability upgrade. Every change is
+additive: no command, option, route, reference, script, template, ledger schema,
+or default is removed, and all v3.3.0 inputs remain valid. See
+[`docs/release-v3.4.0-rc.1.md`](docs/release-v3.4.0-rc.1.md).
+
+### Added
+
+- Added a machine-readable capability baseline and superset checker
+  (`release-evidence/v3.4.0/baseline/capability_baseline.py`) that fails if any
+  command, route, reference, script, template, ledger header size, or record
+  type regresses, or a recorded default changes without a caller opt-in.
+- Added a downstream interop contract: `evidence_ledger.py contract --json`
+  (npm `ledger:contract`) plus the committed snapshot
+  `templates/interop-contract.json`, generated from live ledger constants and
+  route ids, and validated for drift by `check_contract.py`.
+- Added config-backed API pagination with CLI-over-config precedence while
+  preserving the no-config `10`-page default.
+- Added explicit POST/PUT/PATCH/DELETE request construction, intent labels,
+  JSON/file bodies, content types, opt-in retry attempts, and cross-origin
+  redirect authorization to `api_fetch.mjs`.
+- Added Wayback `--submit-archive`, `--dry-run`, and `--json` interfaces plus
+  run-metadata secret redaction.
+- Added deterministic-for-identical-input `full` and `runtime` release
+  artifacts with trusted allowlist contracts, bounded verification, embedded
+  and sidecar manifests, per-file/tree SHA-256, extracted-profile self-tests,
+  and forged-contract regression coverage.
+- Added canonical Python and Node package-identity helpers so every network
+  User-Agent resolves the live package version instead of embedding stale
+  release labels.
+
+### Changed
+
+- Bumped the candidate version to `3.4.0-rc.1` (Beta classifier) so the
+  candidate is exempt from the stable release-evidence gate while feature work
+  proceeds, per the repository's own `-rc.N` promotion model.
+- Routed all 52 reference guides directly from `SKILL.md`, expanded executable
+  path checks, completed the 55-file script inventory, and added fenced
+  Python/JavaScript syntax checks.
+- Replaced end-user repository-clone instructions with a checksummed,
+  allowlisted runtime artifact. The historical `full` profile remains
+  capability-complete; `source` remains its accepted alias.
+
+### Fixed
+
+- Prevented automatic retries from duplicating state-changing API requests;
+  additional attempts now require explicit opt-in.
+- Corrected 301/302/303/307/308 method, body, credential, and origin handling;
+  accepted valid 204/205/empty responses; and preserved GraphQL/JSON objects.
+- Rejected unknown CLI options even with `--print-effective-config`, applied
+  bodyless `--content-type`, and closed camelCase/URL/quoted-secret redaction
+  gaps.
+- Corrected the Wayback documentation mismatch without changing the historical
+  `save` command behavior.
+
+### Security
+
+- Runtime artifact verification now uses the trusted local profile contract
+  rather than an archive-supplied allowlist, binds optional expected version
+  and SHA-256 values, limits compressed/member/file/uncompressed sizes, rejects
+  noncanonical archive metadata, and refuses path, junction, reparse-point, or
+  case-collision escapes.
+
 ## [3.3.0] - 2026-07-26
 
 Stable production release of the v3.3 investigative-research expansion.
@@ -387,7 +499,7 @@ installed-skill readiness gaps found after rc.1 preparation.
 - **F-05 / direct HTTP SSRF:** `api_fetch.mjs` uses connection-bound
   `fetchPublicHttp` (validate DNS → connect to validated IP → peer re-check;
   URL-derived Host + DNS SNI). Rebinding / mixed DNS / peer mismatch covered in
-  `ssrf_guards.mjs` self-test.
+  `scripts/lib/ssrf_guards.mjs` self-test.
 - **Browser SSRF:** arbitrary browser URLs are fail-closed by default (not
   accepted-risk). Local fixture loopback only via
   the hidden `--allow-loopback-fixture` test hook (browser_smoke / acceptance
@@ -1151,7 +1263,9 @@ git push origin v2.1.0 bench/v2.1 v3.0.0
   evidence-ledger schema, anti-bot fallback chain, citation export,
   systematic-review protocol, and PRISMA flow template.
 
-[Unreleased]: https://github.com/d-init-d/d-research-skill/compare/v3.3.0...HEAD
+[Unreleased]: https://github.com/d-init-d/d-research-skill/compare/v3.4.0...HEAD
+[3.4.0]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.4.0
+[3.4.0-rc.1]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.4.0-rc.1
 [3.3.0]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.3.0
 [3.3.0-rc.1]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.3.0-rc.1
 [3.2.1]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.2.1

@@ -754,7 +754,7 @@ def discover_d_research(
                     "reason": "COMPONENT_OVERRIDE_REFUSED: use allow_external for external path",
                 }
             )
-        return {
+        report = {
             "status": "available",
             "path": COMPONENT_URI,
             "resolved_path": resolution.root,
@@ -775,6 +775,18 @@ def discover_d_research(
             "trust_level": resolution.trust_level,
             "tried": tried,
         }
+        # Surface the component's machine-checkable interop contract (ledger
+        # header widths, record types, canonicalization/signature identifiers,
+        # routes) when the locked snapshot ships one (D Research >= 3.4.0).
+        try:
+            from .discovery import _read_interop_contract  # noqa: PLC0415
+
+            interop = _read_interop_contract(Path(resolution.root))
+        except Exception:  # noqa: BLE001 - discovery info must never break resolve
+            interop = None
+        if interop is not None:
+            report["interop_contract"] = interop
+        return report
 
     if require_bundled and not allow_external:
         return {

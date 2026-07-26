@@ -31,9 +31,12 @@ import {
   urlHasCredentials,
 } from './lib/credentials.mjs';
 import { HttpResourceLimitError, assertPublicHttpUrl, fetchPublicHttp } from './lib/ssrf_guards.mjs';
+import { loadConfig, getPositiveIntConfig, redactConfig } from './lib/config.mjs';
 
 const MAX_REDIRECTS = 10;
 const DEFAULT_MAX_BODY_BYTES = 20 * 1024 * 1024;
+const DEFAULT_GET_ATTEMPTS = 3;
+const DEFAULT_NON_IDEMPOTENT_ATTEMPTS = 1;
 
 // Production defaults: public HTTPS destinations only. Offline self-tests may
 // enable loopback HTTP fixtures via setSsrfOptionsForTest() or the hermetic
@@ -176,6 +179,16 @@ function parseArgs(argv) {
     params: {},
     pagination: 'auto',
     maxPages: 10,
+    maxPagesFromCli: false,
+    maxAttempts: null,
+    maxAttemptsFromCli: false,
+    configPath: null,
+    printEffectiveConfig: false,
+    method: 'GET',
+    bodyJson: null,
+    bodyFile: null,
+    contentType: null,
+    intent: null,
     delay: 500,
     out: null,
     format: 'json',
@@ -184,6 +197,7 @@ function parseArgs(argv) {
     cursorKey: null,
     allowPartial: false,
     allowNextOrigin: [],
+    allowRedirectOrigin: [],
     selfTest: false,
     unknown: [],
     parseErrors: [],
@@ -269,8 +283,40 @@ function parseArgs(argv) {
       } else {
         const n = Number.parseInt(raw, 10);
         if (!Number.isFinite(n) || n < 1) args.parseErrors.push(`invalid --max-pages: ${raw}`);
-        else args.maxPages = n;
+        else {
+          args.maxPages = n;
+          args.maxPagesFromCli = true;
+        }
       }
+    } else if (arg === '--max-attempts') {
+      const raw = need('--max-attempts');
+      if (raw == null || !/^\d+$/.test(String(raw))) {
+        args.parseErrors.push(`invalid --max-attempts: ${raw}`);
+      } else {
+        const n = Number.parseInt(raw, 10);
+        if (!Number.isSafeInteger(n) || n < 1) {
+          args.parseErrors.push(`invalid --max-attempts: ${raw}`);
+        } else {
+          args.maxAttempts = n;
+          args.maxAttemptsFromCli = true;
+        }
+      }
+    } else if (arg === '--config') {
+      args.configPath = need('--config');
+    } else if (arg === '--print-effective-config') {
+      args.printEffectiveConfig = true;
+    } else if (arg === '--method') {
+      const raw = need('--method');
+      if (raw != null) args.method = String(raw).toUpperCase();
+    } else if (arg === '--body-json') {
+      args.bodyJson = need('--body-json');
+    } else if (arg === '--body-file') {
+      args.bodyFile = need('--body-file');
+    } else if (arg === '--content-type') {
+      args.contentType = need('--content-type');
+    } else if (arg === '--intent') {
+      const raw = need('--intent');
+      if (raw != null) args.intent = String(raw).toLowerCase();
     } else if (arg === '--delay') {
       const raw = need('--delay');
       if (raw == null || !/^\d+$/.test(String(raw))) {
@@ -312,6 +358,9 @@ function parseArgs(argv) {
     } else if (arg === '--allow-next-origin') {
       const v = need('--allow-next-origin');
       if (v) args.allowNextOrigin.push(v.toLowerCase());
+    } else if (arg === '--allow-redirect-origin') {
+      const v = need('--allow-redirect-origin');
+      if (v) args.allowRedirectOrigin.push(v.toLowerCase());
     } else if (arg === '--self-test') {
       args.selfTest = true;
     } else {
@@ -353,6 +402,30 @@ function parseRetryAfter(value) {
     return Math.min(Math.max(0, when - Date.now()), 120_000);
   }
   return null;
+}
+
+function isAllowedOrigin(url, allowlist) {
+  const parsed = new URL(url);
+  const allowed = new Set((allowlist || []).map((value) => String(value).toLowerCase()));
+  return allowed.has(parsed.origin.toLowerCase()) || allowed.has(parsed.host.toLowerCase());
+}
+
+function withoutEntityHeaders(headers) {
+  const out = {};
+  for (const [key, value] of Object.entries(headers || {})) {
+    if (!['content-type', 'content-length', 'transfer-encoding'].includes(key.toLowerCase())) {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+function redirectedRequest(status, method, body) {
+  const upper = String(method || 'GET').toUpperCase();
+  if (status === 303 || ((status === 301 || status === 302) && upper === 'POST')) {
+    return { method: 'GET', body: undefined };
+  }
+  return { method: upper, body };
 }
 
 function resolveNextUrl(currentUrl, nextUrl, headers, allowNextOrigin) {
@@ -452,8 +525,9 @@ async function fetchWithTimeout(
   url,
   options,
   timeoutMs,
-  maxRetries = 3,
-  maxResponseBytes = DEFAULT_MAX_BODY_BYTES
+  maxAttempts = DEFAULT_GET_ATTEMPTS,
+  maxResponseBytes = DEFAULT_MAX_BODY_BYTES,
+  redirectOptions = {}
 ) {
   let lastError;
   const method = (options && options.method) || 'GET';
@@ -477,10 +551,12 @@ async function fetchWithTimeout(
     }
   }
 
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       let currentUrl = url;
       let headers = { ...requestHeaders };
+      let currentMethod = method;
+      let currentBody = options && options.body != null ? options.body : undefined;
       let hop = 0;
       while (hop <= MAX_REDIRECTS) {
         // Connection-bound SSRF: resolve + validate + connect to validated peer
@@ -492,8 +568,9 @@ async function fetchWithTimeout(
           response = await fetchPublicHttp(
             currentUrl,
             {
-              method,
+              method: currentMethod,
               headers,
+              body: currentBody,
               signal: controller.signal,
               maxResponseBytes,
               bodyTimeoutMs: timeoutMs,
@@ -522,6 +599,7 @@ async function fetchWithTimeout(
           await assertPublicHttpUrl(next, _ssrfOptions);
           const curOrigin = new URL(currentUrl).origin;
           const nextOrigin = new URL(next).origin;
+          const redirected = redirectedRequest(response.status, currentMethod, currentBody);
           if (curOrigin !== nextOrigin) {
             if (
               credentialed ||
@@ -532,15 +610,28 @@ async function fetchWithTimeout(
                 `cross-origin redirect blocked while credentials present: ${redactUrl(next)}`
               );
             }
+            if (
+              !['GET', 'HEAD'].includes(redirected.method) &&
+              !isAllowedOrigin(next, redirectOptions.allowRedirectOrigin)
+            ) {
+              throw new Error(
+                `cross-origin ${redirected.method} redirect blocked ` +
+                  `(use --allow-redirect-origin ${nextOrigin}): ${redactUrl(next)}`
+              );
+            }
             // Even without known secrets, only public headers may cross origin.
             headers = publicHeadersOnly(headers);
           }
+          if (redirected.body === undefined) headers = withoutEntityHeaders(headers);
+          currentMethod = redirected.method;
+          currentBody = redirected.body;
           currentUrl = next;
           hop += 1;
           continue;
         }
 
         if (response.status === 429) {
+          if (attempt + 1 >= maxAttempts) return response;
           const retryAfter = parseRetryAfter(response.headers.get('Retry-After'));
           const waitTime = retryAfter ?? 1000 * Math.pow(2, attempt);
           console.log(`Rate limited. Waiting ${waitTime}ms before retry...`);
@@ -548,6 +639,7 @@ async function fetchWithTimeout(
           break; // retry outer attempt
         }
         if (response.status >= 500) {
+          if (attempt + 1 >= maxAttempts) return response;
           const waitTime = 1000 * Math.pow(2, attempt);
           console.log(`Server error (${response.status}). Retrying in ${waitTime}ms...`);
           await sleep(waitTime);
@@ -571,6 +663,7 @@ async function fetchWithTimeout(
         throw error;
       }
       const waitTime = 1000 * Math.pow(2, attempt);
+      if (attempt + 1 >= maxAttempts) throw error;
       console.log(`Request failed: ${msg}. Retrying in ${waitTime}ms...`);
       await sleep(waitTime);
     }
@@ -602,36 +695,181 @@ function writeSidecar(outPath, meta) {
   console.log(`Metadata written to: ${side}`);
 }
 
-async function main() {
-  const args = parseArgs(process.argv);
+// Fill defaults from config for values the CLI did not set explicitly.
+// Precedence: CLI flag > explicit --config > discovered research.config.json >
+// built-in default. Config never overrides a value the caller passed on the CLI.
+function applyConfigDefaults(args, { startDir = process.cwd() } = {}) {
+  const { config, source, error } = loadConfig({
+    explicitPath: args.configPath,
+    startDir,
+  });
+  if (error) args.parseErrors.push(error);
+  args.effectiveConfigSource = source;
+  args.effectiveConfig = config;
 
-  if (args.selfTest) {
-    await runSelfTest();
-    return;
-  }
-
-  if (args.unknown.length) {
-    console.error(`Error: ${args.unknown.length} unrecognized command-line argument(s)`);
-    process.exit(1);
-  }
-  if (args.parseErrors.length) {
-    for (const e of args.parseErrors) console.error(`Error: ${e}`);
-    process.exit(1);
-  }
-  if (!args.url) {
-    console.error('Error: --url is required');
-    console.error(
-      'Usage: node api_fetch.mjs --url <url> [--headers <json>] [--params <json>] ' +
-        '[--pagination auto|offset|cursor|page|link-header] [--cursor-key <path>] ' +
-        '[--max-pages <n>] [--delay <ms>] [--out <file>] [--format json|jsonl] ' +
-        '[--timeout <ms>] [--max-response-bytes <n>] [--allow-partial] ' +
-        '[--allow-next-origin <origin>]...'
+  if (!args.maxPagesFromCli) {
+    const { value, error: intError } = getPositiveIntConfig(
+      config,
+      'api.maxPagesPerEndpoint',
     );
-    process.exit(1);
+    if (intError) args.parseErrors.push(intError);
+    else if (value !== null) args.maxPages = value;
   }
 
+  return args;
+}
+
+function effectiveConfigReport(args) {
+  return {
+    source: args.effectiveConfigSource ?? null,
+    resolved: {
+      'api.maxPagesPerEndpoint': args.maxPages,
+      maxPagesFromCli: args.maxPagesFromCli,
+    },
+    config: redactConfig(args.effectiveConfig ?? {}),
+  };
+}
+
+const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+const REQUEST_INTENTS = ['query', 'archive', 'mutation'];
+// Which methods each intent may use. GET stays read-only and never needs intent.
+const INTENT_METHODS = {
+  query: ['GET', 'POST'], // e.g. GraphQL / search POST that does not mutate
+  archive: ['POST', 'PUT'], // archival submission
+  mutation: ['POST', 'PUT', 'PATCH', 'DELETE'],
+};
+
+// Validate method/body/intent and materialize the request body.
+// GET is fully preserved: no intent required, no body allowed. Any non-GET
+// method must declare --intent explicitly so a side-effecting request is never
+// issued by accident, and defaults to a single request so a body is never
+// re-sent by pagination.
+function resolveRequestShape(args) {
+  args.body = null;
+  args.bodyContentType = null;
+
+  if (!HTTP_METHODS.includes(args.method)) {
+    args.parseErrors.push(`invalid --method: ${args.method} (allowed: ${HTTP_METHODS.join(', ')})`);
+    return args;
+  }
+
+  const hasBodyFlag = args.bodyJson != null || args.bodyFile != null;
+
+  if (args.method === 'GET') {
+    if (hasBodyFlag) {
+      args.parseErrors.push('--body-json/--body-file are not allowed with GET; choose --method POST|PUT|PATCH|DELETE');
+    }
+    if (args.intent != null && args.intent !== 'query') {
+      args.parseErrors.push(`--intent ${args.intent} is not valid for GET (GET is always a read-only query)`);
+    }
+    if (args.maxAttempts == null) args.maxAttempts = DEFAULT_GET_ATTEMPTS;
+    return args; // GET request behavior remains unchanged.
+  }
+
+  // Non-GET below.
+  if (args.intent == null) {
+    args.parseErrors.push(`--method ${args.method} requires an explicit --intent (${REQUEST_INTENTS.join('|')})`);
+    return args;
+  }
+  if (!REQUEST_INTENTS.includes(args.intent)) {
+    args.parseErrors.push(`invalid --intent: ${args.intent} (allowed: ${REQUEST_INTENTS.join(', ')})`);
+    return args;
+  }
+
+  if (args.maxAttempts == null) {
+    args.maxAttempts = args.intent === 'query'
+      ? DEFAULT_GET_ATTEMPTS
+      : DEFAULT_NON_IDEMPOTENT_ATTEMPTS;
+  }
+  if (!INTENT_METHODS[args.intent].includes(args.method)) {
+    args.parseErrors.push(
+      `--method ${args.method} is not allowed for --intent ${args.intent} ` +
+        `(allowed: ${INTENT_METHODS[args.intent].join(', ')})`,
+    );
+    return args;
+  }
+
+  if (args.bodyJson != null && args.bodyFile != null) {
+    args.parseErrors.push('--body-json and --body-file are mutually exclusive');
+    return args;
+  }
+
+  if (args.bodyJson != null) {
+    try {
+      JSON.parse(args.bodyJson);
+    } catch (e) {
+      args.parseErrors.push(`--body-json is not valid JSON: ${e.message}`);
+      return args;
+    }
+    args.body = args.bodyJson;
+    args.bodyContentType = args.contentType || 'application/json';
+  } else if (args.bodyFile != null) {
+    let contents;
+    try {
+      contents = readFileSync(args.bodyFile);
+    } catch (e) {
+      args.parseErrors.push(`cannot read --body-file ${args.bodyFile}: ${e.message}`);
+      return args;
+    }
+    if (contents.length > args.maxResponseBytes) {
+      args.parseErrors.push(
+        `request body (${contents.length} bytes) exceeds the ${args.maxResponseBytes}-byte cap`,
+      );
+      return args;
+    }
+    args.body = contents;
+    args.bodyContentType = args.contentType || 'application/octet-stream';
+  } else if (args.contentType != null) {
+    args.bodyContentType = args.contentType; // header without a body is allowed
+  }
+
+  if (args.body != null && Buffer.byteLength(args.body) > args.maxResponseBytes) {
+    args.parseErrors.push(
+      `request body exceeds the ${args.maxResponseBytes}-byte cap`,
+    );
+    return args;
+  }
+
+  // A mutation must be a single request; pagination must never re-send a body.
+  if (args.intent === 'mutation') {
+    if (args.maxPagesFromCli && args.maxPages > 1) {
+      args.parseErrors.push('mutations must be a single request; --max-pages must be 1');
+      return args;
+    }
+    args.maxPages = 1;
+  } else if (!args.maxPagesFromCli) {
+    // Non-GET query/archive default to a single request unless the caller
+    // explicitly opts into pagination with --max-pages.
+    args.maxPages = 1;
+  }
+
+  return args;
+}
+
+// Build the request headers, injecting the resolved body content-type without
+// clobbering a caller-supplied Content-Type.
+function buildRequestHeaders(args) {
+  const headers = { ...args.headers };
+  if (args.bodyContentType) {
+    const hasContentType = Object.keys(headers).some(
+      (k) => k.toLowerCase() === 'content-type',
+    );
+    if (!hasContentType) headers['Content-Type'] = args.bodyContentType;
+  }
+  return headers;
+}
+
+async function fetchAllPages(args) {
   const initialUrl = applyParams(args.url, args.params);
+  const method = args.method || 'GET';
+  const maxAttempts = Number.isSafeInteger(args.maxAttempts) && args.maxAttempts > 0
+    ? args.maxAttempts
+    : method === 'GET'
+      ? DEFAULT_GET_ATTEMPTS
+      : DEFAULT_NON_IDEMPOTENT_ATTEMPTS;
+  const requestHeaders = buildRequestHeaders(args);
   console.log(`Starting fetch from: ${redactUrl(initialUrl)}`);
+  if (method !== 'GET') console.log(`Request method: ${method}`);
   console.log(`Pagination mode: ${args.pagination}`);
   console.log(`Max pages: ${args.maxPages}`);
 
@@ -646,15 +884,17 @@ async function main() {
 
   while (hasMorePages && page <= args.maxPages) {
     console.log(`Fetching page ${page}...`);
-    const fetchOptions = { method: 'GET', headers: args.headers };
+    const fetchOptions = { method, headers: requestHeaders };
+    if (args.body != null) fetchOptions.body = args.body;
 
     try {
       const response = await fetchWithTimeout(
         currentUrl,
         fetchOptions,
         args.timeout,
-        3,
-        args.maxResponseBytes
+        maxAttempts,
+        args.maxResponseBytes,
+        { allowRedirectOrigin: args.allowRedirectOrigin }
       );
 
       if (!response.ok) {
@@ -668,7 +908,7 @@ async function main() {
           args.maxResponseBytes,
           args.timeout
         );
-        body = JSON.parse(text);
+        body = text.trim() === '' ? null : JSON.parse(text);
       } catch (e) {
         if (isResourceLimitError(e) || e instanceof RequestTimeoutError) {
           throw e;
@@ -676,7 +916,7 @@ async function main() {
         throw new Error(`JSON parse failed: ${e.message}`);
       }
 
-      if (getCachePath() !== null && !hasCredentialHeaders(fetchOptions.headers)) {
+      if (method === 'GET' && getCachePath() !== null && !hasCredentialHeaders(fetchOptions.headers)) {
         try {
           const headersObj = {};
           response.headers.forEach((v, k) => {
@@ -701,9 +941,10 @@ async function main() {
 
       let items = [];
       if (Array.isArray(body)) items = body;
-      else if (body.data && Array.isArray(body.data)) items = body.data;
-      else if (body.results && Array.isArray(body.results)) items = body.results;
-      else if (body.items && Array.isArray(body.items)) items = body.items;
+      else if (body && body.data && Array.isArray(body.data)) items = body.data;
+      else if (body && body.results && Array.isArray(body.results)) items = body.results;
+      else if (body && body.items && Array.isArray(body.items)) items = body.items;
+      else if (body && typeof body === 'object') items = [body];
 
       allItems.push(...items);
 
@@ -777,6 +1018,72 @@ async function main() {
     complete = false;
   }
 
+  return {
+    initialUrl,
+    allItems,
+    errors,
+    page,
+    complete,
+    stoppingReason,
+    resourceLimitFailure,
+  };
+}
+
+
+async function main() {
+  const args = parseArgs(process.argv);
+
+  if (args.selfTest) {
+    await runSelfTest();
+    return;
+  }
+
+  applyConfigDefaults(args);
+
+  if (args.unknown.length) {
+    console.error(`Error: ${args.unknown.length} unrecognized command-line argument(s)`);
+    process.exit(1);
+  }
+
+  if (args.printEffectiveConfig) {
+    if (args.parseErrors.length) {
+      for (const e of args.parseErrors) console.error(`Error: ${e}`);
+      process.exit(1);
+    }
+    process.stdout.write(JSON.stringify(effectiveConfigReport(args), null, 2) + '\n');
+    return;
+  }
+
+  resolveRequestShape(args);
+
+  if (args.parseErrors.length) {
+    for (const e of args.parseErrors) console.error(`Error: ${e}`);
+    process.exit(1);
+  }
+  if (!args.url) {
+    console.error('Error: --url is required');
+    console.error(
+      'Usage: node api_fetch.mjs --url <url> [--headers <json>] [--params <json>] ' +
+        '[--method GET|POST|PUT|PATCH|DELETE] [--intent query|archive|mutation] ' +
+        '[--body-json <json>] [--body-file <path>] [--content-type <mime>] ' +
+        '[--pagination auto|offset|cursor|page|link-header] [--cursor-key <path>] ' +
+        '[--max-pages <n>] [--max-attempts <n>] [--config <path>] [--print-effective-config] ' +
+        '[--delay <ms>] [--out <file>] [--format json|jsonl] ' +
+        '[--timeout <ms>] [--max-response-bytes <n>] [--allow-partial] ' +
+        '[--allow-next-origin <origin>]... [--allow-redirect-origin <origin>]...'
+    );
+    process.exit(1);
+  }
+
+  const {
+    initialUrl,
+    allItems,
+    errors,
+    page,
+    complete,
+    stoppingReason,
+    resourceLimitFailure,
+  } = await fetchAllPages(args);
   const pagesFetched = Math.max(0, page - 1);
   console.log(`Fetched ${allItems.length} total items across ${pagesFetched} pages.`);
 
@@ -1006,6 +1313,25 @@ async function runSelfTest() {
   const badNum = parseArgs(['node', 'api_fetch.mjs', '--max-pages', '1abc']);
   if (!badNum.parseErrors.length) errors.push('max-pages 1abc should fail parse');
 
+  const mutationAttempts = parseArgs([
+    'node', 'api_fetch.mjs', '--method', 'DELETE', '--intent', 'mutation',
+  ]);
+  resolveRequestShape(mutationAttempts);
+  if (mutationAttempts.maxAttempts !== DEFAULT_NON_IDEMPOTENT_ATTEMPTS) {
+    errors.push('mutation default must use one network attempt');
+  }
+  const explicitAttempts = parseArgs([
+    'node', 'api_fetch.mjs', '--method', 'POST', '--intent', 'mutation', '--max-attempts', '3',
+  ]);
+  resolveRequestShape(explicitAttempts);
+  if (explicitAttempts.parseErrors.length || explicitAttempts.maxAttempts !== 3) {
+    errors.push('explicit mutation max-attempts must be accepted');
+  }
+  const unknownPrint = parseArgs([
+    'node', 'api_fetch.mjs', '--print-effective-config', '--not-a-real-option',
+  ]);
+  if (unknownPrint.unknown.length !== 1) errors.push('unknown option must be retained for print-config validation');
+
   const maxBytesArgs = parseArgs([
     'node',
     'api_fetch.mjs',
@@ -1091,19 +1417,26 @@ async function runSelfTest() {
   await (async () => {
     const hitsB = [];
     const serverB = createServer((req, res) => {
-      hitsB.push({
+      const hit = {
         url: req.url,
+        method: req.method,
         headers: { ...req.headers },
+        body: '',
+      };
+      hitsB.push(hit);
+      req.on('data', (chunk) => { hit.body += chunk.toString(); });
+      req.on('end', () => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, items: [] }));
       });
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, items: [] }));
     });
     await new Promise((r) => serverB.listen(0, '127.0.0.1', r));
     const portB = serverB.address().port;
     const originB = `http://127.0.0.1:${portB}`;
 
     const serverA = createServer((req, res) => {
-      res.writeHead(302, { Location: `${originB}/stolen` });
+      const status = req.url === '/mutation-303' ? 303 : req.url === '/mutation-307' ? 307 : 302;
+      res.writeHead(status, { Location: `${originB}/stolen` });
       res.end();
     });
     await new Promise((r) => serverA.listen(0, '127.0.0.1', r));
@@ -1166,6 +1499,51 @@ async function runSelfTest() {
       if (!msg.toLowerCase().includes('credential') && !msg.toLowerCase().includes('cross-origin')) {
         errors.push(`unexpected redirect error: ${msg}`);
       }
+    }
+
+    // A credential-free 303 must become a GET and drop the mutation body.
+    hitsB.length = 0;
+    await fetchWithTimeout(
+      `${originA}/mutation-303`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"x":1}' },
+      5000,
+      1,
+      DEFAULT_MAX_BODY_BYTES,
+      { allowRedirectOrigin: [] },
+    );
+    if (hitsB.length !== 1 || hitsB[0].method !== 'GET' || hitsB[0].body) {
+      errors.push('303 redirect must rewrite mutation to GET without body');
+    }
+
+    // A 307 state-changing cross-origin redirect is blocked unless explicitly
+    // allowlisted, and the opt-in must preserve the method/body when allowed.
+    hitsB.length = 0;
+    let mutationRedirectBlocked = false;
+    try {
+      await fetchWithTimeout(
+        `${originA}/mutation-307`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"x":1}' },
+        5000,
+        1,
+        DEFAULT_MAX_BODY_BYTES,
+        { allowRedirectOrigin: [] },
+      );
+    } catch (err) {
+      mutationRedirectBlocked = /cross-origin.*redirect.*blocked/i.test(String(err.message || err));
+    }
+    if (!mutationRedirectBlocked || hitsB.length !== 0) {
+      errors.push('307 cross-origin mutation redirect must block before target');
+    }
+    await fetchWithTimeout(
+      `${originA}/mutation-307`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"x":1}' },
+      5000,
+      1,
+      DEFAULT_MAX_BODY_BYTES,
+      { allowRedirectOrigin: [originB] },
+    );
+    if (hitsB.length !== 1 || hitsB[0].method !== 'POST' || hitsB[0].body !== '{"x":1}') {
+      errors.push('allowlisted 307 redirect must preserve method/body');
     }
 
     // B must not receive X-Token
@@ -1249,6 +1627,316 @@ async function runSelfTest() {
       /* ignore */
     }
   }
+
+  // --- D2: config-driven maxPages precedence matrix (real on-disk config) ---
+  {
+    const withConfigDir = (configObj, fn) => {
+      const dir = mkdtempSync(join(tmpdir(), 'api_cfg_unit_'));
+      try {
+        if (configObj !== null) {
+          writeFileSync(join(dir, 'research.config.json'), JSON.stringify(configObj), 'utf8');
+        }
+        return fn(dir);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    };
+    const resolvedMaxPages = (cliArgs, configObj) =>
+      withConfigDir(configObj, (dir) => {
+        const a = parseArgs(['node', 'api_fetch.mjs', ...cliArgs]);
+        applyConfigDefaults(a, { startDir: dir });
+        return a;
+      });
+
+    // absent CLI, absent config -> default 10.
+    let a = resolvedMaxPages([], null);
+    if (a.maxPages !== 10 || a.parseErrors.length) {
+      errors.push(`precedence[absent,absent] expected 10, got ${a.maxPages}`);
+    }
+    // absent CLI, config 50 -> 50.
+    a = resolvedMaxPages([], { api: { maxPagesPerEndpoint: 50 } });
+    if (a.maxPages !== 50 || a.parseErrors.length) {
+      errors.push(`precedence[absent,50] expected 50, got ${a.maxPages}`);
+    }
+    // CLI 7, absent config -> 7.
+    a = resolvedMaxPages(['--max-pages', '7'], null);
+    if (a.maxPages !== 7 || a.parseErrors.length) {
+      errors.push(`precedence[7,absent] expected 7, got ${a.maxPages}`);
+    }
+    // CLI 7, config 50 -> 7 (CLI wins).
+    a = resolvedMaxPages(['--max-pages', '7'], { api: { maxPagesPerEndpoint: 50 } });
+    if (a.maxPages !== 7 || a.parseErrors.length) {
+      errors.push(`precedence[7,50] expected 7 (CLI wins), got ${a.maxPages}`);
+    }
+    // invalid CLI, config 50 -> parse error (must NOT silently proceed).
+    a = resolvedMaxPages(['--max-pages', 'nope'], { api: { maxPagesPerEndpoint: 50 } });
+    if (!a.parseErrors.some((e) => e.includes('--max-pages'))) {
+      errors.push('precedence[invalid,50] must record a --max-pages parse error');
+    }
+    // absent CLI, config invalid type -> structured config error, default retained.
+    a = resolvedMaxPages([], { api: { maxPagesPerEndpoint: 'lots' } });
+    if (!a.parseErrors.some((e) => e.includes('maxPagesPerEndpoint')) || a.maxPages !== 10) {
+      errors.push('precedence[absent,invalid] must record a structured config error');
+    }
+    // Missing explicit --config path is a structured error.
+    const missingCfg = parseArgs(['node', 'api_fetch.mjs', '--config', join(tmpdir(), 'no_such_dir_x', 'research.config.json')]);
+    applyConfigDefaults(missingCfg);
+    if (!missingCfg.parseErrors.some((e) => e.includes('config file not found'))) {
+      errors.push('explicit missing --config must error');
+    }
+    // --print-effective-config must never echo secret header/config values.
+    const secretCfgDir = mkdtempSync(join(tmpdir(), 'api_cfg_secret_'));
+    try {
+      writeFileSync(
+        join(secretCfgDir, 'research.config.json'),
+        JSON.stringify({ api: { maxPagesPerEndpoint: 3 }, headers: { Authorization: 'Bearer SUPERSECRET' } }),
+        'utf8',
+      );
+      const sa = parseArgs(['node', 'api_fetch.mjs', '--print-effective-config']);
+      applyConfigDefaults(sa, { startDir: secretCfgDir });
+      const report = JSON.stringify(effectiveConfigReport(sa));
+      if (report.includes('SUPERSECRET')) {
+        errors.push('--print-effective-config must redact secret values');
+      }
+      if (sa.maxPages !== 3) errors.push('effective config should reflect discovered maxPages');
+    } finally {
+      rmSync(secretCfgDir, { recursive: true, force: true });
+    }
+  }
+
+  // --- D2: real page-count integration (config value actually caps pagination) ---
+  // Drives the real fetchAllPages loop in-process against an offset-paginated
+  // mock server that always advertises more pages, so only maxPages can stop it.
+  // Loopback is reachable here because runSelfTest enabled the SSRF test options.
+  await (async () => {
+    let hits = 0;
+    const server = createServer((req, res) => {
+      hits++;
+      const u = new URL(req.url, 'http://127.0.0.1');
+      const offset = Number(u.searchParams.get('offset') || '0');
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ offset, total: 100000, limit: 10, data: [offset] }));
+    });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    const cfgDir = mkdtempSync(join(tmpdir(), 'api_cfg_int_'));
+    const emptyDir = mkdtempSync(join(tmpdir(), 'api_cfg_empty_'));
+    writeFileSync(
+      join(cfgDir, 'research.config.json'),
+      JSON.stringify({ api: { maxPagesPerEndpoint: 3 } }),
+      'utf8',
+    );
+    const savedCachePath = process.env.D_RESEARCH_HTTP_CACHE_PATH;
+    const cacheDirs = [];
+    const runPages = async (cliArgs, startDir) => {
+      hits = 0;
+      // Fresh cache per run so every page is a real server hit (no cross-run reuse).
+      const cacheDir = mkdtempSync(join(tmpdir(), 'api_int_cache_'));
+      cacheDirs.push(cacheDir);
+      process.env.D_RESEARCH_HTTP_CACHE_PATH = cacheDir;
+      const a = parseArgs([
+        'node', 'api_fetch.mjs',
+        '--url', `http://127.0.0.1:${port}/data`,
+        '--pagination', 'offset',
+        '--delay', '0',
+        '--timeout', '5000',
+        ...cliArgs,
+      ]);
+      applyConfigDefaults(a, { startDir });
+      const res = await fetchAllPages(a);
+      return { pages: res.page - 1, hits };
+    };
+    try {
+      // Config maxPages=3 (discovered), no CLI flag -> exactly 3 real pages.
+      let r = await runPages([], cfgDir);
+      if (r.pages !== 3 || r.hits !== 3) {
+        errors.push(`config maxPages=3 should fetch 3 pages, got pages=${r.pages} hits=${r.hits}`);
+      }
+      // CLI --max-pages=2 overrides config -> exactly 2 real pages.
+      r = await runPages(['--max-pages', '2'], cfgDir);
+      if (r.pages !== 2 || r.hits !== 2) {
+        errors.push(`CLI --max-pages=2 must win, got pages=${r.pages} hits=${r.hits}`);
+      }
+      // No config, no flag -> built-in default 10 real pages.
+      r = await runPages([], emptyDir);
+      if (r.pages !== 10 || r.hits !== 10) {
+        errors.push(`default maxPages should fetch 10 pages, got pages=${r.pages} hits=${r.hits}`);
+      }
+    } finally {
+      await new Promise((r) => server.close(r));
+      if (savedCachePath === undefined) delete process.env.D_RESEARCH_HTTP_CACHE_PATH;
+      else process.env.D_RESEARCH_HTTP_CACHE_PATH = savedCachePath;
+      for (const d of cacheDirs) rmSync(d, { recursive: true, force: true });
+      rmSync(cfgDir, { recursive: true, force: true });
+      rmSync(emptyDir, { recursive: true, force: true });
+    }
+  })();
+
+  // --- D3: additive HTTP method / body / intent validation ---
+  {
+    const shape = (cli) => {
+      const a = parseArgs(['node', 'api_fetch.mjs', '--url', 'https://api.example.com/x', ...cli]);
+      resolveRequestShape(a);
+      return a;
+    };
+    let a = shape([]);
+    if (a.method !== 'GET' || a.body !== null || a.parseErrors.length) {
+      errors.push('GET default must stay a read-only no-body request');
+    }
+    a = shape(['--body-json', '{"x":1}']);
+    if (!a.parseErrors.some((e) => e.includes('not allowed with GET'))) {
+      errors.push('GET with a body must error');
+    }
+    a = shape(['--method', 'POST']);
+    if (!a.parseErrors.some((e) => e.includes('requires an explicit --intent'))) {
+      errors.push('POST without --intent must error');
+    }
+    a = shape(['--method', 'BOGUS', '--intent', 'query']);
+    if (!a.parseErrors.some((e) => e.includes('invalid --method'))) {
+      errors.push('invalid --method must error');
+    }
+    a = shape(['--method', 'PUT', '--intent', 'query']);
+    if (!a.parseErrors.some((e) => e.includes('not allowed for --intent query'))) {
+      errors.push('query intent must forbid PUT');
+    }
+    a = shape(['--method', 'DELETE', '--intent', 'mutation']);
+    if (a.parseErrors.length || a.method !== 'DELETE' || a.maxPages !== 1) {
+      errors.push('DELETE mutation should be a valid single request');
+    }
+    a = shape(['--method', 'POST', '--intent', 'mutation', '--max-pages', '3']);
+    if (!a.parseErrors.some((e) => e.includes('single request'))) {
+      errors.push('mutation with --max-pages>1 must error');
+    }
+    a = shape(['--method', 'POST', '--intent', 'query', '--body-json', '{}', '--body-file', 'x']);
+    if (!a.parseErrors.some((e) => e.includes('mutually exclusive'))) {
+      errors.push('body-json + body-file must error');
+    }
+    a = shape(['--method', 'POST', '--intent', 'query', '--body-json', '{bad']);
+    if (!a.parseErrors.some((e) => e.includes('not valid JSON'))) {
+      errors.push('invalid --body-json must error');
+    }
+    a = shape(['--method', 'POST', '--intent', 'query', '--body-json', '{"q":"x"}']);
+    if (a.parseErrors.length || a.bodyContentType !== 'application/json' || a.maxPages !== 1) {
+      errors.push('POST query body should default content-type and be a single request');
+    }
+    a = shape(['--method', 'POST', '--intent', 'query', '--max-response-bytes', '4', '--body-json', '{"q":"toolong"}']);
+    if (!a.parseErrors.some((e) => e.includes('cap'))) {
+      errors.push('oversize request body must be blocked');
+    }
+    a = shape(['--method', 'POST', '--intent', 'query', '--body-json', '{}', '--max-pages', '4']);
+    if (a.parseErrors.length || a.maxPages !== 4) {
+      errors.push('POST query with explicit --max-pages should keep pagination');
+    }
+  }
+
+  // --- D3: real method + body integration (echo server) ---
+  await (async () => {
+    const seen = [];
+    let retryHits = 0;
+    const server = createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => {
+        body += c;
+      });
+      req.on('end', () => {
+        seen.push({ method: req.method, contentType: req.headers['content-type'] || null, body });
+        if (req.url === '/retry-mutation') {
+          retryHits += 1;
+          res.writeHead(retryHits < 3 ? 500 : 200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ items: [] }));
+        } else if (req.url === '/empty') {
+          res.writeHead(204);
+          res.end();
+        } else if (req.url === '/graphql') {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ data: { viewer: { id: 'viewer-1' } } }));
+        } else {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, items: [] }));
+        }
+      });
+    });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    const savedCache = process.env.D_RESEARCH_HTTP_CACHE_PATH;
+    delete process.env.D_RESEARCH_HTTP_CACHE_PATH;
+    const bodyDir = mkdtempSync(join(tmpdir(), 'api_body_'));
+    const run = async (cli, path = '/x') => {
+      const a = parseArgs([
+        'node', 'api_fetch.mjs',
+        '--url', `http://127.0.0.1:${port}${path}`,
+        '--delay', '0', '--timeout', '5000',
+        ...cli,
+      ]);
+      resolveRequestShape(a);
+      if (a.parseErrors.length) return { err: a.parseErrors };
+      const result = await fetchAllPages(a);
+      return { last: seen[seen.length - 1], result };
+    };
+    try {
+      // GraphQL-style POST query -> POST, JSON body, application/json.
+      seen.length = 0;
+      let r = await run(['--method', 'POST', '--intent', 'query', '--body-json', '{"query":"{ me }"}']);
+      if (r.err) errors.push(`POST query should be valid: ${r.err}`);
+      else if (r.last.method !== 'POST' || !r.last.body.includes('me') || r.last.contentType !== 'application/json') {
+        errors.push(`POST query method/body/content-type mismatch: ${JSON.stringify(r.last)}`);
+      }
+      // PUT mutation.
+      seen.length = 0;
+      r = await run(['--method', 'PUT', '--intent', 'mutation', '--body-json', '{"v":1}']);
+      if (r.err) errors.push(`PUT mutation should be valid: ${r.err}`);
+      else if (r.last.method !== 'PUT' || !r.last.body.includes('"v"')) errors.push('PUT mutation method/body mismatch');
+      // DELETE mutation is exactly one request.
+      seen.length = 0;
+      r = await run(['--method', 'DELETE', '--intent', 'mutation']);
+      if (r.err) errors.push(`DELETE mutation should be valid: ${r.err}`);
+      else if (r.last.method !== 'DELETE' || seen.length !== 1) errors.push('DELETE mutation must be a single request');
+      // body-file with explicit content-type.
+      const bf = join(bodyDir, 'b.json');
+      writeFileSync(bf, '{"file":true}', 'utf8');
+      seen.length = 0;
+      r = await run(['--method', 'POST', '--intent', 'archive', '--body-file', bf, '--content-type', 'application/json']);
+      if (r.err) errors.push(`POST archive body-file should be valid: ${r.err}`);
+      else if (!r.last.body.includes('file') || r.last.contentType !== 'application/json') errors.push('body-file contents/content-type not sent');
+
+      // An explicitly supplied Content-Type is honored even without a body.
+      seen.length = 0;
+      r = await run(['--method', 'DELETE', '--intent', 'mutation', '--content-type', 'application/json']);
+      if (r.err || r.last.contentType !== 'application/json') errors.push('bodyless content-type must be sent');
+
+      // Empty successful mutation responses (204/205) are valid and do not
+      // trigger a misleading JSON parse failure.
+      seen.length = 0;
+      r = await run(['--method', 'DELETE', '--intent', 'mutation'], '/empty');
+      if (r.err || !r.result.complete || r.result.errors.length || r.result.allItems.length) {
+        errors.push('204 mutation response should complete with no items');
+      }
+
+      // Preserve a GraphQL/object response instead of silently converting it
+      // to an empty array.
+      seen.length = 0;
+      r = await run(['--method', 'POST', '--intent', 'query', '--body-json', '{"query":"{ viewer { id } }"}'], '/graphql');
+      if (r.err || !r.result.allItems[0]?.data?.viewer?.id) {
+        errors.push('GraphQL object response must be preserved');
+      }
+
+      // Non-idempotent requests are one attempt by default; a caller may opt
+      // into more attempts explicitly.
+      retryHits = 0;
+      seen.length = 0;
+      r = await run(['--method', 'POST', '--intent', 'mutation'], '/retry-mutation');
+      if (retryHits !== 1 || r.result.complete) errors.push('mutation default retry policy must be single-attempt');
+      retryHits = 0;
+      seen.length = 0;
+      r = await run(['--method', 'POST', '--intent', 'mutation', '--max-attempts', '3'], '/retry-mutation');
+      if (retryHits !== 3 || !r.result.complete) errors.push('explicit mutation retries must be honored');
+    } finally {
+      await new Promise((r) => server.close(r));
+      if (savedCache === undefined) delete process.env.D_RESEARCH_HTTP_CACHE_PATH;
+      else process.env.D_RESEARCH_HTTP_CACHE_PATH = savedCache;
+      rmSync(bodyDir, { recursive: true, force: true });
+    }
+  })();
 
   if (errors.length) {
     console.error('api_fetch self-test FAILED:');
