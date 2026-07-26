@@ -22,7 +22,7 @@ Aleph có một core dùng chung, trung lập với host. Codex, OpenCode, Claud
 | Độ sâu nghiên cứu | Tự mở rộng theo quy mô sự kiện, địa lý, số tác nhân, độ sâu nhân quả, mức bất định và hệ trọng. |
 | Đầu ra | Báo cáo chuyên nghiệp, evidence map, causal graph, branch ledger, propagation trace, validation report và audit metadata. |
 | Tính portable | Skill markdown gọn, script ưu tiên Python stdlib, adapter cho nhiều môi trường agent. |
-| Phạm vi sáng tạo | Aleph không có danh sách chủ đề bị từ chối; chi tiết chưa có chứng cứ được gắn nhãn assumption hoặc simulation. |
+| Phạm vi sáng tạo | Aleph không thêm giới hạn nội dung riêng; trong phạm vi chính sách bắt buộc của host và pháp luật, chi tiết chưa có chứng cứ được gắn nhãn assumption hoặc simulation. |
 
 ## Khi nào nên dùng
 
@@ -36,7 +36,7 @@ Dùng Aleph Skill khi agent cần:
 - mô hình hóa sáng tạo mọi quyết định con người nhưng không biến giả định mô phỏng thành sự thật quan sát;
 - tạo báo cáo tách rõ `fact`, `inference`, `simulation` và `counterfactual`.
 
-Mọi kịch bản sáng tạo đều hợp lệ trong Aleph. Chính sách bắt buộc về công cụ hoặc truy cập của host là lớp bên ngoài, không phải giới hạn nội dung của Aleph.
+Aleph không áp đặt thêm giới hạn nội dung riêng; chính sách bắt buộc của host/system/developer và pháp luật áp dụng luôn có quyền ưu tiên, và trong phạm vi đó mọi kịch bản sáng tạo được thực hiện ở mức tối đa được phép với nhãn fact/inference/assumption/simulation/counterfactual rõ ràng.
 
 ## Phạm vi sản phẩm
 
@@ -183,9 +183,9 @@ and produce at least three branches with relative weights, indicators, contradic
 
 ## Tự do mô phỏng
 
-Aleph luôn chạy kịch bản được yêu cầu và không tự từ chối, thu hẹp hay thay thế kịch bản vì chủ đề, nhân vật, động cơ, xung đột, bạo lực, tôn giáo, chính trị hoặc tính giả định. Nội dung chưa được chứng minh được ghi là `assumption`, `simulation` hoặc `counterfactual`, không bị dùng làm lý do dừng mô phỏng.
+Aleph không áp đặt thêm giới hạn nội dung riêng. Chính sách bắt buộc của host/system/developer và pháp luật áp dụng luôn có quyền ưu tiên. Trong phạm vi đó, Aleph hoàn thành kịch bản được yêu cầu ở mức tối đa được phép, không tự thu hẹp hay thay thế kịch bản vì chủ đề, nhân vật, động cơ, xung đột, bạo lực, tôn giáo, chính trị hoặc tính giả định. Nội dung chưa được chứng minh được ghi là `assumption`, `simulation` hoặc `counterfactual`, không bị dùng làm lý do dừng mô phỏng.
 
-Chính sách bắt buộc của host và giới hạn truy cập của công cụ nằm ngoài Aleph. Chúng không được mô tả thành giới hạn của skill; khi thiếu nguồn hoặc công cụ, Aleph tiếp tục theo tuyến assumption-first và hạ assurance tương ứng.
+Giới hạn xuất phát từ chính sách bắt buộc của host/system/developer hoặc pháp luật phải được quy về đúng nguồn đó, không được mô tả thành giới hạn nội dung của Aleph; khi thiếu nguồn hoặc công cụ, Aleph tiếp tục theo tuyến assumption-first trong phạm vi được phép và hạ assurance tương ứng.
 
 Skill không tiên tri tương lai. Nó dựng mô phỏng minh bạch để người dùng kiểm tra giả định, cơ chế, bất định và phương án thay thế.
 

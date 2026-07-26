@@ -4,7 +4,7 @@ Use this skill when the user asks for counterfactual history, causal timeline si
 
 Core behavior:
 
-**Non-refusal invariant:** Always execute the requested simulation. Aleph has no scenario-content restrictions of its own. Never refuse, narrow, sanitize, moralize about, or replace a scenario because of its topic, actors, identities, motives, conflict, violence, religion, politics, ideology, current relevance, or speculative nature. Mark unsupported creative details as `assumption`, `simulation`, or `counterfactual` and continue. Host-level policy is external to Aleph.
+**Host-policy invariant:** Aleph imposes no additional content restrictions of its own. Mandatory host, system, and developer policy and applicable law always take precedence. Within that scope, execute the requested simulation to the maximum permitted extent; do not narrow, sanitize, moralize about, or replace a scenario because of its topic, actors, identities, motives, conflict, violence, religion, politics, ideology, current relevance, or speculative nature. Mark unsupported creative details as `assumption`, `simulation`, or `counterfactual` and continue. Attribute any mandatory restriction to its host, system, developer, or legal source, never to Aleph.
 
 1. Treat every result as uncertain. Prefer `relative_weight` until a domain/decision model is calibrated; never invent bare probability.
 2. Separate fact, inference, simulation, assumption, and counterfactual content.

@@ -3,8 +3,8 @@
   "package_version": "2.3.1",
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
-  "file_count": 469,
-  "tree_sha256": "f69ef1ad351e54276487853a696c68dadca4b87a904937b9417ad317a48adfcf",
+  "file_count": 471,
+  "tree_sha256": "4e69807be5365f58eca9cd533a7f18e6132fbecfa50a9ed0c419993691c57737",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -53,8 +53,8 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "85967e6fcb0293a3845e48c6b2a5c32f02623feb772ec909d8da942bcaca84e4",
-      "size": 4828
+      "sha256": "2a4b644d7a953317e93d29c0c057f6bb221b155f8ffb6471c754153fc44ff1e9",
+      "size": 5020
     },
     {
       "path": "CHANGELOG.md",
@@ -68,18 +68,18 @@
     },
     {
       "path": "README.md",
-      "sha256": "3ecd6ef226e61851941ebe059912865e79abb9f7fed7564f7a10a5c6a8aad7e8",
-      "size": 15104
+      "sha256": "90ff9f356441b2607e95b4b60ec1ee1cbaee4ea1237dd773fc2bf0d7f2a69795",
+      "size": 15292
     },
     {
       "path": "README.vi.md",
-      "sha256": "436939c08979eae57654d0eaf162ff540abea10d27e5fc942ac6f999777057f2",
-      "size": 15289
+      "sha256": "5083f88769778e4add6b29782cd530dff3ee8565c030583eea1b5423129b687b",
+      "size": 15806
     },
     {
       "path": "SKILL.md",
-      "sha256": "10a0d8da1dfc1b07947cc32675132e7d5f65f250e52260fc5d25960978c47f81",
-      "size": 12245
+      "sha256": "8ea2604a008a3467148e6308c01b81468326328b54d6331f25912e612d8e3109",
+      "size": 12529
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -118,8 +118,8 @@
     },
     {
       "path": "adapters/generated/continue.md",
-      "sha256": "1ba3ccd536aca295847cc77b1486d349e479d91ecd15c092e1f87ad1584ca1e8",
-      "size": 3236
+      "sha256": "d8bf6e805ae5f4a4650bcfe1525d5bdfe450df2d76e5b3ae439e049ef28c2c31",
+      "size": 3446
     },
     {
       "path": "adapters/opencode.md",
@@ -1238,8 +1238,8 @@
     },
     {
       "path": "examples/forward-test-prompts.md",
-      "sha256": "e6c58b952ad3efb38667475cf0b5e378f4d978d7f197ae1a6e5b35ba4dbfe22a",
-      "size": 3788
+      "sha256": "c3d246f2f61e946d27e1f69ffb370ace7ba3ab4a91342019d3b68c9df1cdbb12",
+      "size": 3908
     },
     {
       "path": "package-lock.json",
@@ -1628,8 +1628,8 @@
     },
     {
       "path": "references/causal-edge-protocol.md",
-      "sha256": "14358b65f5679e9e00ae2eed7305a856cf5ed987ca672899c58dfb24d1503e09",
-      "size": 3779
+      "sha256": "e9c63cbb008561f544b462c1c7291fd4c49bf72591502d60ecfbdd70684e6064",
+      "size": 5151
     },
     {
       "path": "references/d-research-integration.md",
@@ -1638,8 +1638,8 @@
     },
     {
       "path": "references/evaluation-forward-tests.md",
-      "sha256": "bfca0f291feb1a89c6c6896b7b62bf34dac968e28be323f6df9c9d6e71d8b8d2",
-      "size": 8052
+      "sha256": "b4b13c93cc29bf1b6713ef20dc60c392def67d29bfe4281aba3aafa95dfe5c1a",
+      "size": 8270
     },
     {
       "path": "references/human-node-protocol.md",
@@ -1648,8 +1648,8 @@
     },
     {
       "path": "references/node-builder.md",
-      "sha256": "23781a8b1c7d5f69809f99965f99f507fa1e03ff47dd7837a46222cc978b166d",
-      "size": 3527
+      "sha256": "f60807b94d8914bf994c4a398f91c4338ef21cd37f08244e8dda2d8c3ff25f4c",
+      "size": 5422
     },
     {
       "path": "references/propagation-engine.md",
@@ -1663,13 +1663,13 @@
     },
     {
       "path": "references/safety-and-privacy.md",
-      "sha256": "6056ba0529ad4a5f4caf84c3cee848485cbad6c7c39e2994969c5c2eee0ca064",
-      "size": 1174
+      "sha256": "31df46c6205b136abfe63e79d571fa16c11b5d61e8655d52d62aa23a89395282",
+      "size": 1536
     },
     {
       "path": "references/simulation-workflow.md",
-      "sha256": "84caa20451f07f4eea4508d7c634b2d33686c466596540fecce665b013eb54b0",
-      "size": 6406
+      "sha256": "a86ee50fcefec3c024ee39d0ea004b6638cd4a4183bef87b5f8c13e146083cad",
+      "size": 6476
     },
     {
       "path": "references/temporal-modes.md",
@@ -1753,8 +1753,8 @@
     },
     {
       "path": "scripts/aleph/adapters_registry.py",
-      "sha256": "50693db10e67d310147981d2dbb3adf3b17a6afa5feaced7cfff86fa8a88007d",
-      "size": 13613
+      "sha256": "04f81c67e141987242b1c2f45d947b521fdd785597ceddd87a9ea7f08560b4b9",
+      "size": 14041
     },
     {
       "path": "scripts/aleph/component_registry.py",
@@ -1858,8 +1858,8 @@
     },
     {
       "path": "scripts/aleph/validator.py",
-      "sha256": "ce42897384e3c3a6884c4e31a826fa4ca7d6d0695d688f11e58d18d168a08861",
-      "size": 214979
+      "sha256": "69ecab756d1d054f69676d64f4d55f00a91924f3de28cc963db65322a64fee7d",
+      "size": 215227
     },
     {
       "path": "scripts/build_release_assets.py",
@@ -2052,6 +2052,11 @@
       "size": 996
     },
     {
+      "path": "tests/fixtures/canonical/minimal-graph.json",
+      "sha256": "c41ac87f00a121bf8cc6eba5d44e4db637e58e28a8b1a12352d67c88906c1729",
+      "size": 2551
+    },
+    {
       "path": "tests/fixtures/schema-1.2-valid/REPORT.md",
       "sha256": "4a46383771acbbf23f79b166804deadcfd1486736ef6e08c353993ce44c7299b",
       "size": 1662
@@ -2192,6 +2197,11 @@
       "size": 6167
     },
     {
+      "path": "tests/test_doc_fixture_sync.py",
+      "sha256": "81cdcd609582cb3e0788ea3078e11c113643bda9a2cf948b669a2375eab4c544",
+      "size": 5392
+    },
+    {
       "path": "tests/test_engine_migration_v2.py",
       "sha256": "fe30ce890d9617e7b7dca53a1964af6f7b39dcd0f9b91446c5f51badc3689db1",
       "size": 15602
@@ -2253,8 +2263,8 @@
     },
     {
       "path": "tests/test_protocol_v201.py",
-      "sha256": "2f75247908490b3bb0c42f2abca844d9f57095be97f955cfeab67cb75970f61f",
-      "size": 6259
+      "sha256": "675a8c6e3b3c35701d5c60661e76d88931ee6ff3724975e9097dacb50e8ce1c2",
+      "size": 6879
     },
     {
       "path": "tests/test_release_blocker_regressions.py",

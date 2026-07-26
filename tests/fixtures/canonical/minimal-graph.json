@@ -1,0 +1,94 @@
+{
+  "evidence_ids": [
+    "evidence:example"
+  ],
+  "nodes": [
+    {
+      "id": "factor:policy-rate",
+      "type": "factor",
+      "name": "Policy rate",
+      "description": "Central bank policy interest rate.",
+      "time": "2026-01-01",
+      "state_before": {
+        "summary": "Policy rate at baseline.",
+        "value": 4.5,
+        "unit": "percent"
+      },
+      "trigger": {
+        "kind": "decision",
+        "description": "Scheduled rate decision."
+      },
+      "mechanism": "The monetary policy committee votes on and publishes the policy rate at scheduled meetings.",
+      "state_after": {
+        "summary": "Policy rate raised.",
+        "value": 5.0,
+        "unit": "percent"
+      },
+      "lag": "P0D",
+      "evidence_ids": [
+        "evidence:example"
+      ],
+      "status": "fact",
+      "timeline": "shared_baseline",
+      "confidence": 0.9
+    },
+    {
+      "id": "factor:credit-growth",
+      "type": "factor",
+      "name": "Credit growth",
+      "description": "Year-over-year private credit growth.",
+      "time": "2026-01-01",
+      "state_before": {
+        "summary": "Credit growth at baseline.",
+        "value": 6.0,
+        "unit": "percent"
+      },
+      "trigger": {
+        "kind": "propagation",
+        "description": "Responds to policy rate."
+      },
+      "mechanism": "Bank lending volumes respond to funding costs because loan pricing and demand both track the policy rate.",
+      "state_after": {
+        "summary": "Credit growth slows.",
+        "value": 5.0,
+        "unit": "percent"
+      },
+      "lag": "P3M",
+      "evidence_ids": [
+        "evidence:example"
+      ],
+      "status": "inference",
+      "timeline": "shared_baseline",
+      "confidence": 0.7
+    }
+  ],
+  "edges": [
+    {
+      "id": "causal:policy-rate-slows-credit-growth",
+      "from": "factor:policy-rate",
+      "to": "factor:credit-growth",
+      "relation": "decreases",
+      "sign": -1,
+      "base_strength": 0.4,
+      "evidence_confidence": 0.6,
+      "mechanism": "Higher policy rates raise bank funding costs, which lowers both loan supply and household or corporate loan demand.",
+      "lag_distribution": {
+        "type": "triangular",
+        "min": "P1M",
+        "mode": "P3M",
+        "max": "P12M"
+      },
+      "context_modifiers": [],
+      "evidence": [
+        "evidence:example"
+      ],
+      "status": "proposed",
+      "transform": "linear",
+      "effect_parameter": {
+        "kind": "rate_level",
+        "reference_value": 4.5,
+        "unit": "percent"
+      }
+    }
+  ]
+}

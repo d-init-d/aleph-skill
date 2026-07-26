@@ -4,16 +4,18 @@ Edges are directed causal hypotheses. Every edge must be traceable and auditable
 
 ## Required edge fields
 
+The canonical minimal edge — every field below is required by the validator (this exact object lives in `tests/fixtures/canonical/minimal-graph.json` and is CI-validated):
+
 ```json
 {
-  "id": "causal:from-verb-to",
-  "from": "node:id",
-  "to": "node:id",
-  "relation": "increases | decreases | enables | prevents | amplifies | dampens",
-  "sign": 1,
-  "base_strength": 0.0,
-  "confidence": 0.0,
-  "mechanism": "",
+  "id": "causal:policy-rate-slows-credit-growth",
+  "from": "factor:policy-rate",
+  "to": "factor:credit-growth",
+  "relation": "decreases",
+  "sign": -1,
+  "base_strength": 0.4,
+  "evidence_confidence": 0.6,
+  "mechanism": "Higher policy rates raise bank funding costs, which lowers both loan supply and household or corporate loan demand.",
   "lag_distribution": {
     "type": "triangular",
     "min": "P1M",
@@ -21,10 +23,26 @@ Edges are directed causal hypotheses. Every edge must be traceable and auditable
     "max": "P12M"
   },
   "context_modifiers": [],
-  "evidence": [],
-  "status": "proposed"
+  "evidence": [
+    "evidence:example"
+  ],
+  "status": "proposed",
+  "transform": "linear",
+  "effect_parameter": {
+    "kind": "rate_level",
+    "reference_value": 4.5,
+    "unit": "percent"
+  }
 }
 ```
+
+Field notes:
+
+- `relation` is one of `increases | decreases | enables | inhibits | causes | prevents | mediates | moderates | triggers | amplifies | dampens | feedback | autoregressive`; `sign` must be `-1` or `1` and consistent with the relation.
+- `evidence_confidence` is the canonical evidence-strength field in `[0, 1]`. `confidence` is an accepted alias: alone it normalizes to `evidence_confidence`; when both appear and diverge, the canonical field wins and the validator emits a non-fatal `CONFIDENCE_ALIAS` warning.
+- `context_modifiers: []` is a valid explicit declaration that no context modulates this edge; omitting the field entirely is an error.
+- `transform` selects the propagation formula (see below); `effect_parameter` declares the numerical reference (`kind` plus `reference_value` or `distribution`) that grounds `base_strength`.
+- `mechanism` needs a concrete transmission sentence (ten words or more).
 
 ## Transform selection
 

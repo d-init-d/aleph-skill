@@ -4,28 +4,66 @@ Build nodes as evidence-bearing simulation objects. Prefer Aleph schema names wh
 
 ## Universal node fields
 
-Every node should include:
+The canonical minimal node — every field below is required by the validator (this exact object lives in `tests/fixtures/canonical/minimal-graph.json` and is CI-validated):
 
 ```json
 {
-  "id": "type:slug",
-  "type": "entity | event | factor | context | indicator | claim | source",
-  "name": "human-readable name",
-  "status": "fact | inference | simulation | counterfactual | assumption",
-  "timeline": "shared_baseline | observed_baseline | simulated_branch",
-  "confidence": 0.0,
-  "sources": [],
-  "description": ""
+  "id": "factor:policy-rate",
+  "type": "factor",
+  "name": "Policy rate",
+  "description": "Central bank policy interest rate.",
+  "time": "2026-01-01",
+  "state_before": {
+    "summary": "Policy rate at baseline.",
+    "value": 4.5,
+    "unit": "percent"
+  },
+  "trigger": {
+    "kind": "decision",
+    "description": "Scheduled rate decision."
+  },
+  "mechanism": "The monetary policy committee votes on and publishes the policy rate at scheduled meetings.",
+  "state_after": {
+    "summary": "Policy rate raised.",
+    "value": 5.0,
+    "unit": "percent"
+  },
+  "lag": "P0D",
+  "evidence_ids": [
+    "evidence:example"
+  ],
+  "status": "fact",
+  "timeline": "shared_baseline",
+  "confidence": 0.9
 }
 ```
 
+`type` is one of `entity | event | factor | context | indicator | claim | source`; `status` is one of `fact | inference | simulation | counterfactual | assumption`; `timeline` is one of `shared_baseline | observed_baseline | simulated_branch`. `mechanism` needs a concrete sentence (ten words or more). Optional universal fields include `sources`, `probability`, `assumption_ref`, `alternative_explanations`, `sensitivity`, `role`, `datatype`, `unit`, `scale`, `baseline`, `bounds`, `retention`, and `decay_rate`.
+
 Use lowercase hyphenated slugs. Do not reuse IDs for materially different objects.
+
+## Type-specific details (schema 2.1.0)
+
+In schema `2.1.0` workspaces, type-specific fields go inside the optional `details` object, discriminated by the node `type`; the validator refuses detail keys that belong to a different type. In schema `2.0.0` workspaces `details` is not accepted — keep type-specific context in `description`, `mechanism`, or evidence instead. A 2.1 node may also carry an optional `extensions` object whose keys are namespaced (for example `org.example/rating`):
+
+```json
+{
+  "details": {
+    "unit": "percent",
+    "trend": "rising",
+    "thresholds": []
+  },
+  "extensions": {
+    "org.example/rating": "AA"
+  }
+}
+```
 
 ## Entity nodes
 
 Entities are persistent actors: people, organizations, nations, groups, regions.
 
-Add:
+Add under `details` (schema 2.1.0):
 
 - `entity_type`,
 - `attributes`,
@@ -39,7 +77,7 @@ For people, use `references/human-node-protocol.md`.
 
 Events are dated occurrences.
 
-Add:
+Add under `details` (schema 2.1.0):
 
 - `start_time`,
 - `end_time`,
@@ -56,7 +94,7 @@ For counterfactual events, set `status: counterfactual` and include the observed
 
 Factors are variables that can change.
 
-Add:
+Add under `details` (schema 2.1.0):
 
 - `unit`,
 - `frequency`,
@@ -78,12 +116,11 @@ For numerical dynamics, set `scale` explicitly:
 
 Contexts modulate causal edges.
 
-Add:
+Add under `details` (schema 2.1.0):
 
 - `active_conditions`,
 - `historical_instances`,
-- `typical_effects.amplifies`,
-- `typical_effects.dampens`,
+- `typical_effects` (with `amplifies` and `dampens` lists),
 - `activation_thresholds`.
 
 Contexts may be active at baseline or created dynamically during propagation.
@@ -92,7 +129,7 @@ Contexts may be active at baseline or created dynamically during propagation.
 
 Indicators measure factors.
 
-Add:
+Add under `details` (schema 2.1.0):
 
 - `measures`,
 - `source_organization`,
@@ -108,7 +145,7 @@ Use indicators as validation anchors.
 
 Claims are source-backed assertions.
 
-Add:
+Add under `details` (schema 2.1.0):
 
 - `statement`,
 - `source`,
@@ -125,7 +162,7 @@ Keep contradictory claims; do not merge them away.
 
 Sources are raw evidence.
 
-Add:
+Add under `details` (schema 2.1.0):
 
 - `source_type`,
 - `author`,

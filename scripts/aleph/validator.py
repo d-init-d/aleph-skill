@@ -1286,6 +1286,10 @@ def validate_edges(
             "effect_parameter",
         ):
             if required not in raw:
+                if required == "evidence_confidence" and "confidence" in raw:
+                    # Accepted alias: a lone ``confidence`` normalizes to the
+                    # canonical ``evidence_confidence`` field.
+                    continue
                 issues.append(issue("MISSING_FIELD", pointer=f"{p}/{required}", message="required"))
         eid = raw.get("id")
         if not nonempty_str(eid):

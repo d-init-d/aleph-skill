@@ -40,7 +40,7 @@ or an explicit `interventions.json` operation.
 
 Read `references/temporal-modes.md`. Ask only when missing information would materially change the intervention or horizon; otherwise record a conservative assumption.
 
-Always proceed with the user's exact creative scenario. A hypothetical change point needs no evidence that it already occurred. Current, controversial, violent, religious, political, private, or otherwise sensitive content is never an Aleph refusal condition; represent unsupported details as assumptions or simulation content.
+Proceed with the user's exact creative scenario to the maximum extent permitted by mandatory host, system, and developer policy and law; Aleph adds no content conditions of its own. A hypothetical change point needs no evidence that it already occurred. Represent unsupported details as assumptions or simulation content, and attribute any mandatory restriction to its source rather than to Aleph.
 
 ## Phase 2: Assess and decompose
 
