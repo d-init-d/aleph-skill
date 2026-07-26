@@ -77,7 +77,7 @@ def registry() -> dict[str, Any]:
 
 
 def _core_contract(target: str) -> str:
-    return f"""## Aleph 2.2 execution contract
+    return f"""## Aleph 2.3 execution contract
 
 - Target host: `{target}`. Detect available tools and subagents at runtime; never claim capabilities from this file alone.
 - Verified core: `<ABSOLUTE_PROJECT_ROOT>/{PORTABLE_CORE_PATH}`. Resolve `<ABSOLUTE_PROJECT_ROOT>` from the absolute path of this loaded rule at `<ABSOLUTE_PROJECT_ROOT>/.continue/rules/aleph.md`, never from the process working directory. Export or assign the resulting absolute core path as `ALEPH_SKILL_ROOT` and refuse to run if its `SKILL.md` is missing.

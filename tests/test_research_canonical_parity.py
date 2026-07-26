@@ -17,6 +17,7 @@ import os
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import ModuleType
 
@@ -35,6 +36,13 @@ FIELDS_19 = FIELDS_14 + [
 ]
 FIELDS_22 = FIELDS_19 + ["license_spdx", "robots_status", "prov_activity_id"]
 FIELDS_23 = FIELDS_22 + ["record_type"]
+FIELDS_POLICY = [
+    "source_access_class", "subject_class", "purpose_category", "policy_tier",
+    "speaker_identity", "speaker_relationship", "content_origin", "lineage_id",
+    "data_sensitivity", "discovery_disposition", "reporting_disposition",
+    "redaction_class", "retention_until", "authorization_scope_hash",
+]
+FIELDS_37 = FIELDS_23 + FIELDS_POLICY
 
 
 def _csv_bytes(fields: list[str], rows: list[dict[str, str]]) -> bytes:
@@ -68,9 +76,23 @@ def _claim_row(**overrides: str) -> dict[str, str]:
         "verifiability": "",
         "verifiability_note": "",
         "license_spdx": "CC0-1.0",
-        "robots_status": "allow",
+        "robots_status": "allowed",
         "prov_activity_id": "act1",
         "record_type": "claim",
+        "source_access_class": "standard_public",
+        "subject_class": "organization",
+        "purpose_category": "general_research",
+        "policy_tier": "R1",
+        "speaker_identity": "",
+        "speaker_relationship": "",
+        "content_origin": "",
+        "lineage_id": "",
+        "data_sensitivity": "public",
+        "discovery_disposition": "evidence",
+        "reporting_disposition": "main_findings",
+        "redaction_class": "none",
+        "retention_until": "",
+        "authorization_scope_hash": "",
     }
     base.update(overrides)
     return base
@@ -150,12 +172,52 @@ class CanonicalParityTests(unittest.TestCase):
                 FIELDS_23,
                 [
                     _claim_row(claim_id="c1", record_type="claim"),
-                    _claim_row(claim_id="p1", record_type="process", claim="searched"),
+                    _claim_row(
+                        claim_id="p1",
+                        record_type="process",
+                        claim="searched",
+                        discovery_disposition="context_only",
+                        reporting_disposition="context_only",
+                        notes="result=completed",
+                    ),
                     _claim_row(
                         claim_id="b1",
                         record_type="blocker",
                         claim="paywall",
                         source_url="https://example.invalid/x",
+                        discovery_disposition="blocked",
+                        reporting_disposition="blocked_prohibited_sources",
+                        snapshot_status="access_denied",
+                    ),
+                ],
+            ),
+            37: (
+                FIELDS_37,
+                [
+                    _claim_row(claim_id="c1", record_type="claim"),
+                    _claim_row(
+                        claim_id="l1",
+                        record_type="lead",
+                        claim="Community report suggests a checkable lead",
+                        discovery_disposition="lead_only",
+                        reporting_disposition="non_official_unverified_leads",
+                    ),
+                    _claim_row(
+                        claim_id="p1",
+                        record_type="process",
+                        claim="searched",
+                        discovery_disposition="context_only",
+                        reporting_disposition="context_only",
+                        notes="result=completed",
+                    ),
+                    _claim_row(
+                        claim_id="b1",
+                        record_type="blocker",
+                        claim="paywall",
+                        source_url="https://example.invalid/x",
+                        discovery_disposition="blocked",
+                        reporting_disposition="blocked_prohibited_sources",
+                        snapshot_status="access_denied",
                     ),
                 ],
             ),
@@ -181,6 +243,9 @@ class CanonicalParityTests(unittest.TestCase):
 
             ledger_path = self._write_temp(raw)
             upstream_canonical = _upstream_canonicalise(upstream_mod, ledger_path)
+            if columns == 37:
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    self.assertEqual(upstream_mod.validate_ledger(ledger_path), 0)
 
             aleph_sha = hashlib.sha256(aleph_canonical).hexdigest()
             upstream_sha = hashlib.sha256(upstream_canonical).hexdigest()
@@ -206,11 +271,19 @@ class CanonicalParityTests(unittest.TestCase):
                 self.assertGreaterEqual(len(imported.get("audit_rows") or []), 2)
                 dual_run["widths"]["23"]["evidence_rows"] = len(imported["evidence_rows"])  # type: ignore[index]
                 dual_run["widths"]["23"]["audit_rows"] = len(imported.get("audit_rows") or [])  # type: ignore[index]
+            if columns == 37:
+                self.assertEqual(imported.get("source_contract"), "d-research-policy-37")
+                self.assertEqual(len(imported["evidence_rows"]), 1)
+                self.assertEqual(len(imported.get("lead_rows") or []), 1)
+                self.assertGreaterEqual(len(imported.get("audit_rows") or []), 2)
+                dual_run["widths"]["37"]["evidence_rows"] = len(imported["evidence_rows"])  # type: ignore[index]
+                dual_run["widths"]["37"]["lead_rows"] = len(imported.get("lead_rows") or [])  # type: ignore[index]
+                dual_run["widths"]["37"]["audit_rows"] = len(imported.get("audit_rows") or [])  # type: ignore[index]
 
-        # All four widths must have matched.
+        # Every supported upstream width must have matched.
         widths = dual_run["widths"]
         assert isinstance(widths, dict)
-        self.assertEqual(set(widths), {"14", "19", "22", "23"})
+        self.assertEqual(set(widths), {"14", "19", "22", "23", "37"})
         for width, payload in widths.items():
             assert isinstance(payload, dict)
             self.assertTrue(payload["match"], f"width {width} did not match")
@@ -221,6 +294,61 @@ class CanonicalParityTests(unittest.TestCase):
             out_path = Path(scratch) / "canonical-parity.json"
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(json.dumps(dual_run, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    def test_raw_leak_leads_are_metadata_only_and_never_evidence(self) -> None:
+        lead = _claim_row(
+            claim_id="l1",
+            record_type="lead",
+            claim="A redacted public report identifies a follow-up lead",
+            source_title="Redacted lead metadata",
+            source_url="",
+            evidence="",
+            quote_or_anchor="",
+            archive_url="",
+            content_hash="",
+            source_access_class="raw_leak_lead_only",
+            data_sensitivity="personal",
+            discovery_disposition="lead_only",
+            reporting_disposition="non_official_unverified_leads",
+            redaction_class="other_pii",
+        )
+        valid_path = self._write_temp(_csv_bytes(FIELDS_37, [lead]))
+        imported = import_d_research_ledger(valid_path, package_major=3)
+        self.assertTrue(imported.get("ok"), imported.get("issues"))
+        self.assertEqual(imported.get("evidence_rows"), [])
+        self.assertEqual(len(imported.get("lead_rows") or []), 1)
+
+        unsafe = dict(lead)
+        unsafe["evidence"] = "raw secret material"
+        unsafe_path = self._write_temp(_csv_bytes(FIELDS_37, [unsafe]))
+        rejected = import_d_research_ledger(unsafe_path, package_major=3)
+        self.assertFalse(rejected.get("ok"))
+        self.assertEqual(rejected.get("evidence_rows"), [])
+
+    def test_policy_rows_fail_closed_without_valid_scope_or_social_promotion(self) -> None:
+        invalid_rows = [
+            _claim_row(policy_tier="banana"),
+            _claim_row(
+                policy_tier="R4",
+                source_access_class="authorized_provider",
+                purpose_category="authorized_pentest",
+                data_sensitivity="professional",
+                authorization_scope_hash="",
+                retention_until="",
+            ),
+            _claim_row(
+                speaker_identity="claimed_identity",
+                speaker_relationship="secondhand",
+                content_origin="original",
+                reporting_disposition="main_findings",
+            ),
+        ]
+        for row in invalid_rows:
+            with self.subTest(row=row):
+                ledger = self._write_temp(_csv_bytes(FIELDS_37, [row]))
+                imported = import_d_research_ledger(ledger, package_major=3)
+                self.assertFalse(imported.get("ok"), imported)
+                self.assertEqual(imported.get("evidence_rows"), [])
 
     def _write_temp(self, raw: bytes) -> Path:
         handle = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")

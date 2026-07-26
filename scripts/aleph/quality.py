@@ -157,6 +157,7 @@ def _d_research_verified(
             and receipt.get("receipt_type") == "d-research-import"
             and receipt.get("mapping_contract") == "d-research-3.x-canonical"
             and receipt.get("source_contract") in {
+                "d-research-policy-37",
                 "d-research-record-type-23",
                 "d-research-provenance-22",
                 "d-research-social-19",

@@ -5,14 +5,14 @@
     "d-research": {
       "uri": "aleph-component://d-research",
       "package_name": "d-research-skill-tools",
-      "version": "3.2.1",
+      "version": "3.3.0",
       "source_repository": "https://github.com/d-init-d/d-research-skill",
-      "source_tag": "v3.2.1",
-      "upstream_tag_object": "4f797f0cb0f75539edfc9bc9332ca4dd041e881c",
-      "upstream_commit": "dc07d4902361ddf15ff0dd093faa0784b2fd47ab",
-      "upstream_tree": "4943fec2d4fa6bda1f4beecfd9177a630af0ab8b",
+      "source_tag": "v3.3.0",
+      "upstream_tag_object": "050d4060182a38c9383365896941b9cbeffee5f4",
+      "upstream_commit": "f097505c1f3a76428d381581c2ac9310553b6823",
+      "upstream_tree": "03469107c036438077eab8d00448e3001999eeb9",
       "source_archive_format": "git-archive-tar",
-      "source_archive_sha256": "sha256:e91837e6d2d38cde4f055f54d382e58c7b2094220b87e77dff695f92a63cdd71",
+      "source_archive_sha256": "sha256:427a96e0a02a1a94b47f5ec482947f9cebe8b218804012e6b46c8c1e5286d300",
       "snapshot_recipe": {
         "version": 1,
         "source": "git-tree",
@@ -546,7 +546,9 @@
           "release-evidence/v3.2.1/tier1-baseline-scores.json",
           "release-evidence/v3.2.1/tier1-candidate-scores.json",
           "release-evidence/v3.2.1/tier2-baseline-scores.json",
-          "release-evidence/v3.2.1/tier2-candidate-scores.json"
+          "release-evidence/v3.2.1/tier2-candidate-scores.json",
+          "release-evidence/v3.3.0/local-verification.json",
+          "release-evidence/v3.3.0/maintainer-override.json"
         ],
         "text_eol": "lf",
         "forbidden_paths": [
@@ -565,10 +567,11 @@
           "release-evidence"
         ]
       },
-      "tree_sha256": "sha256:0276b3f4b6230b65e75c664edd642b9b2b7ce30e534a88a8328899b3d6fc7edd",
-      "file_count": 201,
+      "tree_sha256": "sha256:6f34464f149dab246f51c082aaa886688133f80db4d5589526b3625329490bfa",
+      "file_count": 209,
       "entrypoints": [
         "scripts/evidence_ledger.py",
+        "scripts/investigation_policy.py",
         "scripts/research_plan.py",
         "scripts/playwright_probe.mjs"
       ],
@@ -580,13 +583,13 @@
         },
         {
           "path": "AGENTS.md",
-          "size": 4782,
-          "sha256": "sha256:cd39b1712ee3163bb447dcd53a4ce38299ba18c1d798896168a781bc075e9529"
+          "size": 5788,
+          "sha256": "sha256:43a3ca9ad9816944a8c8d26b5fa344c6431056280634f1c08b2b4461a936b048"
         },
         {
           "path": "CHANGELOG.md",
-          "size": 57556,
-          "sha256": "sha256:86f5736a870d53bbc59cb45038a2d3253b62aad7a97e72bbb6d668c53ea500fa"
+          "size": 62971,
+          "sha256": "sha256:ce4764c8e08522ba0293b76554a26ab9faa38dd2e90d8238ecf7c6a0b4727c6e"
         },
         {
           "path": "CONTRIBUTING.md",
@@ -600,18 +603,18 @@
         },
         {
           "path": "README.md",
-          "size": 58066,
-          "sha256": "sha256:b22cab71ff219802d1a310b66a3f1870f61ccd97e2888715eb23335c6d8d613f"
+          "size": 59340,
+          "sha256": "sha256:361b8a8808eb82f1df3eda71cbcbc09fc517821c3a4b5c34bcefe3f7a9169424"
         },
         {
           "path": "README.vi.md",
-          "size": 23915,
-          "sha256": "sha256:21bd23a549d8cf48c83a6261f0f192d5b4fada8dd567ee2bbf5e30859936e469"
+          "size": 25292,
+          "sha256": "sha256:999c6c3bde7f5af2cb88060794534f6856bfdcd56eec416a748762b278dd736c"
         },
         {
           "path": "SKILL.md",
-          "size": 12919,
-          "sha256": "sha256:78f3bd03e55b9dbe2ae20b64a57d8342f2c49387d914519286e92ccf99d1c47d"
+          "size": 15827,
+          "sha256": "sha256:d17e7c1dec7df61045ae4791fd414fc9a3fc1464868d9d2453295de5c2d926c5"
         },
         {
           "path": "adapters/citation-resolver.md",
@@ -660,8 +663,8 @@
         },
         {
           "path": "agents/openai.yaml",
-          "size": 232,
-          "sha256": "sha256:8c7df8a37cfe0ea2fabdf96a635e4ff90e4fb351a878ee8859163ecaeeea57a3"
+          "size": 342,
+          "sha256": "sha256:32e432a173e12a742b50ef39c22dda5f54c41fc67f31e0f98ef6afef9845d133"
         },
         {
           "path": "docs/.archive/UPGRADE-PLAN.md",
@@ -675,8 +678,8 @@
         },
         {
           "path": "docs/eval.md",
-          "size": 29111,
-          "sha256": "sha256:1b0f0cf3ff4c4a1350f87da98f2f562da0511dd33bd7d234ec7f569fd85718f4"
+          "size": 29120,
+          "sha256": "sha256:591ef28c3a046b0d515d10dd20387ff76e3771b306ade8778b939217db330b94"
         },
         {
           "path": "docs/release-v3.0.1.md",
@@ -745,8 +748,18 @@
         },
         {
           "path": "docs/release-v3.2.1.md",
-          "size": 5861,
-          "sha256": "sha256:f4a7ef0befd97ad09c7e00d707e8b36a603a0cfe1f55bfafe4f2b29679afec7e"
+          "size": 4977,
+          "sha256": "sha256:3a09fef1fa63101dee31a8656f6611009380e88f79ee866af444a7dbefcba8da"
+        },
+        {
+          "path": "docs/release-v3.3.0-rc.1.md",
+          "size": 6787,
+          "sha256": "sha256:82b00345ec60dd0ca8e8c43cfb18a6a367583d755850fb26bbfc0d4ec5b7a531"
+        },
+        {
+          "path": "docs/release-v3.3.0.md",
+          "size": 7006,
+          "sha256": "sha256:430ad00ccd83514cea4133723105ddc82e36229e9a527fde5b27808dffd5a00e"
         },
         {
           "path": "docs/ssrf-helper-inventory.md",
@@ -1001,17 +1014,17 @@
         {
           "path": "package-lock.json",
           "size": 1777,
-          "sha256": "sha256:2939dfa29b363772a3d67aceee35bbd0e3d21611f84253616b9c0552773d7d7d"
+          "sha256": "sha256:a56e990f7f9d045c3e49153fb239af2c48b2084fdc3d713b47db2c8cc37b7d79"
         },
         {
           "path": "package.json",
-          "size": 12033,
-          "sha256": "sha256:076d428a4d70c3f7a209b6aeb56a9efc72c704858a9a6b5bc6545bd314857290"
+          "size": 12665,
+          "sha256": "sha256:be64ffcffd16512f0712ab65a84df96a9db49fc5fbfe473fc670f6e9449b368c"
         },
         {
           "path": "pyproject.toml",
           "size": 2855,
-          "sha256": "sha256:815cc258e0c1c6a2dcd70d8392af056e66ed4942d222ffe6fc482f75cc9db4d1"
+          "sha256": "sha256:1f8780a1259b6fd39955d484815bf91d95f081288dd10185c779dd9712026ed0"
         },
         {
           "path": "references/academic-databases.md",
@@ -1050,13 +1063,13 @@
         },
         {
           "path": "references/citation-management.md",
-          "size": 15440,
-          "sha256": "sha256:fff580d846cc8bfc20b663e933aba7d4459379fc9ef657d3db3936c6e64a715a"
+          "size": 15502,
+          "sha256": "sha256:62f09218c3ec4583b87885ad7ed04dc05be4dda38219004cd2ba940281788c55"
         },
         {
           "path": "references/config-reference.md",
-          "size": 4438,
-          "sha256": "sha256:37143781c76aec47c68be42cd4e68d667cad091f5cb79ba50e9e9a4cdf890b62"
+          "size": 6434,
+          "sha256": "sha256:9aa34f460972a456c873f8d995e2d98acf68bbf72786b88263c5ca5bb8c3b202"
         },
         {
           "path": "references/data-extraction-toolbox.md",
@@ -1080,8 +1093,8 @@
         },
         {
           "path": "references/evidence-ledger.md",
-          "size": 9889,
-          "sha256": "sha256:e99691fb063dd968a490c5b25d6a6a75eccbf26f03e7302e374f1e72c256e15e"
+          "size": 16622,
+          "sha256": "sha256:f880ab734f3353aa4c91a5cfd8bebf4c894788d475823907c25cf17af2114acd"
         },
         {
           "path": "references/execution-gates.md",
@@ -1100,8 +1113,8 @@
         },
         {
           "path": "references/final-report-template.md",
-          "size": 3665,
-          "sha256": "sha256:9be7374b2ee8e0a935fe6e73ab6293456f727fe499b63b1cb0b9c56779ebd643"
+          "size": 4684,
+          "sha256": "sha256:f81cb3a52219e3db7771dcb39caf1789a07ffd64064583d6d3732fb83c40d8c9"
         },
         {
           "path": "references/frontier-search.md",
@@ -1124,9 +1137,19 @@
           "sha256": "sha256:8c56de3fb577107fa668e43f1d011490445a1e0e7c159e521b656f9d34bf5111"
         },
         {
+          "path": "references/investigative-research.md",
+          "size": 9857,
+          "sha256": "sha256:2b2118a450b1173a4f10e22ecf104944a8dbbee2ed2e6a4f74910d5d72a7590d"
+        },
+        {
           "path": "references/large-scale-collection.md",
           "size": 10150,
           "sha256": "sha256:e2585225e86f863c5e72f083b571211bad45bdf05ed7e31af3350594c2fd9c86"
+        },
+        {
+          "path": "references/leaked-data-handling.md",
+          "size": 5012,
+          "sha256": "sha256:e5b2bfb61c8a79f4135b59ac608011eff728995ba203256003e10e6d6a09efff"
         },
         {
           "path": "references/monitoring-change-detection.md",
@@ -1155,8 +1178,8 @@
         },
         {
           "path": "references/person-aggregation.md",
-          "size": 12706,
-          "sha256": "sha256:9723c9de72cd6677e92dd2bda22c0387ea9c0e37bb3a65e50dc3209ef844d0f0"
+          "size": 8863,
+          "sha256": "sha256:25c8681a9080566952e4ba9e3cbd41b70a2509c2c2f12e51da7ec633e341cc0d"
         },
         {
           "path": "references/query-patterns.md",
@@ -1185,23 +1208,28 @@
         },
         {
           "path": "references/research-intake.md",
-          "size": 21362,
-          "sha256": "sha256:c256967e01e499114bd26c091c163cc31b7cbf7bde43b5a6f18614c536eb472b"
+          "size": 25895,
+          "sha256": "sha256:7178d512b61b339d32de7f7ad331209b007d471ec26715b06436686bcd39a012"
         },
         {
           "path": "references/research-plan-protocol.md",
-          "size": 20291,
-          "sha256": "sha256:760223c7b12ac960780a33076936ac5f201d2ed44d6b6a773faa67dd67beb537"
+          "size": 21313,
+          "sha256": "sha256:7028501344b6c4675c91fd0841ade18dd751d4093476006a984d6b69f2eb2721"
         },
         {
           "path": "references/safety-and-access-policy.md",
-          "size": 2377,
-          "sha256": "sha256:dec2c4eef7b46cd8860d1774e92c27a14ca7efaf8ced9e4503a562e2fd0ef018"
+          "size": 5278,
+          "sha256": "sha256:e125f41eaa64196d9c340bb7ec1fb51bab52a9309522b94a45c7fd24694e12f6"
         },
         {
           "path": "references/script-inventory.md",
-          "size": 9691,
-          "sha256": "sha256:bd0eebad5429a2d461b21ed733ba20c4600b37f3726b87099c64301293e21b11"
+          "size": 10031,
+          "sha256": "sha256:8648528950ac63a98eaf2b24325c83195adfd821de7dcff9519c88dcd3a0296e"
+        },
+        {
+          "path": "references/self-exposure-audit.md",
+          "size": 5526,
+          "sha256": "sha256:316e619e6126c62d977aff8f7b12b103aa3a25e4361e316bdddcca0976540bfd"
         },
         {
           "path": "references/semantic-retrieval.md",
@@ -1210,8 +1238,13 @@
         },
         {
           "path": "references/social-media-archival.md",
-          "size": 10606,
-          "sha256": "sha256:e02fac40b11c3023592aebcbcfe6217b67a9a77a8ab0b1a3990e620ffb06c32b"
+          "size": 12456,
+          "sha256": "sha256:809e5b6c1f6ecb358ffeddd4ec4d15f88b75cd2f24fa28fbe478144fb3608048"
+        },
+        {
+          "path": "references/social-source-research.md",
+          "size": 7719,
+          "sha256": "sha256:2c52913c654e71724c18bedc26577d7fa78eef4b702b5b214e8f2281ce675aa4"
         },
         {
           "path": "references/source-discovery.md",
@@ -1220,8 +1253,8 @@
         },
         {
           "path": "references/source-quality-rubric.md",
-          "size": 6113,
-          "sha256": "sha256:29249d84335a9da9a14c5fe98314f83070cac929066a99808350a2bc720eab89"
+          "size": 6302,
+          "sha256": "sha256:12829afa017e7f1e94a0f7ecb699193b7268f0861c41075a22fdfa9b6a80495c"
         },
         {
           "path": "references/specialized-domains.md",
@@ -1260,13 +1293,13 @@
         },
         {
           "path": "references/workflow-routes.md",
-          "size": 15717,
-          "sha256": "sha256:45d0b5d7944f3091de68eb0c6376c6b9ba89a5e29479e2bd81385d897b09b728"
+          "size": 16619,
+          "sha256": "sha256:bd67dc80d080413f19b66b41a1154e201e4d57c951a9443140166a453bd7f91a"
         },
         {
           "path": "research.config.example.json",
-          "size": 3270,
-          "sha256": "sha256:6edd3cc847afc53b79b367d8ba45151bb5dcaf12486bbe2a3a410e8ce52cdfba"
+          "size": 3999,
+          "sha256": "sha256:cac3c5aa7671116842ea36682fb6e851ba0ad90704cf27316b834c740b4216d2"
         },
         {
           "path": "scripts/_ssrf_helpers.py",
@@ -1275,8 +1308,8 @@
         },
         {
           "path": "scripts/adversarial_acceptance.py",
-          "size": 25102,
-          "sha256": "sha256:cf705f11024f068aba6c49e39e53766e13edcace1ae2517be68cb1fc7c18eb09"
+          "size": 34309,
+          "sha256": "sha256:cddd738eb354bede504ce0f3887b853f65c4a0c9fe28ce218fc2610dad0e51e8"
         },
         {
           "path": "scripts/api_fetch.mjs",
@@ -1295,13 +1328,13 @@
         },
         {
           "path": "scripts/check_contract.py",
-          "size": 197066,
-          "sha256": "sha256:0485140ddd7ca2068c5d734b7b363107035722c4fe6f7b6ef3ac14b9554a8856"
+          "size": 206900,
+          "sha256": "sha256:a4e90ccb1b4fde00c1dcbe1b38a993aa8e82a2913fcd28de901411c44086b07c"
         },
         {
           "path": "scripts/check_internal_refs.py",
-          "size": 7801,
-          "sha256": "sha256:4c0992d258a752436e00eba023bde8bdd6fb816229bb70f3dcadfb835eb3452f"
+          "size": 8263,
+          "sha256": "sha256:ee8d5ca77d804506fe8ca7413e04a284a150f5f3832037313f8705bb161de1de"
         },
         {
           "path": "scripts/check_no_plan_files.py",
@@ -1355,8 +1388,8 @@
         },
         {
           "path": "scripts/evidence_ledger.py",
-          "size": 35860,
-          "sha256": "sha256:8a03a3eee7cb9de2ee8ba686d80a4d2ff2d332ff37491ddd90f0f0b8c07b2ddb"
+          "size": 76728,
+          "sha256": "sha256:7d62a2219d971b7f99dfdf3ed9645a71491799a8b4ba719d164c809619ffdda7"
         },
         {
           "path": "scripts/extract_tables.py",
@@ -1377,6 +1410,11 @@
           "path": "scripts/http_cache.py",
           "size": 63771,
           "sha256": "sha256:2898bf16f30f9810d39b7f0c942956423432f8b525fbe102ddfc9c4ca38ea176"
+        },
+        {
+          "path": "scripts/investigation_policy.py",
+          "size": 42356,
+          "sha256": "sha256:219156ee638998fa2ef513f999593601020cea53d3ce35daf3cc4d7f14dc9536"
         },
         {
           "path": "scripts/lib/browser_limits.mjs",
@@ -1450,13 +1488,13 @@
         },
         {
           "path": "scripts/report_render.py",
-          "size": 50158,
-          "sha256": "sha256:7267fea390ea7e4acfa19a035521a8edac372dca3d655458dbf57db5fb5dbed3"
+          "size": 63316,
+          "sha256": "sha256:7958fdb740eb09ad3f560f4f151676b7e0e9297e741f3b91571153f80520fece"
         },
         {
           "path": "scripts/research_plan.py",
-          "size": 180356,
-          "sha256": "sha256:c98e9de2225825b693214fc4edbf43d9a0e5834f649918195a956c2bdd69c33c"
+          "size": 197839,
+          "sha256": "sha256:b6c569b1f015f778e6fbb6d2519ad5b54283dcb964e8be4edb82ddfa22b90697"
         },
         {
           "path": "scripts/resource_limits.py",
@@ -1480,13 +1518,13 @@
         },
         {
           "path": "scripts/score_source.py",
-          "size": 30142,
-          "sha256": "sha256:8e1c8af4d93ea2bf3c2a85e8b876b153e5a5be954623f81885110f1e7c53b91e"
+          "size": 31870,
+          "sha256": "sha256:21ab06a59a9929e06f12fd7845ca6d77ad6cbfc73b2be41eaab06d8559978b0e"
         },
         {
           "path": "scripts/social_snapshot.py",
-          "size": 69796,
-          "sha256": "sha256:157a96f82a70d0883dbe5889f1904cf37d339332ab2a8292d6d58ef5aa84084a"
+          "size": 76160,
+          "sha256": "sha256:9be8948bd5b243128ce1dddb7e3161a81242c00bd9c18cde7cce1774f86bb17d"
         },
         {
           "path": "scripts/translate.py",
@@ -1535,13 +1573,18 @@
         },
         {
           "path": "templates/evidence-ledger.csv",
-          "size": 1405,
-          "sha256": "sha256:5d8821c29ee5e4180528df3677ab799c76077265918d3cf72ce00aa09fd2149d"
+          "size": 1832,
+          "sha256": "sha256:328122de1c611a7df3fc910fc9aaadf84484123d4abc623e0414b62d9c8d4a42"
         },
         {
           "path": "templates/frontier-ledger.csv",
           "size": 1299,
           "sha256": "sha256:b8c910c9f15634504da2d6e1c91fd00a1e4931c52889741c98302858bac72df2"
+        },
+        {
+          "path": "templates/investigation-scope.json",
+          "size": 1313,
+          "sha256": "sha256:a5487ee68efe601fe8601642e3fcc9166545e03e6541555001ae754d986a55f1"
         },
         {
           "path": "templates/prisma-flow.json",
@@ -1560,13 +1603,13 @@
         },
         {
           "path": "templates/research-plan.json",
-          "size": 3060,
-          "sha256": "sha256:cb6d2f5f9c17ccd10b6e436da84654a95ef8f08a175b4fb0cfddbc141c09c14d"
+          "size": 3279,
+          "sha256": "sha256:618fa62a2ff5724cdc7bb09418ca0f015c93fbe83bbbf121feb208b5aee2f80d"
         },
         {
           "path": "templates/route-manifest.json",
-          "size": 18061,
-          "sha256": "sha256:082c8b3afd0ce15cfef494cfba95162136ffb25a435811882b590d3387287402"
+          "size": 23415,
+          "sha256": "sha256:896be6fc1c8a2c9ad5af164fa1e0acb0afc9658b4079bcd94a18d8889ebe0178"
         },
         {
           "path": "templates/screening-log.csv",
@@ -1579,7 +1622,7 @@
           "sha256": "sha256:743b8c25836a152470d13c117d01212cfa5c95f76c39c65b342792e523e1ad39"
         }
       ],
-      "pin_note": "Embeddable snapshot derived from upstream v3.2.1 commit dc07d490: exact repository-only release/CI/dogfood-evidence paths are excluded, text bytes are LF-normalized, and the upstream npm path manifest is preserved. Tag, Git tree, reproducible git-archive, recipe, per-file, and component-tree digests are independently verifiable."
+      "pin_note": "Embeddable snapshot derived from upstream v3.3.0 commit f097505c: exact repository-only release/CI/dogfood-evidence paths are excluded, text bytes are LF-normalized, and the upstream npm path manifest is preserved. Tag, Git tree, reproducible git-archive, recipe, per-file, and component-tree digests are independently verifiable."
     }
   }
 }

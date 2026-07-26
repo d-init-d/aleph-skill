@@ -87,6 +87,7 @@ bindings. Stable task routes include:
 | Ledger init/validate/sign/verify/export | `research:evidence-ledger` | `scripts/evidence_ledger.py` |
 | Signed-ledger import verification | `research:import` | `scripts/evidence_ledger.py verify` |
 | Research plan and gates | `research:plan` | `scripts/research_plan.py` |
+| Investigation scope and source policy | `research:policy` | `scripts/investigation_policy.py` |
 | Browser probe/extract/crawl | `research:browser-probe`, `research:browser-extract`, `research:browser-crawl` | `scripts/playwright_*.mjs` |
 | Public API fetch | `research:api-fetch` | `scripts/api_fetch.mjs` |
 | Web search | `research:web-search` | `scripts/web_search.mjs` |
@@ -133,7 +134,7 @@ and stderr are redacted defensively and the receipt exposes only
 
 ## Component-aware verification
 
-The snapshot recipe includes every upstream tracked file except the exact 11
+The snapshot recipe includes every upstream tracked file except the exact
 paths listed in `component-lock.json` under `snapshot_recipe.excluded_paths`.
 Those exclusions remove repository-only CI/agent/release-evidence files and
 repository metadata; `.npmignore` and `docs/.archive/UPGRADE-PLAN.md` remain
@@ -143,19 +144,19 @@ upstream repository `check_contract.py`. It instead verifies:
 1. the component content lock and package identity;
 2. locked-script coverage of the bundled inventory;
 3. gateway route coverage with no arbitrary launcher;
-4. the portable evidence-ledger offline self-test from an external workspace.
+4. the portable evidence-ledger and investigation-policy offline self-tests from an external workspace.
 
 Missing optional Node/browser capability is reported as `degraded` or
 `delegated` with exit code 0. A lock, route, or portable self-test failure is a
 real failure. `research:acceptance` and `research:browser-smoke` remain separate
 release jobs so a no-browser job cannot masquerade as a browser pass.
 
-The upstream 3.2.1 acceptance matrix also calls the social-snapshot self-test,
+The upstream 3.3.0 acceptance matrix also calls the social-snapshot self-test,
 which resolves `www.reddit.com` before its mocked HTTP layer runs. If a host DNS
 policy maps that public name to a non-public address, the SSRF guard must remain
 fail closed. Aleph may reconcile only the exact two resulting wrapper failures
-(`22` and `26`) as `CAPABILITY_DNS_POLICY`, alongside the exact repository-only
-cases, and delegate them to CI. Any other failure set remains a hard failure.
+(`22` and `26`) as `CAPABILITY_DNS_POLICY`, alongside exact repository-only
+case `23`, and delegate them to CI. Any other failure set remains a hard failure.
 
 ## External compatibility mode
 

@@ -1,113 +1,120 @@
-# D Research v3.2.1
-
-## v3.2.1 Release Notes
-
-D Research v3.2.1 is the stable production release of the optional semantic-
-retrieval, bibliographic-export, and language-detection upgrades frozen in
-v3.2.1-rc.2. The stable tree promotes that exact candidate without executable-
-code, dependency, workflow, route, or package-path drift.
-
-## Maintainer-directed publication
-
-The maintainer explicitly directed publication after the completed technical
-test and live-dogfood runs without waiting for the independent-review gate.
-No reviewer approval or `reviewer-signoff.json` is claimed or manufactured.
-As a result, this GitHub Release is a maintainer-published build rather than a
-contract-compliant `live_evidence` promotion. The dogfood artifacts remain
-included for audit, but independent review was not treated as a publication
-blocker.
-
 ## Highlights
 
-- Semantic retrieval now defaults to an offline `auto` path that prefers an
-  installed `sentence-transformers` backend and otherwise uses deterministic
-  `local-hashing`. The stub backend remains available only through explicit
-  test configuration.
-- Validated JSON metadata sidecars enable conservative `@article`, `@book`,
-  and `@inproceedings` BibTeX exports while preserving safe `@misc` fallback.
-  Structured personal names and literal corporate authors/editors retain their
-  intended identity.
-- Deterministic local `langdetect` and stdlib trigram backends improve language
-  detection without adding a mandatory dependency or making a remote request.
-- CI exercises the real optional semantic and language backends offline across
-  the supported Python matrix, including a generated local embedding model
-  that requires no downloaded weights.
-- Stable promotion recomputes every score from canonical schema-2.1 raw task
-  bundles instead of trusting submitted summaries. Prompts, outputs, ledgers,
-  runtime/model/tool bindings, commit bindings, and thresholds stay auditable.
+D Research v3.2.1 makes research workflows easier to deploy, more reliable across
+languages, and better suited to publication-quality output.
 
-## Compatibility and upgrade notes
+- **More relevant local search** — Use a production-capable semantic backend when
+  available, with a fast deterministic fallback that works without additional services.
+- **Cleaner bibliographies** — Export richer BibTeX records for articles, books, and
+  conference papers while preserving safe fallback behavior for incomplete metadata.
+- **More reliable multilingual research** — Improve language detection while keeping
+  processing fully local.
+- **Seamless upgrade** — Keep existing research plans, evidence ledgers, routes, and
+  installation paths. No migration or new mandatory dependency is required.
 
-Python 3.10 or newer and Node.js 18 or newer remain supported. Existing
-research-plan workspaces, evidence ledgers, routes, and install paths require
-no migration. Semantic retrieval remains dependency-free through
-`local-hashing`; install `.[embeddings]` for trained semantic similarity.
-Deterministic legacy fixtures must explicitly select `--backend stub`.
+## What’s improved
 
-## Candidate provenance
+### Semantic retrieval
 
-The promoted candidate commit is
-`520915764a97d717aaf4682e02b8aae5dc511d2f`. Git tag object
-`fd309e47c9681a391621bf7b842893d5a2d15ab0` binds the GitHub-verified,
-SSH-signed annotated `v3.2.1-rc.2` tag to that exact tree.
+- The default `auto` mode uses an installed `sentence-transformers` model when available.
+- Environments without the optional model backend automatically use deterministic
+  `local-hashing`; the test stub is selected only through explicit configuration.
+- Model loading and encoding failures now return controlled, actionable diagnostics.
+- Stricter index validation rejects malformed vectors, duplicate keys, non-finite values,
+  invalid entries, and blank queries before retrieval.
 
-Before stable preparation, candidate exact-SHA CI, source-archive/checksum
-replay, independent archive reproduction, and GitHub build-provenance
-attestation passed. The RC archive SHA-256 is
-`3e8b29c6662a790e81310bb177776c0d7225612567bde19aa31d7850991245bd`.
+### Citation export
 
-## Live dogfood results
+- Validated metadata sidecars support conservative `@article`, `@book`, and
+  `@inproceedings` BibTeX entries.
+- Structured personal names and literal corporate authors or editors retain their
+  intended identity in BibTeX and CSL output.
+- Conflicting DOI identities and ambiguous metadata fail closed instead of producing a
+  misleading citation.
+- Incomplete rich metadata continues to fall back safely to `@misc`.
 
-Promotion evidence contains exactly 128 canonical run bundles: 12 Tier-1 and
-52 Tier-2 tasks for both the v3.2.0 baseline and the v3.2.1-rc.2 candidate.
-Every bundle binds its rendered prompt, raw output, evidence ledger, runtime,
-model, tool configuration, skill commit, evaluator-harness commit, and
-timestamps.
+### Language detection
 
-| Gate | v3.2.0 baseline | v3.2.1-rc.2 candidate | Verdict |
-|---|---:|---:|---|
-| Tier-1 strict passes | 2 / 12 | 2 / 12 | **SAME** |
-| Tier-1 mean recall | 0.65 | 0.65 | unchanged |
-| Tier-1 mean accuracy | 0.64 | 0.64 | +0.00 (rounded) |
-| Tier-2 strict passes | 6 / 52 | 6 / 52 | **SAME** |
-| Tier-2 mean recall | 0.61 | 0.62 | +0.02 |
-| Tier-2 mean accuracy | 0.71 | 0.75 | +0.04 |
+- Add deterministic local `langdetect` through the optional `language-detection` extra.
+- Keep the built-in trigram detector as an offline, dependency-free fallback.
+- Preserve explicit backend selection for repeatable workflows and test fixtures.
 
-Both tiers have zero failed runs, zero not-run tasks, zero contract-defined
-regressions, and zero safety regressions. Under the frozen comparison policy,
-Tier-1 metric drops count as regressions only when they exceed 0.20; Tier-2
-regressions are pass or safety transitions. Per-task metric movement remains
-visible in the score artifacts: DF-010 has a 0.20 Tier-1 accuracy drop, and
-FB-017, FB-039, FB-042, FB-048, and FB-049 have negative Tier-2 metric deltas;
-none crosses its tier's frozen regression rule. Tier 1 records one partial
-improvement, and Tier 2 records ten partial improvements. “Strict passes” means
-a task met every applicable scoring threshold; all 128 baseline/candidate runs
-completed or produced the expected policy refusal and remain auditable.
+## Upgrade
 
-All runs used Grok Build `0.2.101` with `grok-4.5` and one tool-configuration
-hash,
-`sha256:45b1ed81cc973de656f5d1ce090fd157817111a86b6bcb6733a8ba00f779e300`.
-Targeted reruns used the identical prompt, model, runtime, evaluator, and frozen
-thresholds; no benchmark, policy, or scoring rule changed. The SHA-256 of the
-schema-1.2 promotion manifest is
-`sha256:5f77a1de7a741bedc193b973a4d6bd2de64a0e55cd09bae6044c6b2c270cb611`.
+No workspace migration is required.
 
-## Stable release assurance
+Update an existing Git checkout:
 
-The metadata-only stable commit carries the canonical Tier-1 and Tier-2 live
-dogfood bundles, recomputed schema-2.1 scores, and schema-1.2 promotion
-evidence. The release contract requires one identical runtime, model, tool
-configuration, and evaluator binding across baseline and candidate runs; zero
-failed or not-run tasks; frozen regression thresholds; and an independent
-review of live-run origin, raw artifacts, and score recomputation.
+```bash
+git fetch --tags
+git checkout v3.2.1
+```
 
-The tag-triggered archive workflow remains read-only. Under the normal
-contract, GitHub provenance is issued only after the default-branch verifier
-revalidates the signed tag, artifact metadata, checksum, reproduced archive,
-exact-SHA CI, and repository-bound review. This maintainer-directed publication
-claims only the signed stable tag, the tests reported above, and the included
-raw evidence; it does not claim an independent reviewer sign-off or a green
-stable-promotion attestation.
+Install D Research as a new agent skill:
 
-See [`release-v3.2.1-rc.2.md`](release-v3.2.1-rc.2.md) for the complete frozen
-candidate scope and promotion contract.
+```bash
+git clone --branch v3.2.1 --depth 1 \
+  https://github.com/d-init-d/d-research-skill.git \
+  .agents/skills/d-research
+```
+
+Install the production-quality optional backends only when needed:
+
+```bash
+python -m pip install -e ".[embeddings,language-detection]"
+```
+
+## Compatibility
+
+| Component | Support |
+|---|---|
+| Python | 3.10 or newer |
+| Node.js | 18 or newer |
+| Browser runtime | Playwright 1.61.1 (locked) |
+| Existing workspaces | No migration required |
+| Core runtime dependencies | No new mandatory dependency |
+
+## Quality and security
+
+- Candidate exact-SHA CI passed across Python 3.10–3.12 and Node.js 18/20/22.
+- All 27 adversarial acceptance scenarios passed.
+- All 14 real-browser Chromium smoke groups passed on local fixtures.
+- Real optional-backend tests passed on Python 3.10 and 3.12 without model downloads.
+- Package validation passed with the frozen 199-path boundary.
+- Dependency audit reported 0 vulnerabilities.
+- The stable release contains no executable, dependency, workflow, route, or package-path
+  drift from the tested `v3.2.1-rc.2` candidate.
+- The annotated `v3.2.1` tag is SSH-signed and verified by GitHub.
+
+## Downloads
+
+GitHub provides the standard **Source code (zip)** and **Source code (tar.gz)** archives
+generated from the signed `v3.2.1` tag.
+
+<details>
+<summary>Technical release assurance</summary>
+
+The stable tag is bound to commit
+`dc07d4902361ddf15ff0dd093faa0784b2fd47ab` and tag object
+`4f797f0cb0f75539edfc9bc9332ca4dd041e881c`. The executable candidate is
+`520915764a97d717aaf4682e02b8aae5dc511d2f` (`v3.2.1-rc.2`).
+
+Live dogfood retained 128 canonical baseline/candidate bundles under one Grok Build
+`0.2.101` / `grok-4.5` configuration. Every task completed or produced its expected
+policy refusal; no task failed or remained not-run. Tier 1 and Tier 2 both produced a
+`SAME` promotion verdict.
+
+At the maintainer's direction, publication proceeded without waiting for an independent
+GitHub review or `reviewer-signoff.json`. No independent reviewer sign-off, custom release
+archive/checksum, or green stable-promotion provenance attestation is claimed. This
+assurance limitation does not alter the shipped executable tree, which remains identical
+to the tested release candidate.
+
+Audit trail: [release PR #14](https://github.com/d-init-d/d-research-skill/pull/14) ·
+[tag workflow](https://github.com/d-init-d/d-research-skill/actions/runs/29506701529) ·
+[raw evaluation evidence](https://github.com/d-init-d/d-research-skill/tree/v3.2.1/release-evidence/v3.2.1)
+
+</details>
+
+**Full changelog:** [v3.2.0...v3.2.1](https://github.com/d-init-d/d-research-skill/compare/v3.2.0...v3.2.1) ·
+[Detailed candidate notes](https://github.com/d-init-d/d-research-skill/blob/v3.2.1/docs/release-v3.2.1-rc.2.md)

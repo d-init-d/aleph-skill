@@ -22,7 +22,7 @@ Record discovery/import state as a closed contract:
 | `available` | Bundled URI or explicit external path, `package_major: 3`, truthful invocation flag. |
 | `imported` / `verified` | `invoked: true`, portable `component_binding` on the import receipt, `ledger_ref`, and `artifact_paths.research_import_receipt`. |
 
-For bundled runs store `execution.d_research.path` as `aleph-component://d-research`. Workspace `schema_version` remains `2.0.0`. New Aleph 2.2 workspaces use `formula_version: 2.1.0`; existing formula 2.0.0 workspaces remain replayable under the legacy numerical contract.
+For bundled runs store `execution.d_research.path` as `aleph-component://d-research`. Workspace `schema_version` remains `2.0.0`. New Aleph 2.2+ workspaces use `formula_version: 2.1.0`; existing formula 2.0.0 workspaces remain replayable under the legacy numerical contract.
 
 ## Gateway
 
@@ -35,7 +35,9 @@ All research subprocesses use `scripts/research_gateway.py`:
 - timeouts and output limits;
 - JSON result with `component_binding`, capabilities, selected route, fallback chain, blockers, stdout/stderr digests.
 
-Use `research:manifest` as the machine-readable route inventory. Stable routes cover ledger, plan, browser, API/search, citations, archives, Wikidata, social snapshots, PDF/OCR, translation, semantic retrieval, multi-format extraction, data cleanup, scoring, reports, quality evaluation, acceptance, and package checks. `scripts/run_python.mjs` is deliberately not dispatchable.
+Use `research:manifest` as the machine-readable route inventory. Stable routes cover ledger, plan, investigative policy, browser, API/search, citations, archives, Wikidata, social snapshots, PDF/OCR, translation, semantic retrieval, multi-format extraction, data cleanup, scoring, reports, quality evaluation, acceptance, and package checks. `scripts/run_python.mjs` is deliberately not dispatchable.
+
+For D Research 3.3 investigative routes, initialize and validate `investigation-scope.json` through `research:policy`, then bind it to the research plan through `research:plan bind-policy`. Keep the scope and plan inside the run workspace; `--scope` is path-confined by the gateway. Authorization binding records an independently established review or ownership attestation and never treats a user-declared purpose as proof of authority.
 
 ## Capability ladder
 
@@ -57,9 +59,9 @@ The fallback does not emit a D Research CSV, HMAC sidecar, preserved D Research 
 
 ## Ledger contract
 
-Accept exact ordered D Research CSV headers: legacy 14, social 19, provenance 22, record-type 23. Verify sidecar `d-research-skill/hmac-sha256/v1 <digest>` with `D_RESEARCH_LEDGER_KEY`. Canonical CSV of Aleph must stay byte-equivalent with the pinned helper; drift is `D_RESEARCH_CANONICAL_DRIFT` hard fail.
+Accept exact ordered D Research CSV headers: legacy 14, social 19, provenance 22, record-type 23, and policy-aware 37. Verify sidecar `d-research-skill/hmac-sha256/v1 <digest>` with `D_RESEARCH_LEDGER_KEY`. Canonical CSV of Aleph must stay byte-equivalent with the pinned helper; drift is `D_RESEARCH_CANONICAL_DRIFT` hard fail.
 
-Import only `record_type=claim` as evidence; keep `process` and `blocker` in the audit stream.
+Import only `record_type=claim` through the ledger's `evidence` field. Preserve `lead` rows separately and keep `process` and `blocker` in the audit stream. A lead, raw-leak pointer, prohibited policy row, or lead-only disposition never becomes Aleph evidence.
 
 ## Portable receipt binding
 

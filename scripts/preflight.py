@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from _lib import skill_root
+from aleph import PACKAGE_VERSION
 from aleph.component_registry import COMPONENT_URI, verify_component_lock
 from aleph.discovery import discover_d_research
 from aleph.packs import validate_all_packs
@@ -105,7 +106,9 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Preflight checks for Aleph Skill 2.1.")
+    parser = argparse.ArgumentParser(
+        description=f"Preflight checks for Aleph Skill {PACKAGE_VERSION}."
+    )
     parser.add_argument("--d-research", help="Deprecated alias; prefer bundled component or --external-d-research.")
     parser.add_argument(
         "--external-d-research",

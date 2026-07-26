@@ -48,6 +48,8 @@ An agent reads `SKILL.md` as the entry point, then loads only the reference file
 
 From **2.1.0**, [D Research](https://github.com/d-init-d/d-research-skill) is **bundled** as a locked internal component (`aleph-component://d-research` under `components/d-research/`). Hosts install only `aleph-skill`; nested D Research is not a second skill. Research runs through `scripts/research_gateway.py` with a browser → host-browser → fetch → search → blocker capability ladder. Optional Node/Playwright/browser binaries are not shipped and are not auto-installed. If capabilities are missing, Aleph builds a provenance-rich evidence map with host tools or emits structured blockers, caps assurance at `limited`, and never fabricates a signed ledger. See `THIRD_PARTY_NOTICES.md` and `component-lock.json`.
 
+Aleph 2.3.0 pins D Research 3.3.0 and adds scope-bound investigative routing, policy-aware 37-column ledger import, and strict lead/evidence separation. Investigative operations remain workspace-confined and pass through the same locked gateway.
+
 External-CLI profiles describe version probes, bootstrap instructions, capability boundaries, isolation requirements, and receipt expectations. Installing one does not create subagents, tool isolation, or orchestration by itself; the selected host or wrapper must implement and attest those controls.
 
 ## Workflow lifecycle
@@ -150,7 +152,7 @@ Supported install locations:
 
 ## Verification
 
-When upgrading an existing 2.0.0 workspace, keep an untouched backup and run draft validation first. Aleph 2.2.x keeps `schema_version: 2.0.0`, writes `formula_version: 2.1.0` for new workspaces, and can still replay formula 2.0.0 artifacts. Its stricter numerical, component-binding, likelihood, provenance, and sealed-roleplay contracts can require report, packet/receipt, and numerical-artifact regeneration before final validation succeeds. For a workspace that still stores an absolute D Research path, run `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, inspect the byte-equivalence report, then repeat without `--check`. Do not use the 1.x schema migrator or hand-edit hashes or formula identifiers.
+When upgrading an existing 2.0.0 workspace, keep an untouched backup and run draft validation first. Aleph 2.3.x keeps `schema_version: 2.0.0`, writes `formula_version: 2.1.0` for new workspaces, and can still replay formula 2.0.0 artifacts. Its stricter numerical, component-binding, likelihood, provenance, policy-aware research, and sealed-roleplay contracts can require report, packet/receipt, research-import, and numerical-artifact regeneration before final validation succeeds. For a workspace that still stores an absolute D Research path, run `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, inspect the byte-equivalence report, then repeat without `--check`. Do not use the 1.x schema migrator or hand-edit hashes or formula identifiers.
 
 Run the local release gate:
 

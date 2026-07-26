@@ -60,21 +60,28 @@ class ComponentPackagingTests(unittest.TestCase):
         lock = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))
         entry = lock["components"]["d-research"]
         self.assertEqual(entry["uri"], "aleph-component://d-research")
-        self.assertEqual(entry["version"], "3.2.1")
-        self.assertEqual(entry["source_tag"], "v3.2.1")
-        self.assertEqual(entry["file_count"], 201)
+        self.assertEqual(entry["version"], "3.3.0")
+        self.assertEqual(entry["source_tag"], "v3.3.0")
+        self.assertEqual(entry["file_count"], 209)
         self.assertEqual(entry["file_count"], len(entry["files"]))
         self.assertIn("scripts/evidence_ledger.py", entry["entrypoints"])
+        self.assertIn("scripts/investigation_policy.py", entry["entrypoints"])
         self.assertTrue(entry["tree_sha256"].startswith("sha256:"))
         self.assertEqual(entry["source_archive_format"], "git-archive-tar")
         self.assertEqual(len(entry["upstream_tree"]), 40)
         recipe = entry["snapshot_recipe"]
         self.assertEqual(recipe["text_eol"], "lf")
-        self.assertEqual(len(recipe["excluded_paths"]), 529)
+        self.assertEqual(len(recipe["excluded_paths"]), 531)
         self.assertIn(".github/workflows/release-attest.yml", recipe["excluded_paths"])
         self.assertIn("release-evidence/v3.2.1/promotion.json", recipe["excluded_paths"])
+        self.assertIn(
+            "release-evidence/v3.3.0/maintainer-override.json",
+            recipe["excluded_paths"],
+        )
         self.assertNotIn(".npmignore", recipe["excluded_paths"])
         self.assertNotIn("docs/.archive/UPGRADE-PLAN.md", recipe["excluded_paths"])
+        self.assertIn("scripts/investigation_policy.py", {item["path"] for item in entry["files"]})
+        self.assertIn("v3.3.0 commit f097505c", entry["pin_note"])
 
     def test_component_lock_is_reproducible_and_fully_distributed(self) -> None:
         existing = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))

@@ -14,6 +14,8 @@ Record:
 - desired decision/report use,
 - safety or source restrictions.
 
+When the narrow D Research route is investigative, social-source, person, leaked-data, or authorized self-exposure research, initialize and validate an investigation scope through Aleph's `research:policy` gateway route. Bind the exact scope bytes to the research plan through `research:plan bind-policy` before dispatch. Purpose is context, not proof of authorization; keep lead-only and prohibited material outside the evidence map.
+
 ## 2. Assess complexity
 
 Score each dimension from `0.0` to `1.0` and explain the score:

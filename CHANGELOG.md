@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.3.0
+
+### Added
+- Added the D Research 3.3 investigative-policy surface through the locked `research:policy` gateway route, including workspace-confined scope initialization, validation, authorization binding, and research-plan policy binding.
+- Added exact 37-column ledger interoperability with byte-parity canonicalization, a `d-research-policy-37` import contract, and separate preservation of `lead` rows.
+- Added policy self-testing to Aleph's component-aware verification without executing repository-only checks from the vendored snapshot.
+
+### Changed
+- Updated the locked internal D Research component from `3.2.1` to `3.3.0`.
+- Advanced Aleph package and validator versions to `2.3.0`; workspace schema remains `2.0.0`, new workspaces continue to use formula `2.1.0`, and formula `2.0.0` artifacts remain replayable.
+- Updated gateway acceptance reconciliation for the D Research 3.3 matrix: repository-only case `23` is reconciled only against exact snapshot exclusions, while unrelated failures remain fatal.
+
+### Compatibility
+- Existing exact 14-, 19-, 22-, and 23-column ledgers remain canonicalizable, signable, verifiable, and importable. New policy-aware ledgers use the exact 37-column header.
+- No workspace schema or D Research plan migration is required. Existing component bindings, import receipts, finalization receipts, and validation receipts remain version-bound; preserve the original workspace and regenerate affected receipts on a sibling copy.
+- No new mandatory Python or Node dependency is introduced. Playwright remains locked upstream and browsers are never bundled or auto-installed.
+
+### Security and provenance
+- A `lead`, lead-only disposition, raw-leak pointer, or prohibited policy row cannot enter the Aleph evidence map; 37-column claims import only from the `evidence` field.
+- Pinned GitHub-verified annotated tag object `050d4060182a38c9383365896941b9cbeffee5f4`, commit `f097505c1f3a76428d381581c2ac9310553b6823`, Git tree `03469107c036438077eab8d00448e3001999eeb9`, and canonical archive SHA-256 `427a96e0a02a1a94b47f5ec482947f9cebe8b218804012e6b46c8c1e5286d300`.
+- Locked 209 component files with component-tree SHA-256 `6f34464f149dab246f51c082aaa886688133f80db4d5589526b3625329490bfa`; excluded 531 exact repository-only paths.
+
 ## 2.2.0
 
 ### Creative simulation

@@ -157,6 +157,7 @@ SCRIPT_INVENTORY: tuple[str, ...] = (
     "scripts/generate_test_pdf.py",
     "scripts/harvest_terms.py",
     "scripts/http_cache.py",
+    "scripts/investigation_policy.py",
     "scripts/multi_extract.py",
     "scripts/ocr.py",
     "scripts/package_manifest_check.mjs",
@@ -245,6 +246,7 @@ PATH_OPTIONS = frozenset(
         "--runs-dir",
         "--schema",
         "--screenshot",
+        "--scope",
         "--sig",
         "--source-file",
         "--workspace",
@@ -386,6 +388,7 @@ COMMAND_ROUTES: dict[str, dict[str, Any]] = {
     # not a CLI subcommand, so the old route was never executable.
     "research:import": _route("scripts/evidence_ledger.py", prefix=("verify",), hmac=True),
     "research:plan": _route("scripts/research_plan.py", hmac=True),
+    "research:policy": _route("scripts/investigation_policy.py"),
     "research:package-check": _route("scripts/package_manifest_check.mjs", kind="node"),
     "research:check-contract": _route("scripts/check_contract.py"),
     "research:check-refs": _route("scripts/check_internal_refs.py"),
@@ -569,11 +572,20 @@ def _reconcile_component_acceptance(
     reconciliation = _component_internal_reference_reconciliation(root)
     if reconciliation.get("ok") is not True:
         return None
-    expected_failures = ["10_undeclared_stale_citations"]
-    repo_only_cases = 1
+    component_version = str(reconciliation.get("component_version") or "")
+    if component_version == "3.3.0":
+        repo_only_failures = ["23_unsafe_runtime_config"]
+    elif component_version == "3.2.1":
+        repo_only_failures = [
+            "10_undeclared_stale_citations",
+            "23_unsafe_runtime_config",
+        ]
+    else:
+        repo_only_failures = ["10_undeclared_stale_citations"]
+    expected_failures = list(repo_only_failures)
+    repo_only_cases = len(repo_only_failures)
     dns_policy_cases = 0
-    if reconciliation.get("component_version") == "3.2.1":
-        repo_only_cases = 2
+    if "23_unsafe_runtime_config" in repo_only_failures:
         required = ".github/workflows/lint-and-self-test.yml"
         normalized = re.sub(r"/+", "/", text.replace("\\", "/"))
         if (
@@ -583,21 +595,14 @@ def _reconcile_component_acceptance(
             or "FileNotFoundError" not in text
         ):
             return None
-        dns_failures = {
-            "22_tier_b_lookup_failure_structured",
-            "26_resource_caps_deterministic",
-        }
-        if dns_failures <= set(failed) and _host_resolves_non_public("www.reddit.com"):
-            expected_failures.extend(
-                [
-                    "22_tier_b_lookup_failure_structured",
-                    "23_unsafe_runtime_config",
-                    "26_resource_caps_deterministic",
-                ]
-            )
-            dns_policy_cases = 2
-        else:
-            expected_failures.append("23_unsafe_runtime_config")
+    dns_failures = [
+        "22_tier_b_lookup_failure_structured",
+        "26_resource_caps_deterministic",
+    ]
+    if set(dns_failures) <= set(failed) and _host_resolves_non_public("www.reddit.com"):
+        expected_failures.extend(dns_failures)
+        dns_policy_cases = len(dns_failures)
+    expected_failures.sort(key=lambda value: int(value.split("_", 1)[0]))
     if failed != expected_failures:
         return None
     reconciliation.update(
@@ -606,6 +611,9 @@ def _reconcile_component_acceptance(
                 re.findall(r"^\s*\[PASS\]", text, flags=re.MULTILINE)
             ),
             "upstream_repo_only_cases_reconciled": repo_only_cases,
+            "upstream_repo_only_case_ids": [
+                value.split("_", 1)[0] for value in repo_only_failures
+            ],
             "host_dns_policy_cases_delegated": dns_policy_cases,
             "browser_cases_delegated": len(
                 re.findall(r"^\s*\[DELEGATED\]", text, flags=re.MULTILINE)
@@ -814,7 +822,7 @@ def _filter_research_env(
     filtered["D_RESEARCH_MODE"] = MODE_RESEARCH
     if not network_allowed:
         filtered["D_RESEARCH_NO_NETWORK"] = "1"
-        # D Research 3.2.1 can use an installed sentence-transformers backend.
+        # D Research 3.2.1+ can use an installed sentence-transformers backend.
         # Keep model resolution cache-only unless the caller explicitly grants
         # network access; these are defense-in-depth flags, not an OS sandbox.
         filtered["HF_HUB_OFFLINE"] = "1"
@@ -1297,6 +1305,43 @@ def _component_self_test(
         )
     except OSError as exc:
         checks.append({"name": "evidence-ledger-self-test", "status": "fail", "error": str(exc)})
+    policy = component_root / "scripts" / "investigation_policy.py"
+    try:
+        completed = _run_bounded_process(
+            [sys.executable, "-B", str(policy), "self-test"],
+            cwd=workspace,
+            env=env,
+            timeout_sec=DEFAULT_TIMEOUT_SEC,
+            output_limit=DEFAULT_OUTPUT_LIMIT,
+        )
+        returncode = int(completed["returncode"])
+        checks.append(
+            {
+                "name": "investigation-policy-self-test",
+                "status": "pass"
+                if returncode == 0
+                and not completed["timed_out"]
+                and not completed["output_exceeded"]
+                else "fail",
+                "exit_code": returncode,
+                "stdout": _redact(
+                    bytes(completed["stdout"]).decode("utf-8", errors="replace")
+                )[-4000:],
+                "stderr": _redact(
+                    bytes(completed["stderr"]).decode("utf-8", errors="replace")
+                )[-4000:],
+                "timed_out": completed["timed_out"],
+                "output_exceeded": completed["output_exceeded"],
+            }
+        )
+    except OSError as exc:
+        checks.append(
+            {
+                "name": "investigation-policy-self-test",
+                "status": "fail",
+                "error": str(exc),
+            }
+        )
     caps = preflight.get("capabilities") or {}
     if not caps.get("node"):
         delegated.append(
@@ -1810,10 +1855,19 @@ def run_command(
         completed_message = f"locked helper exited with code {returncode}"
     completed_blockers: list[dict[str, str]] | None = None
     if acceptance_reconciliation is not None:
-        reconciled_count = int(
-            acceptance_reconciliation.get("upstream_repo_only_cases_reconciled", 0)
+        reconciled_case_ids = [
+            str(value)
+            for value in acceptance_reconciliation.get(
+                "upstream_repo_only_case_ids", []
+            )
+        ]
+        reconciled_count = len(reconciled_case_ids)
+        case_labels = (
+            reconciled_case_ids[0]
+            if reconciled_count == 1
+            else ", ".join(reconciled_case_ids[:-1])
+            + f" and {reconciled_case_ids[-1]}"
         )
-        case_labels = "10" if reconciled_count == 1 else "10 and 23"
         case_noun = "case" if reconciled_count == 1 else "cases"
         case_verb = "requires" if reconciled_count == 1 else "require"
         completed_blockers = [

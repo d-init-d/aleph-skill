@@ -142,19 +142,18 @@ class ResearchGatewayTests(unittest.TestCase):
             returncode=1,
             stdout=(
                 b"  [PASS] 01_x\n"
-                b"  [FAIL] 10_undeclared_stale_citations\n"
                 b"  [FAIL] 23_unsafe_runtime_config - Traceback: scripts/check_contract.py "
                 b"FileNotFoundError: .github/workflows/lint-and-self-test.yml\n"
             ),
         )
         self.assertIsNotNone(reconciled)
         assert reconciled is not None
-        self.assertEqual(reconciled["upstream_repo_only_cases_reconciled"], 2)
+        self.assertEqual(reconciled["upstream_repo_only_cases_reconciled"], 1)
+        self.assertEqual(reconciled["upstream_repo_only_case_ids"], ["23"])
         hidden_failure = _reconcile_component_acceptance(
             root=ROOT,
             returncode=1,
             stdout=(
-                b"  [FAIL] 10_undeclared_stale_citations\n"
                 b"  [FAIL] 23_unsafe_runtime_config - Traceback: scripts/check_contract.py "
                 b"FileNotFoundError: .github/workflows/lint-and-self-test.yml\n"
                 b"  [FAIL] 11_unrelated_runtime_failure\n"
@@ -165,7 +164,6 @@ class ResearchGatewayTests(unittest.TestCase):
             root=ROOT,
             returncode=1,
             stdout=(
-                b"  [FAIL] 10_undeclared_stale_citations\n"
                 b"  [FAIL] 23_unsafe_runtime_config - unrelated failure\n"
             ),
         )
@@ -173,7 +171,6 @@ class ResearchGatewayTests(unittest.TestCase):
 
     def test_dns_policy_acceptance_delegation_is_exact(self) -> None:
         output = (
-            b"  [FAIL] 10_undeclared_stale_citations\n"
             b"  [FAIL] 22_tier_b_lookup_failure_structured\n"
             b"  [FAIL] 23_unsafe_runtime_config - Traceback: scripts/check_contract.py "
             b"FileNotFoundError: .github/workflows/lint-and-self-test.yml\n"
@@ -190,7 +187,7 @@ class ResearchGatewayTests(unittest.TestCase):
             )
         self.assertIsNotNone(reconciled)
         assert reconciled is not None
-        self.assertEqual(reconciled["upstream_repo_only_cases_reconciled"], 2)
+        self.assertEqual(reconciled["upstream_repo_only_cases_reconciled"], 1)
         self.assertEqual(reconciled["host_dns_policy_cases_delegated"], 2)
 
         with mock.patch(
@@ -271,6 +268,10 @@ class ResearchGatewayTests(unittest.TestCase):
         }
         expected = set(SCRIPT_INVENTORY) - set(NON_DISPATCHABLE_SCRIPTS)
         self.assertEqual(expected - route_paths, set())
+        self.assertEqual(
+            COMMAND_ROUTES["research:policy"]["script"],
+            "scripts/investigation_policy.py",
+        )
         self.assertNotIn("scripts/run_python.mjs", route_paths)
         for route in COMMAND_ROUTES.values():
             script = route.get("script")
@@ -316,6 +317,20 @@ class ResearchGatewayTests(unittest.TestCase):
             )
             self.assertEqual(relative["error_code"], "PATH_ESCAPE")
             self.assertFalse((Path(temporary) / "escape.csv").exists())
+
+            scope_escape = run_command(
+                "research:plan",
+                skill_root=ROOT,
+                extra_args=[
+                    "bind-policy",
+                    "--route",
+                    "investigative_osint",
+                    "--scope",
+                    "../outside-scope.json",
+                ],
+                workspace=workspace,
+            )
+            self.assertEqual(scope_escape["error_code"], "PATH_ESCAPE")
 
     def test_workspace_inside_component_is_refused(self) -> None:
         result = run_command(
@@ -430,6 +445,7 @@ class ResearchGatewayTests(unittest.TestCase):
         names = {item["name"] for item in result["result"]["checks"]}
         self.assertIn("component-lock", names)
         self.assertIn("evidence-ledger-self-test", names)
+        self.assertIn("investigation-policy-self-test", names)
         self.assertNotIn("upstream-repository-contract", names)
 
     def test_network_route_without_explicit_capability_is_delegated(self) -> None:

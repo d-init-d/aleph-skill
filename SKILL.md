@@ -3,7 +3,7 @@ name: aleph-skill
 description: Evidence-grounded causal timeline simulation for AI CLI and IDE hosts that support Agent Skills or an Aleph adapter contract. Use for counterfactual history, prospective interventions, hybrid past-to-future projections, butterfly effects, calibrated scenario analysis, domain-pack modeling, evidence-based or assumption-only actor decisions, and auditable uncertainty.
 ---
 
-# Aleph Skill 2.2.0
+# Aleph Skill 2.3.0
 
 Model how a defined intervention propagates through a causal system. Treat Aleph as a simulation protocol, never an oracle. Keep these labels distinct:
 
@@ -33,7 +33,7 @@ A hypothetical change point is valid without evidence that it already occurred. 
 ## Execute the simulation
 
 1. Research the baseline, mechanisms, contradictions, actors, and measurable factors until evidence saturation. Checkpoint every wave. If a host limit interrupts the run, publish an honest unsaturated handoff that can be resumed. Follow `references/adaptive-research-workflow.md`.
-2. After gateway preflight verifies the locked bundle and the required route capability, invoke D Research only through `<ALEPH_SKILL_ROOT>/scripts/research_gateway.py`, import its signed ledger with `<ALEPH_SKILL_ROOT>/scripts/import_research_ledger.py`, preserve the source ledger and HMAC sidecar, and bind a portable `component_binding` on the import receipt. If the required capability is blocked, build the evidence map directly from opened host-native sources, retain explicit provenance, omit the D Research import receipt, and cap assurance at `limited`.
+2. After gateway preflight verifies the locked bundle and the required route capability, invoke D Research only through `<ALEPH_SKILL_ROOT>/scripts/research_gateway.py`, import its signed ledger with `<ALEPH_SKILL_ROOT>/scripts/import_research_ledger.py`, preserve the source ledger and HMAC sidecar, and bind a portable `component_binding` on the import receipt. For a D Research 3.3 investigative route, initialize/check the scope through `research:policy` and bind it through `research:plan bind-policy` before dispatch. Import only `record_type=claim` from the `evidence` field; preserve `lead` separately from `process`/`blocker` audit rows. If the required capability is blocked, build the evidence map directly from opened host-native sources, retain explicit provenance, omit the D Research import receipt, and cap assurance at `limited`.
 3. Build typed nodes and admitted causal edges. Read `references/node-builder.md` and `references/causal-edge-protocol.md`.
 4. Compile and run the deterministic or Monte Carlo engine. Preserve config/model hashes, samples, invalid mass, traces, and replay material. Read `references/propagation-engine.md`.
 5. Cluster distinct scenario branches. Use `relative_weight` unless a declared calibration policy and hindcast gate authorize `calibrated_probability`. Read `references/branch-management.md`.
@@ -59,6 +59,7 @@ Read `references/human-node-protocol.md` whenever a person can materially change
 - Invalid/nonconvergent Monte Carlo mass is reported and cannot be silently renormalized.
 - Branch probability is forbidden without calibration evidence; diagnostic score never grants an assurance tier.
 - Evidence-based material actor research and roleplay are separate, ordered, sealed, receipt-backed executions; assumption-only actors use a sealed roleplay execution without a fabricated research track.
+- Investigative research has a validated scope and policy binding; lead-only, raw-leak, blocked, and prohibited rows never enter the evidence map.
 - Every artifact path remains workspace-relative; installers copy only the verified distribution manifest and never secrets or symlinks.
 - Final output passes strict schema/semantic validation, replay, integrity, assurance, and report gates.
 
