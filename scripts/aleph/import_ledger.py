@@ -636,6 +636,15 @@ def import_d_research_ledger(
         if record_type not in VALID_RECORD_TYPES:
             issues.append(issue("LEDGER_MALFORMED", pointer=f"line/{index}/record_type", actual=record_type))
             continue
+        if record_type == "lead" and not policy_schema:
+            issues.append(
+                issue(
+                    "LEDGER_MALFORMED",
+                    pointer=f"line/{index}/record_type",
+                    message="record_type=lead requires the exact 37-column policy contract",
+                )
+            )
+            continue
         if not claim_id:
             issues.append(issue("EMPTY_ID", pointer=f"line/{index}/claim_id"))
             continue

@@ -48,7 +48,7 @@ An agent reads `SKILL.md` as the entry point, then loads only the reference file
 
 From **2.1.0**, [D Research](https://github.com/d-init-d/d-research-skill) is **bundled** as a locked internal component (`aleph-component://d-research` under `components/d-research/`). Hosts install only `aleph-skill`; nested D Research is not a second skill. Research runs through `scripts/research_gateway.py` with a browser → host-browser → fetch → search → blocker capability ladder. Optional Node/Playwright/browser binaries are not shipped and are not auto-installed. If capabilities are missing, Aleph builds a provenance-rich evidence map with host tools or emits structured blockers, caps assurance at `limited`, and never fabricates a signed ledger. See `THIRD_PARTY_NOTICES.md` and `component-lock.json`.
 
-Aleph 2.3.0 pins D Research 3.3.0 and adds scope-bound investigative routing, policy-aware 37-column ledger import, and strict lead/evidence separation. Investigative operations remain workspace-confined and pass through the same locked gateway.
+Aleph 2.3.1 pins D Research 3.3.0 and adds scope-bound investigative routing, policy-aware 37-column ledger import, and strict lead/evidence separation. Investigative operations remain workspace-confined and pass through the same locked gateway.
 
 External-CLI profiles describe version probes, bootstrap instructions, capability boundaries, isolation requirements, and receipt expectations. Installing one does not create subagents, tool isolation, or orchestration by itself; the selected host or wrapper must implement and attest those controls.
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import hmac
 import importlib.util
 import io
 import json
@@ -22,7 +23,11 @@ from pathlib import Path
 from types import ModuleType
 
 from aleph.component_registry import COMPONENT_URI, resolve_component
-from aleph.import_ledger import canonicalise_d_research_csv, import_d_research_ledger
+from aleph.import_ledger import (
+    canonicalise_d_research_csv,
+    import_d_research_ledger,
+    render_evidence_csv,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -43,6 +48,11 @@ FIELDS_POLICY = [
     "redaction_class", "retention_until", "authorization_scope_hash",
 ]
 FIELDS_37 = FIELDS_23 + FIELDS_POLICY
+FIELDS_PROTOTYPE = [
+    "id", "record_type", "claim", "evidence", "source", "source_type", "source_tier",
+    "date", "retrieved_at", "access_method", "retrieval_status", "confidence",
+    "contradiction_status", "notes",
+]
 
 
 def _csv_bytes(fields: list[str], rows: list[dict[str, str]]) -> bytes:
@@ -349,6 +359,431 @@ class CanonicalParityTests(unittest.TestCase):
                 imported = import_d_research_ledger(ledger, package_major=3)
                 self.assertFalse(imported.get("ok"), imported)
                 self.assertEqual(imported.get("evidence_rows"), [])
+
+    def test_renderer_and_canonical_parser_fail_closed(self) -> None:
+        rendered = render_evidence_csv(
+            [
+                {
+                    "evidence_id": "evidence:c1",
+                    "claim": "Rendered claim",
+                    "source": "https://example.invalid/source",
+                    "source_type": "official",
+                    "source_tier": "primary",
+                    "date": "2024-01-01",
+                    "retrieved_at": "2024-01-02",
+                    "access_method": "public_api",
+                    "retrieval_status": "api",
+                    "quote_or_value": "A, quoted value",
+                    "confidence": "0.85",
+                    "contradiction_status": "none",
+                    "notes": "render fixture",
+                }
+            ]
+        )
+        parsed = list(csv.DictReader(io.StringIO(rendered.decode("utf-8"))))
+        self.assertEqual(parsed[0]["evidence_id"], "evidence:c1")
+        self.assertEqual(parsed[0]["quote_or_value"], "A, quoted value")
+
+        malformed_inputs = {
+            "wrong-header": b"id,claim\nc1,test\n",
+            "excess-column": _csv_bytes(FIELDS_14, [_claim_row()]).rstrip(b"\n")
+            + b",unexpected\n",
+            "invalid-utf8": b"\xff\xfe",
+        }
+        for name, raw in malformed_inputs.items():
+            with self.subTest(name=name):
+                canonical, _fields, _rows, issues = canonicalise_d_research_csv(raw)
+                self.assertIsNone(canonical)
+                self.assertIn("LEDGER_MALFORMED", {item.code for item in issues})
+
+    def test_hmac_sidecar_verification_is_strict_and_auto_discovered(self) -> None:
+        raw = _csv_bytes(FIELDS_14, [_claim_row()])
+        ledger = self._write_temp(raw)
+        canonical, _fields, _rows, issues = canonicalise_d_research_csv(raw)
+        self.assertFalse(issues)
+        assert canonical is not None
+        key = b"canonical-parity-test-key"
+        signature = hmac.new(key, canonical, hashlib.sha256).hexdigest()
+        automatic = ledger.with_suffix(ledger.suffix + ".hmac")
+        automatic.write_text(
+            f"d-research-skill/hmac-sha256/v1 {signature}\n",
+            encoding="utf-8",
+        )
+        self.addCleanup(lambda: automatic.unlink(missing_ok=True))
+
+        verified = import_d_research_ledger(ledger, hmac_key=key, package_major=3)
+        self.assertTrue(verified.get("ok"), verified.get("issues"))
+        self.assertTrue(verified.get("hmac_verified"))
+        self.assertEqual(verified.get("hmac_sidecar"), str(automatic))
+
+        no_key = import_d_research_ledger(ledger, package_major=3)
+        self.assertFalse(no_key.get("ok"))
+        self.assertIn("HMAC_TAMPER", {item["code"] for item in no_key["issues"]})
+
+        malformed = automatic.with_name(automatic.name + ".malformed")
+        malformed.write_text("not-a-supported-signature\n", encoding="utf-8")
+        self.addCleanup(lambda: malformed.unlink(missing_ok=True))
+        bad_format = import_d_research_ledger(
+            ledger,
+            hmac_sidecar=malformed,
+            hmac_key=key,
+            package_major=3,
+        )
+        self.assertFalse(bad_format.get("ok"))
+        self.assertIn("HMAC_TAMPER", {item["code"] for item in bad_format["issues"]})
+
+        mismatch = automatic.with_name(automatic.name + ".mismatch")
+        mismatch.write_text(
+            "d-research-skill/hmac-sha256/v1 " + "0" * 64 + "\n",
+            encoding="utf-8",
+        )
+        self.addCleanup(lambda: mismatch.unlink(missing_ok=True))
+        tampered = import_d_research_ledger(
+            ledger,
+            hmac_sidecar=mismatch,
+            hmac_key=key,
+            package_major=3,
+        )
+        self.assertFalse(tampered.get("ok"))
+        self.assertEqual(
+            {item["code"] for item in tampered["issues"]},
+            {"HMAC_TAMPER", "LEDGER_TAMPER"},
+        )
+
+        missing_sidecar = import_d_research_ledger(
+            ledger,
+            hmac_sidecar=automatic.with_name("missing-ledger-sidecar.hmac"),
+            hmac_key=key,
+            package_major=3,
+        )
+        self.assertFalse(missing_sidecar.get("ok"))
+        self.assertIn("HMAC_TAMPER", {item["code"] for item in missing_sidecar["issues"]})
+
+    def test_source_tier_and_retrieval_status_mapping(self) -> None:
+        variants = [
+            ("primary", "public_api", "primary", "api"),
+            ("paper", "public_file", "authoritative-secondary", "downloaded"),
+            ("secondary", "search", "secondary", "search-snippet"),
+            ("unknown", "manual_needed", "tertiary", "blocked"),
+            ("community", "playwright", "secondary", "opened"),
+        ]
+        rows = [
+            _claim_row(
+                claim_id=f"mapping-{index}",
+                source_type=source_type,
+                access_method=access_method,
+            )
+            for index, (source_type, access_method, _tier, _status) in enumerate(variants)
+        ]
+        ledger = self._write_temp(_csv_bytes(FIELDS_14, rows))
+        imported = import_d_research_ledger(ledger, package_major=3)
+        self.assertTrue(imported.get("ok"), imported.get("issues"))
+        mapped = {row["evidence_id"]: row for row in imported["evidence_rows"]}
+        for index, (_source_type, _access_method, tier, status) in enumerate(variants):
+            with self.subTest(index=index):
+                row = mapped[f"evidence:mapping-{index}"]
+                self.assertEqual(row["source_tier"], tier)
+                self.assertEqual(row["retrieval_status"], status)
+
+    def test_prototype_numeric_confidence_and_import_error_paths(self) -> None:
+        prototype = {
+            "id": "prototype-1",
+            "record_type": "claim",
+            "claim": "Prototype claim",
+            "evidence": "Prototype evidence",
+            "source": "https://example.invalid/prototype",
+            "source_type": "official",
+            "source_tier": "primary",
+            "date": "2024-01-01",
+            "retrieved_at": "2024-01-02T00:00:00Z",
+            "access_method": "download",
+            "retrieval_status": "downloaded",
+            "confidence": "0.42",
+            "contradiction_status": "none",
+            "notes": "prototype fixture",
+        }
+        ledger = self._write_temp(_csv_bytes(FIELDS_PROTOTYPE, [prototype]))
+        imported = import_d_research_ledger(ledger, package_major=3)
+        self.assertTrue(imported.get("ok"), imported.get("issues"))
+        self.assertEqual(imported["evidence_rows"][0]["confidence"], "0.42")
+        self.assertEqual(imported.get("source_contract"), "aleph-prototype-14")
+
+        for confidence in ("1.01", "not-a-number"):
+            with self.subTest(confidence=confidence):
+                invalid = dict(prototype, id=f"prototype-{confidence}", confidence=confidence)
+                path = self._write_temp(_csv_bytes(FIELDS_PROTOTYPE, [invalid]))
+                result = import_d_research_ledger(path, package_major=3)
+                self.assertFalse(result.get("ok"))
+                self.assertIn("/confidence", result["issues"][0]["pointer"])
+
+        unsupported = import_d_research_ledger(ledger, package_major=4)
+        self.assertFalse(unsupported.get("ok"))
+        self.assertEqual(unsupported["issues"][0]["code"], "LEDGER_MAJOR")
+        missing = import_d_research_ledger(
+            ledger.with_name("does-not-exist.csv"),
+            package_major=3,
+        )
+        self.assertFalse(missing.get("ok"))
+        self.assertEqual(missing["issues"][0]["code"], "LEDGER_MALFORMED")
+
+        invalid_rows = [
+            _claim_row(claim_id="", record_type="claim"),
+            _claim_row(claim_id="duplicate", record_type="claim"),
+            _claim_row(claim_id="duplicate", record_type="claim"),
+            _claim_row(claim_id="bad-type", record_type="unknown-record"),
+            _claim_row(claim_id="empty-claim", claim="", record_type="claim"),
+            _claim_row(claim_id="missing-source", source_url="", record_type="claim"),
+        ]
+        invalid_path = self._write_temp(_csv_bytes(FIELDS_23, invalid_rows))
+        invalid_result = import_d_research_ledger(invalid_path, package_major=3)
+        self.assertFalse(invalid_result.get("ok"))
+        self.assertTrue(
+            {"EMPTY_ID", "LEDGER_DUPLICATE", "LEDGER_MALFORMED"}
+            <= {item["code"] for item in invalid_result["issues"]}
+        )
+
+        pre_policy_lead = _claim_row(
+            claim_id="legacy-lead",
+            record_type="lead",
+            claim="Lead rows require the policy contract",
+        )
+        pre_policy_path = self._write_temp(_csv_bytes(FIELDS_23, [pre_policy_lead]))
+        pre_policy_result = import_d_research_ledger(pre_policy_path, package_major=3)
+        self.assertFalse(pre_policy_result.get("ok"))
+        self.assertIn(
+            "record_type=lead requires the exact 37-column policy contract",
+            pre_policy_result["issues"][0]["message"],
+        )
+
+    def test_policy_validation_matrix_covers_security_boundaries(self) -> None:
+        scope_hash = "sha256:" + "a" * 64
+        cases: list[tuple[str, dict[str, str], str]] = [
+            ("required", {"source_access_class": ""}, "missing required policy fields"),
+            ("claim", {"claim": ""}, "policy row requires a claim"),
+            (
+                "lead-source",
+                {
+                    "record_type": "lead",
+                    "source_url": "",
+                    "discovery_disposition": "lead_only",
+                    "reporting_disposition": "non_official_unverified_leads",
+                },
+                "lead row requires source_url",
+            ),
+            (
+                "audit-context",
+                {
+                    "record_type": "process",
+                    "source_url": "",
+                    "source_title": "",
+                    "notes": "",
+                    "evidence": "",
+                    "snapshot_status": "",
+                    "robots_status": "",
+                    "verifiability": "",
+                    "discovery_disposition": "context_only",
+                    "reporting_disposition": "context_only",
+                },
+                "audit row requires source_url or source_title",
+            ),
+            ("source-type", {"source_type": "blog"}, "invalid source type"),
+            ("confidence", {"confidence": "certain"}, "invalid policy-ledger confidence"),
+            ("contradiction", {"contradiction": "maybe"}, "invalid contradiction value"),
+            ("verifiability", {"verifiability": "mirror"}, "invalid verifiability value"),
+            ("snapshot", {"snapshot_status": "gone"}, "invalid snapshot status"),
+            ("robots", {"robots_status": "ignored"}, "invalid robots status"),
+            ("license", {"license_spdx": "LicenseRef-"}, "invalid SPDX-style license"),
+            ("provenance", {"prov_activity_id": "contains space"}, "invalid provenance"),
+            (
+                "r0-person",
+                {"subject_class": "public_role_person"},
+                "R1 person row must use R2 or R3",
+            ),
+            (
+                "r1-sensitive",
+                {"data_sensitivity": "sensitive", "redaction_class": "other_pii"},
+                "R1 permits public/professional data only",
+            ),
+            (
+                "r2-subject",
+                {"policy_tier": "R2", "subject_class": "organization"},
+                "R2 requires a person or self subject",
+            ),
+            (
+                "r2-sensitive",
+                {
+                    "policy_tier": "R2",
+                    "subject_class": "self",
+                    "data_sensitivity": "personal",
+                    "redaction_class": "other_pii",
+                },
+                "R2 permits public/professional data only",
+            ),
+            (
+                "r3-subject",
+                {
+                    "policy_tier": "R3",
+                    "subject_class": "private_person",
+                    "authorization_scope_hash": scope_hash,
+                    "retention_until": "2024-01-30T00:00:00Z",
+                },
+                "R3 requires a self or organization subject",
+            ),
+            (
+                "main-lead",
+                {"record_type": "lead", "reporting_disposition": "main_findings"},
+                "main_findings requires record_type=claim",
+            ),
+            (
+                "lead-partition",
+                {"reporting_disposition": "non_official_unverified_leads"},
+                "non_official_unverified_leads requires record_type=lead",
+            ),
+            (
+                "lead-discovery",
+                {"discovery_disposition": "lead_only"},
+                "lead_only requires record_type=lead",
+            ),
+            (
+                "redaction",
+                {"data_sensitivity": "personal", "redaction_class": "none"},
+                "personal or sensitive data requires redaction",
+            ),
+            ("lineage", {"lineage_id": "contains space"}, "invalid lineage identifier"),
+            (
+                "retention-format",
+                {"retention_until": "2024-01-01"},
+                "retention timestamp must be RFC 3339",
+            ),
+            (
+                "scope-format",
+                {"authorization_scope_hash": "sha256:not-valid"},
+                "invalid authorization scope hash",
+            ),
+            (
+                "partial-social",
+                {"speaker_identity": "official"},
+                "social classification fields must be populated together",
+            ),
+            (
+                "social-promotion",
+                {
+                    "speaker_identity": "claimed_identity",
+                    "speaker_relationship": "secondhand",
+                    "content_origin": "original",
+                },
+                "social main finding lacks verified original evidence",
+            ),
+            (
+                "derivative-social",
+                {
+                    "speaker_identity": "official",
+                    "speaker_relationship": "repost",
+                    "content_origin": "quote",
+                    "reporting_disposition": "context_only",
+                },
+                "derivative social evidence requires lineage_id",
+            ),
+            (
+                "prohibited",
+                {
+                    "policy_tier": "RX",
+                    "subject_class": "minor",
+                    "data_sensitivity": "minor",
+                    "discovery_disposition": "prohibited",
+                    "reporting_disposition": "prohibited",
+                },
+                "prohibited policy row cannot be imported",
+            ),
+            (
+                "secret-fields",
+                {
+                    "source_access_class": "prohibited_secret",
+                    "data_sensitivity": "secret",
+                    "reporting_disposition": "prohibited",
+                },
+                "secret or prohibited metadata retained protected fields",
+            ),
+            (
+                "raw-leak-shape",
+                {
+                    "source_access_class": "raw_leak_lead_only",
+                    "source_url": "",
+                    "source_title": "",
+                    "evidence": "",
+                    "quote_or_anchor": "",
+                    "data_sensitivity": "personal",
+                    "redaction_class": "other_pii",
+                    "discovery_disposition": "lead_only",
+                    "reporting_disposition": "non_official_unverified_leads",
+                },
+                "raw-leak metadata requires lead, process, or blocker",
+            ),
+            (
+                "r3-binding",
+                {"policy_tier": "R3", "subject_class": "self"},
+                "R3 requires authorization binding",
+            ),
+            (
+                "r3-anchor",
+                {
+                    "policy_tier": "R3",
+                    "subject_class": "self",
+                    "authorization_scope_hash": scope_hash,
+                    "retention_until": "2024-01-30T00:00:00Z",
+                    "date_accessed": "not-a-date",
+                },
+                "R3 requires a valid retention anchor",
+            ),
+            (
+                "r3-window",
+                {
+                    "policy_tier": "R3",
+                    "subject_class": "self",
+                    "authorization_scope_hash": scope_hash,
+                    "retention_until": "2024-02-01T00:00:00Z",
+                    "date_accessed": "2024-01-01",
+                },
+                "R3 retention exceeds the 30-day maximum",
+            ),
+        ]
+        for name, overrides, expected in cases:
+            with self.subTest(name=name):
+                ledger = self._write_temp(_csv_bytes(FIELDS_37, [_claim_row(**overrides)]))
+                imported = import_d_research_ledger(ledger, package_major=3)
+                messages = "\n".join(item.get("message", "") for item in imported["issues"])
+                self.assertFalse(imported.get("ok"), imported)
+                self.assertIn(expected, messages)
+
+    def test_valid_policy_authorization_and_license_variants(self) -> None:
+        scope_hash = "sha256:" + "b" * 64
+        rows = [
+            _claim_row(
+                claim_id="r3-valid",
+                policy_tier="R3",
+                subject_class="self",
+                purpose_category="self_audit",
+                source_access_class="user_provided_private",
+                authorization_scope_hash=scope_hash,
+                retention_until="2024-01-31T00:00:00Z",
+                license_spdx="NOASSERTION",
+            ),
+            _claim_row(
+                claim_id="r4-valid",
+                policy_tier="R4",
+                subject_class="organization",
+                purpose_category="authorized_pentest",
+                source_access_class="authorized_provider",
+                authorization_scope_hash=scope_hash,
+                retention_until="2024-06-01T00:00:00+00:00",
+                license_spdx="LicenseRef-Internal",
+            ),
+            _claim_row(claim_id="empty-license", license_spdx=""),
+        ]
+        ledger = self._write_temp(_csv_bytes(FIELDS_37, rows))
+        imported = import_d_research_ledger(ledger, package_major=3)
+        self.assertTrue(imported.get("ok"), imported.get("issues"))
+        self.assertEqual(len(imported["evidence_rows"]), 3)
 
     def _write_temp(self, raw: bytes) -> Path:
         handle = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")

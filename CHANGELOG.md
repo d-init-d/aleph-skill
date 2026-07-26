@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.3.1
+
+### Release integrity
+- Added targeted regression coverage for the D Research 3.3 policy-ledger validation paths so the branch-aware release gate passes without lowering its threshold.
+- Aligned importer behavior with the upstream ledger validator by rejecting `record_type=lead` outside the exact 37-column policy contract.
+- Kept the public `v2.3.0` tag immutable after its unpublished workflow run stopped at the coverage gate; `v2.3.1` is the first published package in the 2.3 line.
+
+### Compatibility
+- Advanced package and validator versions to `2.3.1`. Workspace schema `2.0.0`, formula contracts, and the locked D Research `3.3.0` component remain unchanged. Existing exact 23-column ledgers remain supported, but `lead` rows require the 37-column policy schema as specified upstream.
+
 ## 2.3.0
 
 ### Added

@@ -1,10 +1,10 @@
 {
   "schema_version": "2.0.0",
-  "package_version": "2.3.0",
+  "package_version": "2.3.1",
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
-  "file_count": 451,
-  "tree_sha256": "f335dee310c095ac99f6e4606802029ba9e8fe17629ab09caad8453a2f981d03",
+  "file_count": 452,
+  "tree_sha256": "27b45ce44cea28e7f9f40c427023f6730e202ff512448067e54e2ecbab90aeef",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -32,6 +32,11 @@
       "size": 5538
     },
     {
+      "path": ".github/release-notes/v2.3.1.md",
+      "sha256": "da3d9b8b25117c84061b02a9d03287b4cd0bd04c7ad401b68d62fe337f1f05a6",
+      "size": 6287
+    },
+    {
       "path": ".github/workflows/ci.yml",
       "sha256": "a301376df378a48bd5e6075c00a0a128ebff571e612eff85f03d800afa01b701",
       "size": 263
@@ -53,8 +58,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "5853226a1257a869d2a901c943e0a84698e9b9a54e593119163ffded63172c10",
-      "size": 25349
+      "sha256": "b4568b2588b2c93c0a5edad4175dbcedbf4280a6245d4654e5098f979cfddbfb",
+      "size": 26154
     },
     {
       "path": "LICENSE",
@@ -63,17 +68,17 @@
     },
     {
       "path": "README.md",
-      "sha256": "23604f54db7300ec5c8677ebd0a89c6c6a73332ea1e469c5c0a95c583ea19bd5",
+      "sha256": "a9fb6613359310ccbf5f95c720cce46e6a54f9b54f6b6baaaf9d97b085071a94",
       "size": 15021
     },
     {
       "path": "README.vi.md",
-      "sha256": "b93ea05742a8a5599b71e4ef1b93eb120918d2d66d35876989213b83cd9853b1",
+      "sha256": "9ba1e80b2d125d1dce880fbf879e199da0432e7cce8130002ae1fbf474d60dd1",
       "size": 15189
     },
     {
       "path": "SKILL.md",
-      "sha256": "27e715ed756534588bc37e4fa627f8be0a3ded99ec199bc2128c7dadf3476077",
+      "sha256": "10a0d8da1dfc1b07947cc32675132e7d5f65f250e52260fc5d25960978c47f81",
       "size": 12245
     },
     {
@@ -98,17 +103,17 @@
     },
     {
       "path": "adapters/external/aider.json",
-      "sha256": "5fd257bc25dd21812dfad235a5c043e07fb98996ef356c15ee5e709045faff15",
+      "sha256": "5e9e74d4cdb9f234cfa4c9b2835eb8f8a61957660f463c4f6d54019831677aed",
       "size": 907
     },
     {
       "path": "adapters/external/generic-cli.json",
-      "sha256": "e2aa0e61c52c7126655b1f4beecf40ed9833a737bb0ee33a145a88f913bd8497",
+      "sha256": "ee51fd8a774aed54787be00f104c1466b8764ed8d2f0618f596e50a5dd69326e",
       "size": 880
     },
     {
       "path": "adapters/external/grok-build.json",
-      "sha256": "e5b37f10e6ed427364efe2bb847ceb5b792f42c7ad586f01265b62b4c3db82eb",
+      "sha256": "b8ea6336e7209d62b35a66cafe46253e3b8aac634f419b88b15d01e07b558977",
       "size": 910
     },
     {
@@ -123,7 +128,7 @@
     },
     {
       "path": "adapters/registry.json",
-      "sha256": "6783796989ef3766c95a743e7eedab1b0024b225a9acbf802d7a4c24ee61cabc",
+      "sha256": "aeea37dab638e2559982941027bdc42cb7f3284fe933bf96ca3fcf6e5ccd292e",
       "size": 8291
     },
     {
@@ -1188,12 +1193,12 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "469cba22691a6368b69293637f169fff8b0b91836bb0b599a7d0ccf6f2c73b48",
+      "sha256": "52c687b01d6ffac2a0a6330071fee35fab11aa6c08e1f03da3255ff780321ab7",
       "size": 230
     },
     {
       "path": "package.json",
-      "sha256": "f767e0c68a84c45170e0bdd684953cea4e480289430352156a15f9576c125e7d",
+      "sha256": "c98b1301b52e2858d17418615534c2764da637af9483796f2ebc85114da913c1",
       "size": 2211
     },
     {
@@ -1548,7 +1553,7 @@
     },
     {
       "path": "pyproject.toml",
-      "sha256": "bba220b939ed2e909f1bc64a373042145550959fabcb3641589377eae42beac1",
+      "sha256": "21674c352f4f52eb90c7045215b08059075f1fb466d3834694459f7d46aa2c57",
       "size": 1114
     },
     {
@@ -1693,7 +1698,7 @@
     },
     {
       "path": "scripts/aleph/__init__.py",
-      "sha256": "69a79335b62bb69a45453729701054ed7d1ac34e2cfe0ea8ab0194bb699939ca",
+      "sha256": "ea57112b5aa77b5009f7c81f0a763b0ee22422c11557b57c9d47f93d29b68197",
       "size": 827
     },
     {
@@ -1733,8 +1738,8 @@
     },
     {
       "path": "scripts/aleph/import_ledger.py",
-      "sha256": "9063ff66619929f14c8e98b91cb86cbee14d69ad200743be92db1ce0aa78372d",
-      "size": 30327
+      "sha256": "aca3d43d2d2f9368abcbdac84fad8b980cc3714ec2d70a0c58bbea20f37e72ed",
+      "size": 30676
     },
     {
       "path": "scripts/aleph/installer.py",
@@ -1978,7 +1983,7 @@
     },
     {
       "path": "templates/validation-report.json",
-      "sha256": "291e2afde90e76fe2cc4463bf1881e6aae8ba0c09b0b3cffa6b34c265064cfd4",
+      "sha256": "e87080688778bf2e797d13ecdf012b7ae315b6693c4ecfdd238e95ecf0e17bb7",
       "size": 340
     },
     {
@@ -2198,8 +2203,8 @@
     },
     {
       "path": "tests/test_research_canonical_parity.py",
-      "sha256": "2961aaa62ff60c6bebf4f59149fcbc00af0b6864d6389c1c77ca26efe2b070c2",
-      "size": 15965
+      "sha256": "6e2e6efee412932ba1b55e0ad4981719ad8ec2f0977715cd7ced21c7db3725b5",
+      "size": 34836
     },
     {
       "path": "tests/test_research_gateway.py",
@@ -2258,7 +2263,7 @@
     },
     {
       "path": "uv.lock",
-      "sha256": "2dd7e45d7be2703f1a4ee91a48e375a7099f3bdc117ed8faaa868c4fef5949b3",
+      "sha256": "fca8cbf9ef6054d4f78949f823d757e34a5495969b244aac8cb8bd411b1d5271",
       "size": 208659
     }
   ]
