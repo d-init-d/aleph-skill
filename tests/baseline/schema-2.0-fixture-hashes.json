@@ -1,0 +1,15 @@
+{
+  "algorithm": "sha256",
+  "fixtures": {
+    "actors.json": "c2d0512d0783c411c8fe30f09ee699cac30b9293631ccef7bfb8bf13afefb94b",
+    "branch-ledger.json": "947af05aad803fcb18cedc829050ee949bf0aa9859033253ad3b5c8cb7678d67",
+    "edges.json": "204b0121edfa9244bee6a158f060b175d7860248cd77e37deac784a7c2bc78ba",
+    "nodes.json": "49459360dd50bde0568347085e31aa495ae477a648ba06aae5f519f9fd882f84",
+    "packet-governor.json": "e083d18888e81503de52ea8844d5a74a044c8ea20761b0a11024d31d14c405d0",
+    "replay-report.json": "28450ea196db0c9bd707aa4d39d98587b8c83312e1f1f30d02061c7598a1ed88",
+    "roleplay-governor.json": "768bfdaba90ec39edea9c3295085a47eeb46b3d916f740a5100094c334d669ca",
+    "simulation-manifest.json": "c05a7add68d40fdc7547d618170e4e22cdce5f498d968cd57d42fe55de62dfc2",
+    "simulation-model.json": "2a1737fcf8ffa910a673c61ad412a3e36cdc86210a4d625248303122dc2c4b56",
+    "simulation-run.json": "ec6da4e513f2763cde69f6750fd90ba5e4c48b1d96df39ff5fe9e9c32301b41d"
+  }
+}

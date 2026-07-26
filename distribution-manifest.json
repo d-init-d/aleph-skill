@@ -3,8 +3,8 @@
   "package_version": "2.3.1",
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
-  "file_count": 452,
-  "tree_sha256": "27b45ce44cea28e7f9f40c427023f6730e202ff512448067e54e2ecbab90aeef",
+  "file_count": 456,
+  "tree_sha256": "7daade56b434427e215aa0b4e47f917952424a4d27403b721a85acdeb1063dd4",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -1987,6 +1987,21 @@
       "size": 340
     },
     {
+      "path": "tests/baseline/BASELINE-v2.3.1.md",
+      "sha256": "458753176dd5883eb57434b85f7b5dab5735bad0f88c0aa3986a473fb8e8473c",
+      "size": 2658
+    },
+    {
+      "path": "tests/baseline/capability-baseline.json",
+      "sha256": "d3478150935c08592c9c970ba76c873dc15170df7839995cbdcee67b9da5190c",
+      "size": 6267
+    },
+    {
+      "path": "tests/baseline/schema-2.0-fixture-hashes.json",
+      "sha256": "e52f1d85d73f5e689e2f707319fe49d1b9e867cdf158a30610c9d671e72403dd",
+      "size": 996
+    },
+    {
       "path": "tests/fixtures/schema-1.2-valid/REPORT.md",
       "sha256": "4a46383771acbbf23f79b166804deadcfd1486736ef6e08c353993ce44c7299b",
       "size": 1662
@@ -2105,6 +2120,11 @@
       "path": "tests/test_adapters_v201.py",
       "sha256": "da96c036133bfc08ef169db439c676e1c76d780ca33fa83b38d8e314ffe97344",
       "size": 9241
+    },
+    {
+      "path": "tests/test_capability_baseline.py",
+      "sha256": "243f3a06a88a63ba42e1e51dc54dae8ceb3ea26ef059429a8a7f8603f88e5943",
+      "size": 5385
     },
     {
       "path": "tests/test_component_packaging.py",
