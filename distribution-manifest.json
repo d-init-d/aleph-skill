@@ -1,10 +1,10 @@
 {
   "schema_version": "2.0.0",
-  "package_version": "2.3.1",
+  "package_version": "2.4.0",
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
-  "file_count": 472,
-  "tree_sha256": "575f4cebe1214aac94dca8e6307121f607140009a20cdedb83de25a13b7eaf87",
+  "file_count": 473,
+  "tree_sha256": "0b85681dd6b8468b62ffd562675dab257152ed294811be8c7cca4ffeb9018dc7",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -37,6 +37,11 @@
       "size": 6287
     },
     {
+      "path": ".github/release-notes/v2.4.0.md",
+      "sha256": "b88a53241a85e7609d245d363ff082075ba29a075cd13b1388231b0236a78317",
+      "size": 7679
+    },
+    {
       "path": ".github/workflows/ci.yml",
       "sha256": "a301376df378a48bd5e6075c00a0a128ebff571e612eff85f03d800afa01b701",
       "size": 263
@@ -58,8 +63,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "b4568b2588b2c93c0a5edad4175dbcedbf4280a6245d4654e5098f979cfddbfb",
-      "size": 26154
+      "sha256": "740e30a9c479fe743376046ce5191e038d1dfc526e301e6e12b95e56fa315772",
+      "size": 31459
     },
     {
       "path": "LICENSE",
@@ -78,7 +83,7 @@
     },
     {
       "path": "SKILL.md",
-      "sha256": "8ea2604a008a3467148e6308c01b81468326328b54d6331f25912e612d8e3109",
+      "sha256": "4da1e550f83bf554bddca5787292caec7b41a037ef4419d782f22e652bf33996",
       "size": 12529
     },
     {
@@ -103,22 +108,22 @@
     },
     {
       "path": "adapters/external/aider.json",
-      "sha256": "5e9e74d4cdb9f234cfa4c9b2835eb8f8a61957660f463c4f6d54019831677aed",
+      "sha256": "d5ced9b084d39fb3e532b744b83398b0f4dccdd63531b282b0518fa21dab47e2",
       "size": 907
     },
     {
       "path": "adapters/external/generic-cli.json",
-      "sha256": "ee51fd8a774aed54787be00f104c1466b8764ed8d2f0618f596e50a5dd69326e",
+      "sha256": "367b82c4ec7c479da5a9687ae8ada9a3a42215248f23f2e8faeb82d4bfccb467",
       "size": 880
     },
     {
       "path": "adapters/external/grok-build.json",
-      "sha256": "b8ea6336e7209d62b35a66cafe46253e3b8aac634f419b88b15d01e07b558977",
+      "sha256": "3a9d798f3a3d57967a42b88197e5e0699152ba76ddd03e00ac6e8fbcc1197d9f",
       "size": 910
     },
     {
       "path": "adapters/generated/continue.md",
-      "sha256": "d8bf6e805ae5f4a4650bcfe1525d5bdfe450df2d76e5b3ae439e049ef28c2c31",
+      "sha256": "f2c3d2008d357622faf88a5457d21cd0a6cfa3a9615a707ca67dd50656285709",
       "size": 3446
     },
     {
@@ -128,7 +133,7 @@
     },
     {
       "path": "adapters/registry.json",
-      "sha256": "aeea37dab638e2559982941027bdc42cb7f3284fe933bf96ca3fcf6e5ccd292e",
+      "sha256": "228e189ec0c3b9a5a154357c7de1b51ab3960def06e8da1236f94760248e284f",
       "size": 8291
     },
     {
@@ -1243,12 +1248,12 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "52c687b01d6ffac2a0a6330071fee35fab11aa6c08e1f03da3255ff780321ab7",
+      "sha256": "6a265e80771edfd234bfac020b94f774e7e53767be7d3a7df55c7f51b267fc50",
       "size": 230
     },
     {
       "path": "package.json",
-      "sha256": "c98b1301b52e2858d17418615534c2764da637af9483796f2ebc85114da913c1",
+      "sha256": "d281e307726b2e352e0a76d9e09fc13feecba6e14d93454f46244ec7b9339407",
       "size": 2211
     },
     {
@@ -1603,7 +1608,7 @@
     },
     {
       "path": "pyproject.toml",
-      "sha256": "21674c352f4f52eb90c7045215b08059075f1fb466d3834694459f7d46aa2c57",
+      "sha256": "637b72d05ed3ce9be32a7c005f2624ae749d05bb855e68297a06e36f495c05de",
       "size": 1114
     },
     {
@@ -1748,7 +1753,7 @@
     },
     {
       "path": "scripts/aleph/__init__.py",
-      "sha256": "938cf34b981b9d289a7321cb092fd685d56f7b4421bc3ae8244443187a572393",
+      "sha256": "5728bd8aec9b331f6cdccba66b255c06f38575afd6aa30f836f2526b02c80295",
       "size": 1127
     },
     {
@@ -2033,7 +2038,7 @@
     },
     {
       "path": "templates/validation-report.json",
-      "sha256": "e87080688778bf2e797d13ecdf012b7ae315b6693c4ecfdd238e95ecf0e17bb7",
+      "sha256": "d05b215fb22e43f383bc43abe9af301bd906c58078d0515b7d6140402dc5c4c7",
       "size": 340
     },
     {
@@ -2363,7 +2368,7 @@
     },
     {
       "path": "uv.lock",
-      "sha256": "fca8cbf9ef6054d4f78949f823d757e34a5495969b244aac8cb8bd411b1d5271",
+      "sha256": "69975a4ec28042e4971d48ed2fdb7b86a14f0f88139d7694d49ef6d459e3db80",
       "size": 208659
     }
   ]

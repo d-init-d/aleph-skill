@@ -1,12 +1,12 @@
 ---
-name: Aleph 2.3 causal simulation
+name: Aleph 2.4 causal simulation
 description: Evidence-grounded timeline simulation guardrails
 alwaysApply: false
 ---
 
 # Aleph for Continue
 
-## Aleph 2.3 execution contract
+## Aleph 2.4 execution contract
 
 - Target host: `continue`. Detect available tools and subagents at runtime; never claim capabilities from this file alone.
 - Verified core: `<ABSOLUTE_PROJECT_ROOT>/.aleph/core/aleph-skill`. Resolve `<ABSOLUTE_PROJECT_ROOT>` from the absolute path of this loaded rule at `<ABSOLUTE_PROJECT_ROOT>/.continue/rules/aleph.md`, never from the process working directory. Export or assign the resulting absolute core path as `ALEPH_SKILL_ROOT` and refuse to run if its `SKILL.md` is missing.

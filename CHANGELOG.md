@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.4.0
+
+### Added
+- Added the additive workspace artifact schema `2.1.0` next to `2.0.0` with full dual-read validation: optional type-discriminated node `details`, namespaced node `extensions`, explicit `actor_basis` authoring, and an explicit sibling-only `--upgrade-schema-2-1` migration that is idempotent, transactional, byte-preserving, and audit-trailed. `2.0.0` remains the write default; `init_simulation_workspace.py` gains `--schema-version {2.0.0,2.1.0}`.
+- Added a deterministic `aleph-skill-runtime-v<version>.zip` artifact next to the unchanged capability-complete full artifact: an allowlisted transitive closure carrying the entire locked D Research component with its interop contract, self-described by an embedded `runtime-manifest.json`, with fail-closed closure, extraction, and tamper verification outside Git.
+- Added audit-stream persistence to the ledger import CLI: a `d-research-import-audit` artifact keeps `lead`, `process`, and `blocker` partitions plus full per-row 37-column source provenance, bound into the import receipt by `audit_ref`/`audit_sha256` with deterministic receipt hashes.
+- Added capability-contract discovery: the bundled report surfaces the component's machine-checkable `templates/interop-contract.json` (header widths, record types, canonicalization/signature identifiers, routes, entrypoints, artifact profiles) beside the importer's own ledger contract, and compatibility is decided from declared capability when a contract is present, with the historical major-3 acceptance retained for contract-less candidates.
+- Added gateway routes for the new D Research 3.4.0 surfaces — `research:package-metadata`, `research:check-doc-examples`, and `research:build-artifacts` — while classifying the packed-artifact self-check and new library modules as explicitly reported non-dispatchable entries.
+- Added canonical minimal node/edge fixtures (`tests/fixtures/canonical/minimal-graph.json`) as the CI-validated source of truth embedded byte-exactly in `references/node-builder.md` and `references/causal-edge-protocol.md`, with fenced-JSON parsing checks over both docs.
+
+### Changed
+- Updated the locked internal D Research component from `3.3.0` to `3.4.0`.
+- Advanced Aleph package and validator versions to `2.4.0`; workspace schema `2.0.0` artifacts and formula `2.0.0`/`2.1.0` contracts are unchanged.
+- Rewrote the host-policy statement repository-wide (docs, adapter generator, generated adapters): Aleph imposes no additional content restrictions of its own; mandatory host, system, and developer policy and applicable law always take precedence; within that scope the simulation completes to the maximum permitted extent with explicit `fact`/`inference`/`assumption`/`simulation`/`counterfactual` labels. The Vatican regression is retitled to a labeled-simulation regression and keeps its causal branches.
+- Edge validation accepts an explicit `context_modifiers: []` declaration, normalizes the `confidence` alias to canonical `evidence_confidence` (non-fatal `CONFIDENCE_ALIAS` warning on divergence), and treats a lone `confidence` as satisfying the required-field contract; missing `actor_basis` keeps its inference with a warning-severity annotation.
+- Validation reports resolve `formula_version` from the workspace instead of hardcoding the current formula; an unsaturated partial that self-claims `verified`/`calibrated` is normalized with a `PARTIAL_ASSURANCE_NORMALIZED` warning while final-mode saturation gates stay hard.
+- Release archives use deterministic DEFLATE after a byte-identical double-build check, with STORED as the declared fallback; adapter version labels (Continue frontmatter and contract header) derive from the canonical package version.
+- Updated gateway acceptance reconciliation for the D Research 3.4.0 matrix: repository-only case `23_unsafe_runtime_config` is reconciled only against the exact locked identity, while the 3.3.0 and 3.2.1 branches remain unchanged.
+
+### Compatibility
+- Every v2.3.1 command, route, flag, default, adapter, domain pack, schema, ledger width, and valid input remains accepted; the frozen capability baseline suite enforces the superset.
+- Existing exact 14-, 19-, 22-, 23-, and 37-column ledgers remain canonicalizable, signable, verifiable, and importable with unchanged canonicalization and HMAC semantics.
+- Existing schema `2.0.0` workspaces and fixtures remain valid without migration; the `2.1.0` upgrade is opt-in, sibling-only, and never rewrites a source workspace in place.
+- No new mandatory Python or Node dependency is introduced. Playwright remains locked upstream and browsers are never bundled or auto-installed.
+
+### Security and provenance
+- Leads, process rows, and blocker rows persist to the audit artifact and are never promoted to evidence; prohibited policy rows continue to fail closed.
+- Pinned GitHub-verified annotated tag object `65b5b788f841f40b1de50269c5dbf3fd2b51e4d9`, commit `9f9ad30346f3921ab544014b2a15a8fe5734e2e9`, Git tree `899e955dea529fad79892d5750d77075c26aecc3`, and canonical archive SHA-256 `19ebdb0281a6b24aa6cc252f4d8404f052b6f671366818eb913454eab3779795`.
+- Locked 219 component files with component-tree SHA-256 `e6314acd173a861c7e51d3dbe8dd3ec6860b8e9d91c72c02e07cc1af2b21fe26`; excluded 536 exact repository-only paths.
+
 ## 2.3.1
 
 ### Release integrity
