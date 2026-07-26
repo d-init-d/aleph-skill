@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-from . import SCHEMA_VERSION
+from . import SCHEMA_VERSION, SCHEMA_VERSION_2_1, SUPPORTED_SCHEMA_VERSIONS
 from .issues import Issue, issue
 
 EPISTEMIC_STATUS = frozenset({"fact", "inference", "simulation", "counterfactual", "assumption"})
@@ -199,6 +199,85 @@ EDGE_FIELDS = frozenset(
         "effect_size",
     }
 )
+
+# Schema 2.1.0 additive node surface: type-specific ``details`` plus a
+# namespaced ``extensions`` object. Universal NODE_FIELDS stay unchanged so
+# 2.0.0 artifacts keep their exact contract.
+NODE_V2_1_EXTRA_FIELDS = frozenset({"details", "extensions"})
+NODE_DETAILS_FIELDS: dict[str, frozenset[str]] = {
+    "entity": frozenset(
+        {"entity_type", "attributes", "decision_patterns", "relationships", "behavioral_drivers"}
+    ),
+    "event": frozenset(
+        {
+            "start_time",
+            "end_time",
+            "duration",
+            "actors",
+            "location",
+            "caused_by",
+            "causes",
+            "significance",
+        }
+    ),
+    "factor": frozenset(
+        {
+            "unit",
+            "frequency",
+            "range",
+            "value_at_change_point",
+            "trend",
+            "thresholds",
+            "indicators",
+        }
+    ),
+    "context": frozenset(
+        {
+            "active_conditions",
+            "historical_instances",
+            "typical_effects",
+            "activation_thresholds",
+        }
+    ),
+    "indicator": frozenset(
+        {
+            "measures",
+            "source_organization",
+            "unit",
+            "frequency",
+            "current_value",
+            "current_date",
+            "historical_range",
+        }
+    ),
+    "claim": frozenset(
+        {
+            "statement",
+            "source",
+            "quote_or_value",
+            "quote_status",
+            "page_or_section",
+            "about",
+            "supports",
+            "contradicts",
+        }
+    ),
+    "source": frozenset(
+        {
+            "source_type",
+            "author",
+            "published_date",
+            "url",
+            "file_path",
+            "reliability_score",
+            "reliability_rationale",
+            "covers",
+        }
+    ),
+}
+# Extension keys must be namespaced (at least one "." or "/" separator between
+# non-empty segments), e.g. "org.example/finding" or "vendor.feature".
+EXTENSION_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+(?:[./][A-Za-z0-9_-]+)+$")
 
 LAG_FIELDS = frozenset({"type", "min", "max", "mode", "fixed", "rate", "mean"})
 CONTEXT_MODIFIER_FIELDS = frozenset({"context", "multiplier", "rationale", "active"})
@@ -698,7 +777,11 @@ def ensure_list(value: Any) -> list[Any]:
 
 
 def schema_is_current(version: Any) -> bool:
-    return isinstance(version, str) and version == SCHEMA_VERSION
+    return isinstance(version, str) and version in SUPPORTED_SCHEMA_VERSIONS
+
+
+def schema_is_v2_1(version: Any) -> bool:
+    return isinstance(version, str) and version == SCHEMA_VERSION_2_1
 
 
 def schema_is_legacy(version: Any) -> bool:

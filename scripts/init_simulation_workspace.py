@@ -70,7 +70,7 @@ def build_workspace(args: argparse.Namespace) -> Path:
     timeline_mode = infer_timeline_mode(change_date, cutoff_date, simulation_end)
 
     manifest = load_json(templates / "simulation-manifest.json")
-    manifest["schema_version"] = "2.0.0"
+    manifest["schema_version"] = getattr(args, "schema_version", None) or "2.0.0"
     manifest["simulation_id"] = f"sim-{slug}"
     manifest["created_at"] = utc_now()
     manifest["status"] = "draft"
@@ -257,6 +257,12 @@ def main() -> None:
     parser.add_argument("--geography", default="global", help="Comma-separated geographic or institutional scopes.")
     parser.add_argument("--out-dir", help="Output base directory outside the installed skill. Defaults to ./simulation-output.")
     parser.add_argument("--force", action="store_true", help="Allow using an existing workspace directory.")
+    parser.add_argument(
+        "--schema-version",
+        choices=["2.0.0", "2.1.0"],
+        default="2.0.0",
+        help="Workspace artifact schema to write (default preserves 2.0.0; 2.1.0 enables node details/extensions).",
+    )
     args = parser.parse_args()
     workspace = build_workspace(args)
     print(str(workspace))

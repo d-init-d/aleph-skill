@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 SCHEMA_VERSION = "2.0.0"
+# Additive artifact schema: 2.1.0 adds optional node details/extensions and
+# explicit actor_basis. 2.0.0 stays the write default; both are dual-read.
+SCHEMA_VERSION_2_1 = "2.1.0"
+SUPPORTED_SCHEMA_VERSIONS = (SCHEMA_VERSION, SCHEMA_VERSION_2_1)
 LEGACY_SCHEMA_VERSION = "1.2.0"
 PACKAGE_VERSION = "2.3.1"
 VALIDATOR_VERSION = "2.3.1"
@@ -19,6 +23,8 @@ EXIT_NUMERICAL = 4
 
 __all__ = [
     "SCHEMA_VERSION",
+    "SCHEMA_VERSION_2_1",
+    "SUPPORTED_SCHEMA_VERSIONS",
     "LEGACY_SCHEMA_VERSION",
     "PACKAGE_VERSION",
     "VALIDATOR_VERSION",

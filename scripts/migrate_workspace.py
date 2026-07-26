@@ -11,6 +11,7 @@ from aleph.migrate import (
     migrate_dual_run_canonical,
     migrate_workspace,
     plan_migration,
+    upgrade_workspace_schema,
 )
 
 
@@ -32,6 +33,11 @@ def main() -> None:
         action="store_true",
         help="Rewrite absolute D Research paths to aleph-component://d-research when equivalent",
     )
+    parser.add_argument(
+        "--upgrade-schema-2-1",
+        action="store_true",
+        help="Additive sibling upgrade of a schema 2.0.0 workspace to 2.1.0 (never in place)",
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
@@ -42,6 +48,11 @@ def main() -> None:
 
     if args.bind_bundled_d_research:
         result = bind_bundled_d_research(source, check_only=args.check)
+        print(json.dumps(result, indent=2, default=str))
+        raise SystemExit(EXIT_OK if result.get("ok") else EXIT_SEMANTIC)
+
+    if args.upgrade_schema_2_1:
+        result = upgrade_workspace_schema(source, Path(args.out).resolve() if args.out else None)
         print(json.dumps(result, indent=2, default=str))
         raise SystemExit(EXIT_OK if result.get("ok") else EXIT_SEMANTIC)
 

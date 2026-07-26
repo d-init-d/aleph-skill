@@ -10,7 +10,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from . import LEGACY_SCHEMA_VERSION, SCHEMA_VERSION
+from . import (
+    LEGACY_SCHEMA_VERSION,
+    SCHEMA_VERSION,
+    SCHEMA_VERSION_2_1,
+    SUPPORTED_SCHEMA_VERSIONS,
+)
 from .io import canonical_hash, load_json_secure, sha256_file, write_json_atomic
 from .paths import resolve_in_workspace
 
@@ -662,6 +667,141 @@ def migrate_workspace(
     }
 
 
+def upgrade_workspace_schema(source: Path, out: Path | None = None) -> dict[str, Any]:
+    """Explicit additive schema upgrade: 2.0.0 -> 2.1.0 sibling workspace.
+
+    The source is never rewritten in place. The upgrade is idempotent (a
+    2.1.0 source reports ``already_current``) and keeps an audit trail in the
+    manifest ``migration`` block plus ``migration-report.json``. Receipts and
+    finalization are invalidated because the manifest bytes change; every
+    other artifact is byte-preserved, so a 2.0 workspace round-trips into 2.1
+    without field loss.
+    """
+    source = source.resolve()
+    manifest_path = source / "simulation-manifest.json"
+    if not manifest_path.is_file():
+        return {"ok": False, "error": "missing simulation-manifest.json"}
+    try:
+        manifest = _load_json(manifest_path)
+    except ValueError as exc:
+        return {"ok": False, "error": f"invalid simulation-manifest.json: {exc}"}
+    if not isinstance(manifest, dict):
+        return {"ok": False, "error": "manifest must be an object"}
+    version = manifest.get("schema_version")
+    if version == SCHEMA_VERSION_2_1:
+        return {
+            "ok": True,
+            "already_current": True,
+            "source_schema": version,
+            "target_schema": version,
+            "destination": str(source),
+            "source_mutated": False,
+        }
+    if version != SCHEMA_VERSION:
+        return {
+            "ok": False,
+            "error": f"schema upgrade requires source schema {SCHEMA_VERSION}",
+            "schema": version,
+        }
+    try:
+        source_digest, source_files = _workspace_digest(source)
+    except OSError as exc:
+        return {"ok": False, "error": f"cannot hash complete source: {exc}"}
+    symlinks = [entry for entry in source_files if entry["type"] == "symlink"]
+    if symlinks:
+        return {
+            "ok": False,
+            "error": "source contains symlinks; migration refuses ambiguous trees",
+            "symlinks": symlinks,
+        }
+    destination = (out if out is not None else source.parent / f"{source.name}-v2.1").resolve()
+    if destination.exists():
+        return {"ok": False, "error": "destination exists; refusing destructive overwrite"}
+    if _inside(destination, source) or _inside(source, destination):
+        return {"ok": False, "error": "source and destination trees must not overlap"}
+    stage = destination.parent / f".{destination.name}.migration-stage-{uuid.uuid4().hex}"
+    if stage.exists():
+        return {"ok": False, "error": "unexpected migration staging collision"}
+
+    transforms = [
+        "set schema_version to 2.1.0",
+        "invalidate validation and quality receipts",
+    ]
+    try:
+        shutil.copytree(source, stage, symlinks=True)
+        staged_manifest = _load_json(stage / "simulation-manifest.json")
+        previous_migration = (
+            copy.deepcopy(staged_manifest.get("migration"))
+            if isinstance(staged_manifest.get("migration"), dict)
+            else None
+        )
+        staged_manifest["schema_version"] = SCHEMA_VERSION_2_1
+        invalidated = _invalidate_finalization(stage, staged_manifest)
+        unresolved = [
+            {
+                "item": name,
+                "field": "receipt",
+                "note": "invalidated by schema upgrade; re-run validation",
+            }
+            for name in invalidated
+        ]
+        # Artifacts that bind pre-upgrade manifest bytes stay byte-preserved
+        # but need re-execution: the compiled model and sealed actor packets
+        # hash their sources, so the upgrade records them as unresolved
+        # instead of silently rewriting generated content.
+        for name, note in (
+            ("simulation-model.json", "compiled model binds pre-upgrade source hashes; recompile"),
+            ("packet-governor.json", "sealed packet binds pre-upgrade scenario hash; re-seal"),
+            ("roleplay-governor.json", "roleplay governor binds pre-upgrade scenario hash; re-run"),
+        ):
+            if (stage / name).is_file():
+                unresolved.append({"item": name, "field": "binding", "note": note})
+        staged_manifest["migration"] = {
+            "source_schema_version": SCHEMA_VERSION,
+            "target_schema_version": SCHEMA_VERSION_2_1,
+            "source_digest": source_digest,
+            "transforms": transforms,
+            "unresolved_fields": unresolved,
+        }
+        write_json_atomic(stage / "simulation-manifest.json", staged_manifest)
+        report_body = {
+            "schema_version": SCHEMA_VERSION_2_1,
+            "source_digest": source_digest,
+            "source_file_count": len(source_files),
+            "source_schema": SCHEMA_VERSION,
+            "transforms": transforms,
+            "unresolved_fields": unresolved,
+            "previous_migration": previous_migration,
+            "status": "draft",
+        }
+        report_body["report_hash"] = canonical_hash(report_body)
+        report = {**report_body, "source": str(source), "destination": str(destination)}
+        write_json_atomic(stage / "migration-report.json", report)
+        migrated_digest, _ = _workspace_digest(stage)
+        stage.rename(destination)
+    except Exception as exc:  # noqa: BLE001 - transactional rollback
+        if stage.exists():
+            shutil.rmtree(stage)
+        return {"ok": False, "error": f"migration rolled back: {exc}"}
+
+    after_digest, _ = _workspace_digest(source)
+    if after_digest != source_digest:
+        if destination.exists():
+            shutil.rmtree(destination)
+        return {"ok": False, "error": "source changed during sibling migration", "source_mutated": True}
+    return {
+        "ok": True,
+        "destination": str(destination),
+        "report": report,
+        "canonical_hash": report["report_hash"],
+        "source_digest": source_digest,
+        "migrated_digest": migrated_digest,
+        "source_mutated": False,
+        "source_schema": SCHEMA_VERSION,
+        "target_schema": SCHEMA_VERSION_2_1,
+    }
+
+
 def migrate_dual_run_canonical(source: Path, out_a: Path, out_b: Path) -> dict[str, Any]:
     first = migrate_workspace(source, out_a)
     second = migrate_workspace(source, out_b)
@@ -720,8 +860,12 @@ def bind_bundled_d_research(
         return {"ok": False, "error": str(exc)}
     if not isinstance(manifest, dict):
         return {"ok": False, "error": "manifest must be an object"}
-    if manifest.get("schema_version") != SCHEMA_VERSION:
-        return {"ok": False, "error": f"schema must be {SCHEMA_VERSION}", "schema": manifest.get("schema_version")}
+    if manifest.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS:
+        return {
+            "ok": False,
+            "error": f"schema must be one of {list(SUPPORTED_SCHEMA_VERSIONS)}",
+            "schema": manifest.get("schema_version"),
+        }
 
     root = skill_root if skill_root is not None else skill_root_from()
     try:

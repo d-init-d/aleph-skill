@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from . import LEGACY_FORMULA_VERSION, SCHEMA_VERSION
+from . import LEGACY_FORMULA_VERSION, SCHEMA_VERSION, SUPPORTED_SCHEMA_VERSIONS
 from .discovery import discover_d_research
 from .import_ledger import import_d_research_ledger, render_evidence_csv
 from .io import canonical_hash, load_json_secure, load_jsonl_secure, sha256_file
@@ -153,7 +153,7 @@ def _d_research_verified(
         return bool(
             imported.get("ok")
             and imported.get("hmac_verified") is True
-            and receipt.get("schema_version") == SCHEMA_VERSION
+            and receipt.get("schema_version") in SUPPORTED_SCHEMA_VERSIONS
             and receipt.get("receipt_type") == "d-research-import"
             and receipt.get("mapping_contract") == "d-research-3.x-canonical"
             and receipt.get("source_contract") in {

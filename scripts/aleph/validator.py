@@ -12,7 +12,9 @@ from . import (
     FORMULA_VERSION,
     LEGACY_FORMULA_VERSION,
     SCHEMA_VERSION,
+    SCHEMA_VERSION_2_1,
     SUPPORTED_FORMULA_VERSIONS,
+    SUPPORTED_SCHEMA_VERSIONS,
     VALIDATOR_VERSION,
 )
 from .engine import (
@@ -56,6 +58,9 @@ from .schema import (
     CONTEXT_MODIFIER_FIELDS,
     D_RESEARCH_FIELDS,
     DECOMPOSITION_FIELDS,
+    EXTENSION_KEY_RE,
+    NODE_DETAILS_FIELDS,
+    NODE_V2_1_EXTRA_FIELDS,
     EDGE_FIELDS,
     EDGE_STATUS,
     EFFECT_PARAMETER_FIELDS,
@@ -625,12 +630,12 @@ def _validate_v2_manifest_contract(manifest: dict[str, Any], issues: list[Issue]
         for field in ("source_schema_version", "target_schema_version"):
             if not nonempty_str(migration.get(field)):
                 issues.append(issue("TYPE", pointer=f"migration.{field}", message="must be string"))
-        if migration.get("target_schema_version") != SCHEMA_VERSION:
+        if migration.get("target_schema_version") not in SUPPORTED_SCHEMA_VERSIONS:
             issues.append(
                 issue(
                     "SCHEMA",
                     pointer="migration.target_schema_version",
-                    expected=SCHEMA_VERSION,
+                    expected=list(SUPPORTED_SCHEMA_VERSIONS),
                     actual=migration.get("target_schema_version"),
                 )
             )
@@ -703,9 +708,9 @@ def validate_manifest_core(manifest: dict[str, Any], mode: str) -> CheckResult:
     reject_unknown_fields(manifest, KNOWN_MANIFEST_FIELDS, "manifest", issues)
     _reject_nested_manifest(manifest, issues)
     version = manifest.get("schema_version")
-    if not isinstance(version, str) or version not in {SCHEMA_VERSION, "1.2.0", "1.1.0"}:
-        issues.append(issue("SCHEMA", pointer="schema_version", message=f"unsupported {version}", expected=SCHEMA_VERSION))
-    if version == SCHEMA_VERSION:
+    if not isinstance(version, str) or version not in {*SUPPORTED_SCHEMA_VERSIONS, "1.2.0", "1.1.0"}:
+        issues.append(issue("SCHEMA", pointer="schema_version", message=f"unsupported {version}", expected=list(SUPPORTED_SCHEMA_VERSIONS)))
+    if version in SUPPORTED_SCHEMA_VERSIONS:
         _validate_v2_manifest_contract(manifest, issues)
     for field in ["simulation_id", "created_at", "status", "change_point", "temporal_frame", "scope", "execution", "artifact_paths"]:
         if field not in manifest:
@@ -725,7 +730,7 @@ def validate_manifest_core(manifest: dict[str, Any], mode: str) -> CheckResult:
     ):
         issues.append(issue("INCOMPLETE", pointer="status", message="final requires complete/completed"))
 
-    if version == SCHEMA_VERSION:
+    if version in SUPPORTED_SCHEMA_VERSIONS:
         assumptions = manifest.get("assumptions")
         assumption_ids: set[str] = set()
         if not isinstance(assumptions, list) or not assumptions:
@@ -1057,16 +1062,57 @@ def validate_evidence(rows: list[dict[str, str]], manifest: dict[str, Any], mode
     return _check("evidence", issues, metrics), ids
 
 
+def _validate_node_details(raw: dict[str, Any], p: str, issues: list[Issue]) -> None:
+    """Schema 2.1 optional ``details``: discriminated by the node ``type``."""
+    details = raw.get("details")
+    if details is None:
+        return
+    if not isinstance(details, dict):
+        issues.append(issue("TYPE", pointer=f"{p}/details", message="must be object"))
+        return
+    node_type = raw.get("type")
+    allowed = NODE_DETAILS_FIELDS.get(str(node_type))
+    if allowed is None:
+        # Invalid node type is reported by the type check itself.
+        return
+    reject_unknown_fields(details, allowed, f"{p}/details", issues)
+
+
+def _validate_node_extensions(raw: dict[str, Any], p: str, issues: list[Issue]) -> None:
+    """Schema 2.1 optional ``extensions``: namespaced keys, free-form values."""
+    extensions = raw.get("extensions")
+    if extensions is None:
+        return
+    if not isinstance(extensions, dict):
+        issues.append(issue("TYPE", pointer=f"{p}/extensions", message="must be object"))
+        return
+    for key in sorted(extensions):
+        if not isinstance(key, str) or not EXTENSION_KEY_RE.fullmatch(key):
+            issues.append(
+                issue(
+                    "SCHEMA",
+                    pointer=f"{p}/extensions/{key}",
+                    message="extension keys must be namespaced (e.g. org.example/field)",
+                    actual=key,
+                )
+            )
+
+
 def validate_nodes(nodes: list[Any], evidence_ids: set[str], manifest: dict[str, Any]) -> tuple[CheckResult, set[str]]:
     issues: list[Issue] = []
     ids: set[str] = set()
     cutoff = parse_time(_mapping(manifest.get("temporal_frame")).get("observation_cutoff"))
+    schema_2_1 = manifest.get("schema_version") == SCHEMA_VERSION_2_1
+    node_allowed_fields = NODE_FIELDS | NODE_V2_1_EXTRA_FIELDS if schema_2_1 else NODE_FIELDS
     for idx, raw in enumerate(nodes):
         p = f"/nodes/{idx}"
         if not isinstance(raw, dict):
             issues.append(issue("TYPE", pointer=p, message="must be object"))
             continue
-        reject_unknown_fields(raw, NODE_FIELDS, p, issues)
+        reject_unknown_fields(raw, node_allowed_fields, p, issues)
+        if schema_2_1:
+            _validate_node_details(raw, p, issues)
+            _validate_node_extensions(raw, p, issues)
         for required in (
             "id",
             "type",
@@ -1265,11 +1311,34 @@ def validate_edges(
         if isinstance(rel, str) and rel in {"increases", "enables", "causes", "amplifies", "triggers"} and sign == -1:
             issues.append(issue("SIGN", pointer=f"{p}/sign", message="relation implies positive sign"))
         refuse_string_number(raw.get("base_strength"), f"{p}/base_strength", issues)
-        # confidence is evidence_confidence only — still validate if present
+        # ``confidence`` is an accepted alias for ``evidence_confidence``:
+        # alone it normalizes to the canonical field; when both are present and
+        # equal the canonical field wins silently; when they diverge the
+        # canonical field still wins, with a non-fatal warning.
         if "confidence" in raw:
             unit_interval(raw.get("confidence"), f"{p}/confidence", issues)
         if "evidence_confidence" in raw:
             unit_interval(raw.get("evidence_confidence"), f"{p}/evidence_confidence", issues)
+        if "confidence" in raw and "evidence_confidence" in raw:
+            alias = raw.get("confidence")
+            canonical = raw.get("evidence_confidence")
+            if (
+                isinstance(alias, (int, float))
+                and isinstance(canonical, (int, float))
+                and not isinstance(alias, bool)
+                and not isinstance(canonical, bool)
+                and float(alias) != float(canonical)
+            ):
+                issues.append(
+                    issue(
+                        "CONFIDENCE_ALIAS",
+                        severity="warning",
+                        pointer=f"{p}/confidence",
+                        message="confidence diverges from evidence_confidence; canonical evidence_confidence wins",
+                        expected=canonical,
+                        actual=alias,
+                    )
+                )
         if "existence_prob" in raw:
             unit_interval(raw.get("existence_prob"), f"{p}/existence_prob", issues)
         edge_status = raw.get("status")
@@ -1382,7 +1451,9 @@ def validate_edges(
             if "mode" in parsed and "max" in parsed and parsed["mode"] > parsed["max"]:
                 issues.append(issue("LAG_ORDER", pointer=f"{p}/lag_distribution/mode", message="mode > max"))
         mods = raw.get("context_modifiers")
-        if not isinstance(mods, list) or not mods:
+        # An explicit empty list is a valid declaration that no context
+        # modulates this edge; only a missing or non-list value is an error.
+        if not isinstance(mods, list):
             issues.append(issue("CONTEXT", pointer=f"{p}/context_modifiers", message="requires modifiers"))
         else:
             for mi, mod in enumerate(mods):
@@ -1607,6 +1678,18 @@ def validate_actors(
         if sc is not None and (not isinstance(sc, str) or sc not in SUBJECT_CLASS):
             issues.append(issue("SUBJECT_CLASS", pointer=f"{p}/subject_class", actual=sc))
         actor_basis = raw.get("actor_basis", "evidence" if raw.get("evidence_ids") else "assumption")
+        if "actor_basis" not in raw:
+            # Schema 2.1 writes actor_basis explicitly; inference stays the
+            # dual-read behavior for 2.0 artifacts and is annotated, not fatal.
+            issues.append(
+                issue(
+                    "ACTOR_BASIS_INFERRED",
+                    severity="warning",
+                    pointer=f"{p}/actor_basis",
+                    message="actor_basis missing; inferred from evidence_ids",
+                    actual=actor_basis,
+                )
+            )
         if actor_basis not in {"evidence", "mixed", "assumption"}:
             issues.append(issue("ENUM", pointer=f"{p}/actor_basis", actual=actor_basis))
         assumptions = raw.get("assumptions")
@@ -2259,12 +2342,12 @@ def validate_branches(
                     message="required by branch-ledger schema 2.0.0",
                 )
             )
-    if data.get("schema_version") != SCHEMA_VERSION:
+    if data.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS:
         issues.append(
             issue(
                 "SCHEMA",
                 pointer="branch_ledger.schema_version",
-                expected=SCHEMA_VERSION,
+                expected=list(SUPPORTED_SCHEMA_VERSIONS),
                 actual=data.get("schema_version"),
             )
         )
@@ -2541,7 +2624,7 @@ def validate_branches(
         unit_interval(branch.get("confidence"), f"{p}/confidence", issues)
         manifest_simulation_mode = manifest.get("simulation_mode")
         if (
-            manifest.get("schema_version") == SCHEMA_VERSION
+            manifest.get("schema_version") in SUPPORTED_SCHEMA_VERSIONS
             and isinstance(manifest_simulation_mode, str)
             and manifest_simulation_mode in {"deterministic", "monte_carlo"}
         ):
@@ -2862,8 +2945,8 @@ def validate_stale(
                 issues.append(issue("MISSING_FIELD", artifact="validation-receipt.json", pointer=field, message="required"))
         if validation_receipt.get("status") != "pass":
             issues.append(issue("VALIDATION_FAILED", artifact="validation-receipt.json", message="receipt status must be pass"))
-        if validation_receipt.get("schema_version") != SCHEMA_VERSION:
-            issues.append(issue("SCHEMA", artifact="validation-receipt.json", pointer="schema_version", expected=SCHEMA_VERSION, actual=validation_receipt.get("schema_version")))
+        if validation_receipt.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS:
+            issues.append(issue("SCHEMA", artifact="validation-receipt.json", pointer="schema_version", expected=list(SUPPORTED_SCHEMA_VERSIONS), actual=validation_receipt.get("schema_version")))
         if validation_receipt.get("validator_version") != VALIDATOR_VERSION:
             issues.append(issue("STALE_ARTIFACT", artifact="validation-receipt.json", pointer="validator_version", message="receipt produced by a different validator", expected=VALIDATOR_VERSION, actual=validation_receipt.get("validator_version")))
         if validation_receipt.get("formula_version") not in SUPPORTED_FORMULA_VERSIONS:
@@ -3081,13 +3164,13 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
         ):
             if field not in run:
                 issues.append(issue("MISSING_FIELD", artifact="run_ledger", pointer=field, message="required"))
-        if run.get("schema_version") != SCHEMA_VERSION:
+        if run.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS:
             issues.append(
                 issue(
                     "SCHEMA",
                     artifact="run_ledger",
                     pointer="schema_version",
-                    expected=SCHEMA_VERSION,
+                    expected=list(SUPPORTED_SCHEMA_VERSIONS),
                     actual=run.get("schema_version"),
                 )
             )
@@ -3647,7 +3730,7 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
             if isinstance(run, dict)
             else FORMULA_VERSION
         )
-        if replay.get("schema_version") != SCHEMA_VERSION or replay.get("formula_version") != expected_replay_formula:
+        if replay.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS or replay.get("formula_version") != expected_replay_formula:
             issues.append(issue("SCHEMA", artifact="replay_report", message="replay schema/formula version mismatch"))
         required_flags = (
             "contract_hash_ok",

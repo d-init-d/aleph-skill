@@ -3,8 +3,8 @@
   "package_version": "2.3.1",
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
-  "file_count": 468,
-  "tree_sha256": "85f5fa3c4dc1a305a3f09e5c71c9f58906dc48d3d727469ba4dead470d0727c7",
+  "file_count": 469,
+  "tree_sha256": "f69ef1ad351e54276487853a696c68dadca4b87a904937b9417ad317a48adfcf",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -1748,8 +1748,8 @@
     },
     {
       "path": "scripts/aleph/__init__.py",
-      "sha256": "ea57112b5aa77b5009f7c81f0a763b0ee22422c11557b57c9d47f93d29b68197",
-      "size": 827
+      "sha256": "3ad5fc00e3b6339fd7efb4be8cfb53bb1eab96712b26e3188e5ce492c6414a9c",
+      "size": 1131
     },
     {
       "path": "scripts/aleph/adapters_registry.py",
@@ -1803,13 +1803,13 @@
     },
     {
       "path": "scripts/aleph/issues.py",
-      "sha256": "e6fa181aa6c968c6a62bd958690daa4c63d20c28e3e21c9b9eec2063b446ae58",
-      "size": 4911
+      "sha256": "00ee415ac53d523aa62c0ea28253a66b54f149f83c046207b3e70f7c2189a870",
+      "size": 4971
     },
     {
       "path": "scripts/aleph/migrate.py",
-      "sha256": "7b39b98bc2438332181f298628fbceb523fc4679091846ac7d5c25558c89a9d3",
-      "size": 40385
+      "sha256": "65a71cc0590a3701543d00bc9b194e48c34046f156274f6b1dcc1f381fc76dd9",
+      "size": 46572
     },
     {
       "path": "scripts/aleph/packets.py",
@@ -1833,8 +1833,8 @@
     },
     {
       "path": "scripts/aleph/quality.py",
-      "sha256": "68e4c7e6b80c49279f4eab77c9fcec5e2d006867689a432e75e877d55fd30227",
-      "size": 21290
+      "sha256": "d094e10afffed22cf4b5eaa81db15c5b1cc6bef48d75019833664b9a2568ef33",
+      "size": 21328
     },
     {
       "path": "scripts/aleph/rng.py",
@@ -1843,8 +1843,8 @@
     },
     {
       "path": "scripts/aleph/schema.py",
-      "sha256": "70d3d68b0bbb7436b0642aa4ee38cb353a575127f394a6cc696be21dede0cb89",
-      "size": 18708
+      "sha256": "a3d4e0a2845eac427362a261d0b19cf91807a3da7562abb95e58041f2bc253b1",
+      "size": 20980
     },
     {
       "path": "scripts/aleph/sensitivity.py",
@@ -1858,8 +1858,8 @@
     },
     {
       "path": "scripts/aleph/validator.py",
-      "sha256": "0cb40634322e3a74dd89afa685f29688c873f1ac0fec3b9123b21a918f68e343",
-      "size": 211147
+      "sha256": "ce42897384e3c3a6884c4e31a826fa4ca7d6d0695d688f11e58d18d168a08861",
+      "size": 214979
     },
     {
       "path": "scripts/build_release_assets.py",
@@ -1893,8 +1893,8 @@
     },
     {
       "path": "scripts/init_simulation_workspace.py",
-      "sha256": "18bc7a0863344e32327a04d86fb9665f4a4b74b2910b39f86bf3efdbbeb9e1dd",
-      "size": 11889
+      "sha256": "efcd4451e95763646eafcaab08b0c72224f6e1e53042248ad5048de55829c0e1",
+      "size": 12167
     },
     {
       "path": "scripts/install_adapters.py",
@@ -1908,8 +1908,8 @@
     },
     {
       "path": "scripts/migrate_workspace.py",
-      "sha256": "77be449e72be8c35143dc7b14c4b351c7d9ec483c756f02c49338e95088e3c8b",
-      "size": 2751
+      "sha256": "bc4eddfd0df0938afba30d4b9f013eab1850916fc04cb7462c824edb3f6f10cb",
+      "size": 3229
     },
     {
       "path": "scripts/preflight.py",
@@ -2305,6 +2305,11 @@
       "path": "tests/test_roleplay_portability_v2.py",
       "sha256": "036b3812998c97921331f0d53446d422718ebcef7adf4825eae0b642b65aad7b",
       "size": 23914
+    },
+    {
+      "path": "tests/test_schema_v21_dual_read.py",
+      "sha256": "8880329286497fa3da50419e14d579d65a023fe39dd77d0a25952d8fe50dc54b",
+      "size": 11355
     },
     {
       "path": "tests/test_security_assurance_fixes.py",

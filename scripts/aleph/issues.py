@@ -43,6 +43,8 @@ PUBLIC_CODES = frozenset(
         "LAG_ORDER",
         "CONTEXT",
         "CONTEXT_MISSING",
+        "CONFIDENCE_ALIAS",
+        "ACTOR_BASIS_INFERRED",
         "MULTIPLIER",
         "SELF_EDGE",
         "TRACE_STEP",
