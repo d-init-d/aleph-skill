@@ -213,7 +213,7 @@ def discover_d_research(
     if explicit is not None:
         report = _candidate_report("explicit", Path(explicit).expanduser())
         if not report.get("ok"):
-            return {
+            incompatible: dict[str, Any] = {
                 "status": "incompatible",
                 "path": report.get("resolved_path") or str(explicit),
                 "source": "explicit",
@@ -233,6 +233,14 @@ def discover_d_research(
                     ).to_dict()
                 ],
             }
+            # Keep the declared-vs-supported contract comparison visible on the
+            # refusal itself so callers can explain the incompatibility.
+            if "interop_contract" in report:
+                incompatible["interop_contract"] = report["interop_contract"]
+                incompatible["importer_ledger_contract"] = report.get(
+                    "importer_ledger_contract"
+                )
+            return incompatible
         if not allow_external:
             bundled = _bundled_discover(
                 skill_root=root,

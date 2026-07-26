@@ -43,6 +43,13 @@ def main() -> None:
     parser.add_argument("--out", help="Write evidence CSV")
     parser.add_argument("--raw-out", help="Preserve the original ledger at this path (default: <out>.source.csv)")
     parser.add_argument("--receipt-out", help="Write the cryptographic import receipt JSON")
+    parser.add_argument(
+        "--audit-out",
+        help=(
+            "Write the audit-stream artifact (lead/process/blocker partitions plus "
+            "full per-row source provenance) (default: <out>.audit.json)"
+        ),
+    )
     parser.add_argument("--workspace", help="Workspace root for portable receipt references (default: output parent)")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -67,6 +74,11 @@ def main() -> None:
         if args.receipt_out
         else out.with_suffix(out.suffix + ".import-receipt.json") if out is not None else None
     )
+    audit_out = (
+        Path(args.audit_out)
+        if args.audit_out
+        else out.with_suffix(out.suffix + ".audit.json") if out is not None else None
+    )
     receipt_workspace = (
         Path(args.workspace).resolve()
         if args.workspace
@@ -74,7 +86,7 @@ def main() -> None:
     )
     sidecar_out = raw_out.with_suffix(raw_out.suffix + ".hmac") if raw_out is not None and sidecar is not None else None
     sources = [ledger] + ([sidecar] if sidecar is not None else [])
-    targets = [value for value in (out, raw_out, receipt_out, sidecar_out) if value is not None]
+    targets = [value for value in (out, raw_out, receipt_out, sidecar_out, audit_out) if value is not None]
     aliases: list[tuple[str, str]] = []
     for index, left in enumerate(sources + targets):
         for right in (sources + targets)[index + 1 :]:
@@ -88,6 +100,9 @@ def main() -> None:
         portable_evidence_ref = _portable_ref(out, receipt_workspace) if out is not None else None
         portable_sidecar_ref = (
             _portable_ref(sidecar_out, receipt_workspace) if sidecar_out is not None else None
+        )
+        portable_audit_ref = (
+            _portable_ref(audit_out, receipt_workspace) if audit_out is not None else None
         )
         if receipt_out is not None:
             _portable_ref(receipt_out, receipt_workspace)
@@ -146,6 +161,24 @@ def main() -> None:
         if verified_sidecar and sidecar_out is not None:
             write_bytes_atomic(sidecar_out, Path(str(verified_sidecar)).read_bytes())
         write_text_atomic(out, render_evidence_csv(rows).decode("utf-8"))
+        audit_sha256: str | None = None
+        if audit_out is not None:
+            # Leads and process/blocker rows stay in the audit stream — never
+            # promoted to evidence — with every source column preserved.
+            audit_artifact = {
+                "schema_version": "2.0.0",
+                "artifact_type": "d-research-import-audit",
+                "source_contract": result.get("source_contract"),
+                "column_count": result.get("column_count"),
+                "fieldnames": result.get("fieldnames"),
+                "raw_sha256": result.get("raw_sha256"),
+                "canonical_sha256": result.get("canonical_sha256"),
+                "lead_rows": result.get("lead_rows") or [],
+                "audit_rows": result.get("audit_rows") or [],
+                "source_provenance": result.get("source_provenance") or [],
+            }
+            write_json_atomic(audit_out, audit_artifact)
+            audit_sha256 = hashlib.sha256(audit_out.read_bytes()).hexdigest()
         receipt = {
             "schema_version": "2.0.0",
             "receipt_type": "d-research-import",
@@ -163,6 +196,11 @@ def main() -> None:
                 hashlib.sha256(sidecar_out.read_bytes()).hexdigest() if sidecar_out is not None else None
             ),
             "hmac_verified": result.get("hmac_verified") is True,
+            "audit_ref": portable_audit_ref,
+            "audit_sha256": audit_sha256,
+            "evidence_count": len(rows),
+            "lead_count": len(result.get("lead_rows") or []),
+            "audit_count": len(result.get("audit_rows") or []),
             "d_research_identity": identity,
             "component_binding": component_binding,
         }

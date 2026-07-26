@@ -3,8 +3,8 @@
   "package_version": "2.3.1",
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
-  "file_count": 466,
-  "tree_sha256": "04d8289325fb659c26bca94a287dfc6a0f57ff951498cc48d9f4fb1bd1985d7e",
+  "file_count": 468,
+  "tree_sha256": "85f5fa3c4dc1a305a3f09e5c71c9f58906dc48d3d727469ba4dead470d0727c7",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -1758,13 +1758,13 @@
     },
     {
       "path": "scripts/aleph/component_registry.py",
-      "sha256": "93418c20771b54070d2321c15fa0b14794354927903f5d7c479e3bb2f6b6630d",
-      "size": 38547
+      "sha256": "d37ca55a27e11547ef80a23cc5c53134aa7d39fae05e616d08a655061e4f2918",
+      "size": 38912
     },
     {
       "path": "scripts/aleph/discovery.py",
-      "sha256": "8b43faf225aa2deea3ca310c4648062c62ff7450dd0b9d13973f8a0bed3ea72d",
-      "size": 16330
+      "sha256": "de34d9437c4a4f1a57f9beebb996dd5da8ee3010ea1a38319b9bc5181b2af40b",
+      "size": 16798
     },
     {
       "path": "scripts/aleph/engine.py",
@@ -1888,8 +1888,8 @@
     },
     {
       "path": "scripts/import_research_ledger.py",
-      "sha256": "b567ff6091f2eb42e8eeff88737d64cb59e4903a916232a33a7b81bb7733db0b",
-      "size": 8419
+      "sha256": "5c94dfdac4a563ce786bdc190b433c6893b89db2625f8036062c12a524e5180e",
+      "size": 10236
     },
     {
       "path": "scripts/init_simulation_workspace.py",
@@ -2187,6 +2187,11 @@
       "size": 7890
     },
     {
+      "path": "tests/test_discovery_interop_contract.py",
+      "sha256": "9f023e68796114ba3105b6bc958f8a7c6d6a6786555fe73d490a25fb31eb766c",
+      "size": 6167
+    },
+    {
       "path": "tests/test_engine_migration_v2.py",
       "sha256": "fe30ce890d9617e7b7dca53a1964af6f7b39dcd0f9b91446c5f51badc3689db1",
       "size": 15602
@@ -2230,6 +2235,11 @@
       "path": "tests/test_foundation_depth_v2.py",
       "sha256": "3222fe6ded25b66f418f5eca3f97abcd3251a78ae57675a551e8067959232a93",
       "size": 22479
+    },
+    {
+      "path": "tests/test_import_audit_stream.py",
+      "sha256": "ebf3128ac1ca6ed7bce22b49376d7a32b893bfe00a4681387d81b876aa2296f0",
+      "size": 8481
     },
     {
       "path": "tests/test_likelihood_contract_v201.py",

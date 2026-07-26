@@ -777,15 +777,23 @@ def discover_d_research(
         }
         # Surface the component's machine-checkable interop contract (ledger
         # header widths, record types, canonicalization/signature identifiers,
-        # routes) when the locked snapshot ships one (D Research >= 3.4.0).
+        # routes) when the locked snapshot ships one (D Research >= 3.4.0),
+        # together with the importer's own ledger contract for comparison.
         try:
-            from .discovery import _read_interop_contract  # noqa: PLC0415
+            from .discovery import (  # noqa: PLC0415
+                _importer_ledger_contract,
+                _read_interop_contract,
+            )
 
             interop = _read_interop_contract(Path(resolution.root))
+            importer_contract = _importer_ledger_contract()
         except Exception:  # noqa: BLE001 - discovery info must never break resolve
             interop = None
+            importer_contract = None
         if interop is not None:
             report["interop_contract"] = interop
+            if importer_contract is not None:
+                report["importer_ledger_contract"] = importer_contract
         return report
 
     if require_bundled and not allow_external:
