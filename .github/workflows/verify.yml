@@ -6,6 +6,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
 jobs:
   lockfiles:
     runs-on: ubuntu-24.04
@@ -146,7 +149,8 @@ jobs:
       - name: Verify locked component and package manifest
         run: |
           python -B scripts/lock_bundled_component.py
-          node components/d-research/scripts/runtime_self_test.mjs
+          cd components/d-research
+          node scripts/runtime_self_test.mjs
       - name: Require an honest no-browser self-test status
         shell: bash
         run: |

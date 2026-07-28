@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 466,
-  "tree_sha256": "484cdcf4a516604f7941e1071fb5a64bba16a127bb34c1c000d60c759d9137d7",
+  "tree_sha256": "c3d06a11b12ba652a440ddaad11959155d9a0a8058be1266b646dfa9b777f1ba",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -53,8 +53,8 @@
     },
     {
       "path": ".github/workflows/verify.yml",
-      "sha256": "896814913bc0c33f05bbcb49974d29b9a1e3cee3f0e2dd16420aec0b50e32cd5",
-      "size": 9645
+      "sha256": "3c9158595f216148cfc5443652ce0e28e5712173fba8b4134bcb98e3391857f1",
+      "size": 9695
     },
     {
       "path": "AGENTS.md",
@@ -2018,8 +2018,8 @@
     },
     {
       "path": "tests/baseline/schema-2.0-fixture-hashes.json",
-      "sha256": "e52f1d85d73f5e689e2f707319fe49d1b9e867cdf158a30610c9d671e72403dd",
-      "size": 996
+      "sha256": "cb358aace7342a7c6c901c80f12792cbdaf6fb53a30d58ea57f97ec58de4c054",
+      "size": 981
     },
     {
       "path": "tests/fixtures/canonical/minimal-graph.json",
