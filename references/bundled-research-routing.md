@@ -151,12 +151,14 @@ Missing optional Node/browser capability is reported as `degraded` or
 real failure. `research:acceptance` and `research:browser-smoke` remain separate
 release jobs so a no-browser job cannot masquerade as a browser pass.
 
-The upstream 3.4.0 acceptance matrix also calls the social-snapshot self-test,
-which resolves `www.reddit.com` before its mocked HTTP layer runs. If a host DNS
-policy maps that public name to a non-public address, the SSRF guard must remain
-fail closed. Aleph may reconcile only the exact two resulting wrapper failures
-(`22` and `26`) as `CAPABILITY_DNS_POLICY`, alongside exact repository-only
-case `23`, and delegate them to CI. Any other failure set remains a hard failure.
+Upstream 3.4.1 makes the social-snapshot self-test hermetic for known mocked
+fixture hosts while retaining the production resolver for private and malformed
+targets. The locked 3.4.1 component therefore reconciles only exact
+repository-only case `23`. Aleph retains the historical 3.4.0 DNS-policy
+reconciliation for exact legacy bindings: if a host maps the public fixture
+name to a non-public address, only wrapper failures `22` and `26` may be
+reported as `CAPABILITY_DNS_POLICY` alongside case `23`. Any other failure set
+remains a hard failure.
 
 ## External compatibility mode
 

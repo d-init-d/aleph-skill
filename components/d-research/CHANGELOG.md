@@ -7,6 +7,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.4.1] - 2026-07-28
+
+Stable production promotion of the signed `v3.4.1-rc.2` candidate. This patch
+aligns the product's public access-model contract with its existing explicit
+archival and authorized API mutation capabilities, adds machine-enforced
+wording regression protection, and makes the social snapshot self-test
+independent of filtered public DNS. See
+[`docs/release-v3.4.1.md`](docs/release-v3.4.1.md).
+
+### Changed
+
+- Standardized the public access posture as read-only by default while keeping
+  dedicated archival commands and `--intent archive|mutation` fully available.
+- Promoted package lifecycle metadata from `3.4.1-rc.2` Beta to `3.4.1`
+  Production/Stable without changing executable code, dependencies, routes, or
+  package paths after candidate freeze.
+
+### Added
+
+- Added cross-document contract checks and negative fixtures that reject stale
+  absolute read-only claims or omission of the explicit mutation surface.
+
+### Fixed
+
+- Made mocked social snapshot tests hermetic when a filtered resolver maps
+  public fixture hosts to loopback, without weakening production SSRF checks.
+
+### Verification
+
+- Exact candidate CI passed Python 3.10-3.12, Node.js 18/20/22, Windows and
+  Ubuntu integration, real Chromium, optional backends, 34/34 adversarial
+  acceptance, package boundaries, capability-superset, and artifact gates.
+- The signed candidate tag, deterministic source archive replay, independent
+  reproduction, provenance attestation, dependency audit, and all 24 local
+  promotion checks passed before stable promotion.
+- No v3.4.0 command, option, route, reference, script, template, ledger schema,
+  record type, supported operation, or recorded no-config default was removed.
+
+## [3.4.1-rc.2] - 2026-07-28
+
+Release candidate that supersedes v3.4.1-rc.1 without changing its executable
+behavior. It freezes the final stable release-note path inside the candidate
+package boundary so RC-to-stable promotion can remain metadata-only and the npm
+package allowlist stays byte-auditable. See
+[`docs/release-v3.4.1-rc.2.md`](docs/release-v3.4.1-rc.2.md).
+
+### Changed
+
+- Advanced candidate lifecycle metadata from `3.4.1-rc.1` to `3.4.1-rc.2`.
+- Pre-committed `docs/release-v3.4.1.md` before candidate freeze; stable
+  promotion may refine that document but cannot add an unvalidated package path.
+
+### Verification
+
+- Inherits the access-contract regression guard and hermetic social snapshot
+  self-test from RC1.
+- Requires a new signed tag, exact-SHA CI, source archive replay, independent
+  reproduction, and provenance attestation before stable promotion.
+
+## [3.4.1-rc.1] - 2026-07-28
+
+Patch candidate that aligns the public access-model contract with the explicit,
+user-authorized archival and API mutation capabilities already shipped in
+v3.4.0. This is a monotonic documentation-and-validation correction: it removes
+no command, option, route, reference, script, template, ledger format, record
+type, supported operation, or no-config default. See
+[`docs/release-v3.4.1-rc.1.md`](docs/release-v3.4.1-rc.1.md).
+
+### Changed
+
+- Reframed the access posture consistently as read-only by default, with
+  explicit archival and authorized API mutation available through dedicated
+  commands or `--intent archive|mutation`.
+- Synchronized `SKILL.md`, `AGENTS.md`, and both English and Vietnamese product
+  documentation without changing executable request behavior.
+
+### Added
+
+- Added a contract regression gate and negative self-tests that reject stale
+  absolute read-only claims or omission of the explicit mutation surface.
+
+### Fixed
+
+- Made the social snapshot self-test hermetic when filtered DNS maps public
+  fixture hostnames to loopback, while retaining the real SSRF resolver for all
+  private-host and malformed-URL negative cases.
+
+### Verification
+
+- Retains the v3.4.0 capability baseline and requires the complete candidate
+  source/runtime, package, contract, documentation, and artifact gates.
+- Keeps the stable-promotion freeze: executable and policy code are immutable
+  after the signed candidate; stable changes are restricted to lifecycle
+  metadata, release documentation, and version-scoped evidence.
+
 ## [3.4.0] - 2026-07-26
 
 Stable production promotion of the signed `v3.4.0-rc.1` monotonic-capability
@@ -1263,7 +1358,10 @@ git push origin v2.1.0 bench/v2.1 v3.0.0
   evidence-ledger schema, anti-bot fallback chain, citation export,
   systematic-review protocol, and PRISMA flow template.
 
-[Unreleased]: https://github.com/d-init-d/d-research-skill/compare/v3.4.0...HEAD
+[Unreleased]: https://github.com/d-init-d/d-research-skill/compare/v3.4.1...HEAD
+[3.4.1]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.4.1
+[3.4.1-rc.2]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.4.1-rc.2
+[3.4.1-rc.1]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.4.1-rc.1
 [3.4.0]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.4.0
 [3.4.0-rc.1]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.4.0-rc.1
 [3.3.0]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.3.0

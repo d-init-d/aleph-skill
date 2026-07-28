@@ -60,9 +60,9 @@ class ComponentPackagingTests(unittest.TestCase):
         lock = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))
         entry = lock["components"]["d-research"]
         self.assertEqual(entry["uri"], "aleph-component://d-research")
-        self.assertEqual(entry["version"], "3.4.0")
-        self.assertEqual(entry["source_tag"], "v3.4.0")
-        self.assertEqual(entry["file_count"], 210)
+        self.assertEqual(entry["version"], "3.4.1")
+        self.assertEqual(entry["source_tag"], "v3.4.1")
+        self.assertEqual(entry["file_count"], 213)
         self.assertEqual(entry["file_count"], len(entry["files"]))
         self.assertIn("scripts/evidence_ledger.py", entry["entrypoints"])
         self.assertIn("scripts/investigation_policy.py", entry["entrypoints"])
@@ -70,21 +70,25 @@ class ComponentPackagingTests(unittest.TestCase):
         self.assertEqual(entry["source_archive_format"], "git-archive-tar")
         self.assertEqual(len(entry["upstream_tree"]), 40)
         self.assertEqual(
-            entry["upstream_commit"], "9f9ad30346f3921ab544014b2a15a8fe5734e2e9"
+            entry["upstream_commit"], "e159653797308cfb1cd10ec63f51dcc7d69d6066"
         )
         self.assertEqual(
-            entry["upstream_tag_object"], "65b5b788f841f40b1de50269c5dbf3fd2b51e4d9"
+            entry["upstream_tag_object"], "c70b5dde6d15994d9ada54226cfd7eaab217ba88"
         )
         self.assertEqual(
-            entry["upstream_tree"], "899e955dea529fad79892d5750d77075c26aecc3"
+            entry["upstream_tree"], "f6b32e1c99e575d815e72ace7df704388e82a10b"
         )
         recipe = entry["snapshot_recipe"]
         self.assertEqual(recipe["text_eol"], "lf")
-        self.assertEqual(len(recipe["excluded_paths"]), 545)
+        self.assertEqual(len(recipe["excluded_paths"]), 547)
         self.assertIn(".github/workflows/release-attest.yml", recipe["excluded_paths"])
         self.assertIn("release-evidence/v3.2.1/promotion.json", recipe["excluded_paths"])
         self.assertIn(
             "release-evidence/v3.3.0/maintainer-override.json",
+            recipe["excluded_paths"],
+        )
+        self.assertIn(
+            "release-evidence/v3.4.1/maintainer-override.json",
             recipe["excluded_paths"],
         )
         self.assertIn(".npmignore", recipe["excluded_paths"])
@@ -94,7 +98,7 @@ class ComponentPackagingTests(unittest.TestCase):
         )
         self.assertNotIn("docs/.archive/UPGRADE-PLAN.md", recipe["excluded_paths"])
         self.assertIn("scripts/investigation_policy.py", {item["path"] for item in entry["files"]})
-        # New v3.4.0 runtime surfaces must be part of the locked snapshot.
+        # D Research 3.4.x runtime surfaces must be part of the locked snapshot.
         locked_paths = {item["path"] for item in entry["files"]}
         self.assertIn("templates/interop-contract.json", locked_paths)
         self.assertIn("scripts/lib/config.mjs", locked_paths)
@@ -103,16 +107,16 @@ class ComponentPackagingTests(unittest.TestCase):
             any(path.startswith("examples/evals/quality/fixtures/hostile/") for path in locked_paths)
         )
         source_artifacts = entry["source_artifacts"]
-        self.assertEqual(source_artifacts["runtime_profile"]["file_count"], 210)
+        self.assertEqual(source_artifacts["runtime_profile"]["file_count"], 213)
         self.assertEqual(
             source_artifacts["workflow_source"]["sha256"],
-            "sha256:7de771335576bebb93b66e3f89aad87a6355b175c11e63d4b508feeddbd5d366",
+            "sha256:56e1e93abcf2063f33f28ee3c38390bbba8a75d2fdbff3a8a94dbd6162b9b3cd",
         )
         self.assertEqual(
             entry["source_archive_sha256"],
-            "sha256:19ebdb0281a6b24aa6cc252f4d8404f052b6f671366818eb913454eab3779795",
+            "sha256:e0a215c3734457244b337a881444afe072353ce01b42c88c7b6fd0248ef710b8",
         )
-        self.assertIn("v3.4.0 commit 9f9ad303", entry["pin_note"])
+        self.assertIn("v3.4.1 commit e1596537", entry["pin_note"])
 
     def test_component_lock_is_reproducible_and_fully_distributed(self) -> None:
         existing = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))

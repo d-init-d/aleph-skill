@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.4.1
+
+### Changed
+- Updated the locked internal D Research component from `3.4.0` to `3.4.1` using the official 213-file runtime profile and a byte-exact LF-normalized snapshot.
+- Advanced Aleph package and validator versions to `2.4.1`; workspace schema `2.0.0`, opt-in schema `2.1.0`, and formula `2.0.0`/`2.1.0` contracts are unchanged.
+- Extended exact gateway acceptance reconciliation to the locked D Research 3.4.1 identity while retaining all historical 3.4.0, 3.3.0, and 3.2.1 branches.
+
+### Fixed
+- Bundled the corrected D Research access-model contract: research is read-only by default, while explicit user-authorized archival and API mutation operations remain discoverable through dedicated commands or `--intent archive|mutation`.
+- Bundled the upstream contract regression guard that rejects stale absolute read-only assertions or omission of the explicit mutation surface.
+- Bundled the hermetic social snapshot self-test for filtered-DNS environments without weakening private-target SSRF validation.
+
+### Compatibility
+- Every Aleph 2.4.0 command, route, flag, adapter, domain pack, workspace schema, formula version, ledger width, default, and valid input remains available; the frozen v2.3.1 capability baseline continues to enforce the broader monotonic surface.
+- Existing schema `2.0.0` and `2.1.0` workspaces remain valid. Component-bound research receipts may be regenerated to bind D Research 3.4.1; no workspace schema migration is required.
+- No mandatory Python or Node dependency is added. Playwright remains locked upstream and browsers are never bundled or auto-installed.
+
+### Security and provenance
+- Pinned GitHub-verified annotated tag object `c70b5dde6d15994d9ada54226cfd7eaab217ba88`, commit `e159653797308cfb1cd10ec63f51dcc7d69d6066`, and Git tree `f6b32e1c99e575d815e72ace7df704388e82a10b`.
+- Bound the raw reproducible Git archive tar SHA-256 `e0a215c3734457244b337a881444afe072353ce01b42c88c7b6fd0248ef710b8` and release-workflow tar.gz SHA-256 `56e1e93abcf2063f33f28ee3c38390bbba8a75d2fdbff3a8a94dbd6162b9b3cd`.
+- Vendored the official 213-file runtime profile with normalized component-tree SHA-256 `0555d49ddb6b11929f70387838c51917a3236a219a2f8853beba1a61bd9b9ee1`; excluded 547 exact repository-only paths and applied only the attested runtime `package.json` projection.
+
 ## 2.4.0
 
 ### Added
