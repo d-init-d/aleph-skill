@@ -1060,6 +1060,12 @@ def discover_d_research(
                 ]
             return available
         if authoritative:
+            reason = report.get("reason")
+            message = (
+                reason
+                if isinstance(reason, str)
+                else "configured D Research is unavailable or incompatible"
+            )
             return {
                 "status": "incompatible",
                 "path": report.get("resolved_path") or str(path),
@@ -1076,7 +1082,7 @@ def discover_d_research(
                 "issues": [
                     issue(
                         "D_RESEARCH",
-                        message=report.get("reason", "configured D Research is unavailable or incompatible"),
+                        message=message,
                     ).to_dict()
                 ],
             }

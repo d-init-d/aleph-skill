@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 466,
-  "tree_sha256": "c3d06a11b12ba652a440ddaad11959155d9a0a8058be1266b646dfa9b777f1ba",
+  "tree_sha256": "0bb43f66384b114cbc3ce1b1cd0c917ef0d6d2c41d80435d0a3775d8d13e076f",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -1728,13 +1728,13 @@
     },
     {
       "path": "scripts/aleph/component_registry.py",
-      "sha256": "81e5929268bbeefdd687098494ad238af97c10033f4f2a335f49496ee45f7e22",
-      "size": 48212
+      "sha256": "cb06d6919fb2fad22e5b811e8fcfe8f87029e3a28227ead121d4bb1140c86ba9",
+      "size": 48365
     },
     {
       "path": "scripts/aleph/discovery.py",
-      "sha256": "c939bc8389ea465f2b961543f2a004780f284492358a06cfecbf5cb99478f9a2",
-      "size": 20808
+      "sha256": "0abae54e33d578a45ff97299562211ff2e0683389e9eb25107ff0ebb338fea7a",
+      "size": 20840
     },
     {
       "path": "scripts/aleph/engine.py",
@@ -1813,8 +1813,8 @@
     },
     {
       "path": "scripts/aleph/schema.py",
-      "sha256": "91f8a3e3614c9fcad341dde1cd3661d8bf8b5c26fb43281ea95fbbf16f51e10d",
-      "size": 20996
+      "sha256": "7cf298064c1055ac6d271518f7774d7aa77992ccc42369c3adbe4157e49464a5",
+      "size": 20980
     },
     {
       "path": "scripts/aleph/sensitivity.py",
@@ -1828,7 +1828,7 @@
     },
     {
       "path": "scripts/aleph/validator.py",
-      "sha256": "7d8164ec76fb51cd591f37774a9b65e125cbef4fbd49e8d3ce58adaed8542120",
+      "sha256": "1a05d4afbff03f13c914a209af4195aea98cae6c6b686f136b55080a91eafd50",
       "size": 216717
     },
     {
@@ -2148,8 +2148,8 @@
     },
     {
       "path": "tests/test_capability_baseline.py",
-      "sha256": "bab848ed16b48a3cc3453855e3c1dd34153f77f065e80b6242c8dad3b0412bc1",
-      "size": 11070
+      "sha256": "e4e55c45e0c8696cd153da430e78eb1d4c15173ec433e835fac3bb75f793d43f",
+      "size": 11057
     },
     {
       "path": "tests/test_component_packaging.py",
@@ -2163,8 +2163,8 @@
     },
     {
       "path": "tests/test_discovery_interop_contract.py",
-      "sha256": "9f023e68796114ba3105b6bc958f8a7c6d6a6786555fe73d490a25fb31eb766c",
-      "size": 6167
+      "sha256": "d16d12ce0717e3c1c3e084f0ed567a497aca1a4f77cbc4db3937d8db8addb48a",
+      "size": 6166
     },
     {
       "path": "tests/test_doc_fixture_sync.py",

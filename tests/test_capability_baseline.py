@@ -15,8 +15,8 @@ baseline itself is being advanced on purpose):
 
 from __future__ import annotations
 
-import json
 import ast
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -84,14 +84,14 @@ def capture_cli_options(scripts: Path) -> dict[str, list[dict[str, object]]]:
 
 def capture_surface() -> dict:
     """Collect the current public capability surface (static, offline)."""
-    from research_gateway import COMMAND_ROUTES  # noqa: PLC0415
     from aleph import (  # noqa: PLC0415
         LEGACY_SCHEMA_VERSION,
         SCHEMA_VERSION,
         SUPPORTED_FORMULA_VERSIONS,
         SUPPORTED_SCHEMA_VERSIONS,
+        import_ledger,  # noqa: PLC0415
     )
-    from aleph import import_ledger  # noqa: PLC0415
+    from research_gateway import COMMAND_ROUTES  # noqa: PLC0415
 
     adapters = json.loads((REPO_ROOT / "adapters" / "registry.json").read_text(encoding="utf-8"))
     raw_adapters = adapters.get("adapters", {})

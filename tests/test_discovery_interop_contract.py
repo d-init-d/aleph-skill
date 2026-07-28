@@ -10,6 +10,7 @@ contract keep the historical major-3 acceptance (monotonic fallback).
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -19,8 +20,6 @@ from aleph.import_ledger import (
     D_RESEARCH_SIGNATURE_VERSION,
     VALID_RECORD_TYPES,
 )
-
-import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENT_ROOT = ROOT / "components" / "d-research"

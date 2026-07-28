@@ -92,7 +92,8 @@ def _read_interop_contract(resolved: Path) -> dict[str, Any] | None:
     contract, contract_issues = load_json_secure(contract_path)
     if contract_issues or not isinstance(contract, dict):
         return {"present": True, "readable": False}
-    ledger = contract.get("ledger") if isinstance(contract.get("ledger"), dict) else {}
+    raw_ledger = contract.get("ledger")
+    ledger: dict[str, Any] = raw_ledger if isinstance(raw_ledger, dict) else {}
     importer = _importer_ledger_contract()
     declared_widths = ledger.get("header_sizes")
     declared_types = ledger.get("record_types")

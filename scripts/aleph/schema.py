@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-from . import SCHEMA_VERSION, SCHEMA_VERSION_2_1, SUPPORTED_SCHEMA_VERSIONS
+from . import SCHEMA_VERSION_2_1, SUPPORTED_SCHEMA_VERSIONS
 from .issues import Issue, issue
 
 EPISTEMIC_STATUS = frozenset({"fact", "inference", "simulation", "counterfactual", "assumption"})
