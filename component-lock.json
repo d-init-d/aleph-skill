@@ -13,10 +13,37 @@
       "upstream_tree": "899e955dea529fad79892d5750d77075c26aecc3",
       "source_archive_format": "git-archive-tar",
       "source_archive_sha256": "sha256:19ebdb0281a6b24aa6cc252f4d8404f052b6f671366818eb913454eab3779795",
+      "source_artifacts": {
+        "workflow_source": {
+          "name": "d-research-skill-v3.4.0.tar.gz",
+          "sha256": "sha256:7de771335576bebb93b66e3f89aad87a6355b175c11e63d4b508feeddbd5d366"
+        },
+        "full_profile": {
+          "name": "d-research-3.4.0-full.tar.gz",
+          "sha256": "sha256:e7c9cd03c399420be322fef8fe8ab13316b5db9d711aa163578f08a41b0d8fb7",
+          "manifest_name": "d-research-3.4.0-full.manifest.json",
+          "manifest_sha256": "sha256:f7516dc92d6cb9ad0a4ceb5737cbc4a037bb1e79cd8e71f5d2a35911190fef07",
+          "file_count": 755
+        },
+        "runtime_profile": {
+          "name": "d-research-3.4.0-runtime.tar.gz",
+          "sha256": "sha256:fd8bca6a682cfa5d6dad953183eea14b9bd3ae349e6e5b1fff29334afa2d7e4f",
+          "manifest_name": "d-research-3.4.0-runtime.manifest.json",
+          "manifest_sha256": "sha256:e197e98c05d9edfc106b72dcd88689f5558e00a250196af68acca355937f1b6e",
+          "file_count": 210,
+          "tree_sha256": "sha256:0ab3c0cfe5e3dde3a8d77bdfd9a24236cac07641fb33af3ede56fee6909483a0",
+          "ordered_paths_sha256": "sha256:857adbe34ea29e04cf27929a09b583a8e7eb2ac3464b642905b88114f1c42104"
+        },
+        "interop_contract": {
+          "path": "templates/interop-contract.json",
+          "source_sha256": "sha256:266bd2696eb99900561eebe1eadb5ddad0e174ee1c799a5f18b16b7f35bf2edf",
+          "normalized_sha256": "sha256:39c94007486f74ab303051c310b82a01e76f4b05c4571ca5a080cd06018c4bd3"
+        }
+      },
       "snapshot_recipe": {
-        "version": 1,
-        "source": "git-tree",
-        "include": "all-tracked-files-except-excluded_paths",
+        "version": 2,
+        "source": "release-runtime-profile",
+        "include": "runtime-profile-files",
         "excluded_paths": [
           ".agents/skills/testing-scripts/SKILL.md",
           ".gitattributes",
@@ -27,7 +54,16 @@
           ".github/workflows/release-source-archive.yml",
           ".gitignore",
           ".lycheeignore",
+          ".npmignore",
           ".pre-commit-config.yaml",
+          "examples/evals/quality/fixtures/hostile/fake_jsonld_citations.html",
+          "examples/evals/quality/fixtures/hostile/goal_hijack.html",
+          "examples/evals/quality/fixtures/hostile/inject_ignore_instructions.html",
+          "examples/evals/quality/fixtures/hostile/invisible_misleading.html",
+          "examples/evals/quality/fixtures/hostile/path_traversal_name.json",
+          "examples/evals/quality/fixtures/hostile/private_redirect.html",
+          "examples/evals/quality/fixtures/hostile/safe_oversize.bin.json",
+          "examples/evals/quality/fixtures/hostile/secret_in_page.html",
           "release-evidence/v3.2.0/local-verification.json",
           "release-evidence/v3.2.0/maintainer-override.json",
           "release-evidence/v3.2.1/promotion.json",
@@ -562,18 +598,33 @@
           "**/*.pyo",
           ".agents",
           ".git",
+          ".gitattributes",
           ".github",
+          ".gitignore",
+          ".lycheeignore",
+          ".npmignore",
+          ".pre-commit-config.yaml",
           ".venv",
           "__pycache__",
           "browser-binaries",
           "credentials",
+          "examples/evals/quality/fixtures/hostile/**",
           "generated-output",
           "node_modules",
           "release-evidence"
+        ],
+        "profile": "runtime",
+        "content_transforms": [
+          {
+            "path": "package.json",
+            "transform": "runtime-package-v1",
+            "source_sha256": "sha256:5ad911506f2a67d487b9e1f8ee87d2321c0c73d0131ac17b75c5b1f8e8b1acdb",
+            "output_sha256": "sha256:dc95de0b2102419ec965d44b529d7beac0f8085859eac3bc8911485687841e4e"
+          }
         ]
       },
-      "tree_sha256": "sha256:e6314acd173a861c7e51d3dbe8dd3ec6860b8e9d91c72c02e07cc1af2b21fe26",
-      "file_count": 219,
+      "tree_sha256": "sha256:7c382b677cce9b228bb81e053fc6897e4c4dca49288a73577ef205c1aee18cfc",
+      "file_count": 210,
       "entrypoints": [
         "scripts/evidence_ledger.py",
         "scripts/investigation_policy.py",
@@ -581,11 +632,6 @@
         "scripts/playwright_probe.mjs"
       ],
       "files": [
-        {
-          "path": ".npmignore",
-          "size": 214,
-          "sha256": "sha256:3812383959328015f3cd35d9b34697886cd207b742cddad88bbf05812e3f4e15"
-        },
         {
           "path": "AGENTS.md",
           "size": 5788,
@@ -872,46 +918,6 @@
           "sha256": "sha256:4354bd2e273ecd71f4fd74a52be9757b9f7b00aed5280df24fe1f96dd4d9f766"
         },
         {
-          "path": "examples/evals/quality/fixtures/hostile/fake_jsonld_citations.html",
-          "size": 480,
-          "sha256": "sha256:1127d8ca41d278b2f9d560e50216df82d79e2d0b9b8a8e6879913cc8cb22e754"
-        },
-        {
-          "path": "examples/evals/quality/fixtures/hostile/goal_hijack.html",
-          "size": 237,
-          "sha256": "sha256:ac7b9eb8759d044f28448c68aa03994dc9e5550ba555c57e5e8a3d4b104af244"
-        },
-        {
-          "path": "examples/evals/quality/fixtures/hostile/inject_ignore_instructions.html",
-          "size": 509,
-          "sha256": "sha256:a0080b9a43c756d372a7faa6b0c0c04da05c40b828ef50b590f6827b5534608b"
-        },
-        {
-          "path": "examples/evals/quality/fixtures/hostile/invisible_misleading.html",
-          "size": 407,
-          "sha256": "sha256:90e8a04116aad2d9ac276268706329939fa72984be18bdba15584ecaef1c330d"
-        },
-        {
-          "path": "examples/evals/quality/fixtures/hostile/path_traversal_name.json",
-          "size": 291,
-          "sha256": "sha256:6cc7b21cd11a4d09f2c2e4a160a86163151d850a4817c54ec7169f70270338d2"
-        },
-        {
-          "path": "examples/evals/quality/fixtures/hostile/private_redirect.html",
-          "size": 180,
-          "sha256": "sha256:c97faa11a3d20dff9d14d48e9eb20a9754ea9bc603b65f9d02363497ec10ffed"
-        },
-        {
-          "path": "examples/evals/quality/fixtures/hostile/safe_oversize.bin.json",
-          "size": 206,
-          "sha256": "sha256:62e87f0be727ae85123ab288567517a2a08a441c78cee8be631da7a100044638"
-        },
-        {
-          "path": "examples/evals/quality/fixtures/hostile/secret_in_page.html",
-          "size": 189,
-          "sha256": "sha256:ef12ece4ae460eb9bf0ac0169df6942764572aeb3b7c3fa7b4a1d8ad879da150"
-        },
-        {
           "path": "examples/evals/quality/fixtures/integrity/bad_unsupported_claim.json",
           "size": 177,
           "sha256": "sha256:a382635dfb7aececa513069e0aa82ab818ab4ee444870e4eefa679845e01322a"
@@ -1033,8 +1039,8 @@
         },
         {
           "path": "package.json",
-          "size": 13631,
-          "sha256": "sha256:28b18a1ba2b6bbce9a93e8583476275b35fc9fbb465f729bd83107ed62dfdd1a"
+          "size": 8728,
+          "sha256": "sha256:dc95de0b2102419ec965d44b529d7beac0f8085859eac3bc8911485687841e4e"
         },
         {
           "path": "pyproject.toml",

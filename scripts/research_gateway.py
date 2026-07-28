@@ -42,7 +42,7 @@ from aleph.component_registry import (  # noqa: E402
     skill_root_from,
     verify_component_lock,
 )
-from aleph.io import canonical_json_bytes  # noqa: E402
+from aleph.io import canonical_json_bytes, load_json_secure  # noqa: E402
 from aleph.paths import path_contains_link_or_reparse  # noqa: E402
 
 DEFAULT_TIMEOUT_SEC = 120
@@ -201,10 +201,6 @@ NON_DISPATCHABLE_SCRIPTS = frozenset(
         "scripts/content_sanitize.py",
         "scripts/generate_test_pdf.py",  # hard-codes writes beside __file__
         "scripts/run_python.mjs",  # accepts an arbitrary script path
-        # v3.4.0 packed-artifact self-check: its capability:check probe expects
-        # repo-only release-evidence paths the npm snapshot recipe excludes, so
-        # inside the locked component it can only report that recipe gap.
-        "scripts/runtime_self_test.mjs",
         "scripts/lib/browser_limits.mjs",
         "scripts/lib/browser_ssrf.mjs",
         "scripts/lib/config.mjs",
@@ -407,6 +403,7 @@ COMMAND_ROUTES: dict[str, dict[str, Any]] = {
     "research:plan": _route("scripts/research_plan.py", hmac=True),
     "research:policy": _route("scripts/investigation_policy.py"),
     "research:package-check": _route("scripts/package_manifest_check.mjs", kind="node"),
+    "research:runtime-self-test": _route("scripts/runtime_self_test.mjs", kind="node"),
     "research:package-metadata": _route("scripts/package_metadata.py"),
     "research:check-contract": _route("scripts/check_contract.py"),
     "research:check-refs": _route("scripts/check_internal_refs.py"),
@@ -1621,6 +1618,26 @@ def run_command(
         if ephemeral:
             shutil.rmtree(workdir, ignore_errors=True)
         return result
+    # ``research:package-check`` predates the runtime artifact profile. Keep the
+    # command and inventory alias fully functional: a source/full component runs
+    # the historical npm-package manifest check, while an attested runtime
+    # projection runs its official runtime closure self-test instead.
+    if command in {
+        "research:package-check",
+        "research:script:package_manifest_check-mjs",
+    }:
+        package, package_issues = load_json_secure(component_root / "package.json")
+        artifact_profile = (
+            package.get("dResearchArtifactProfile")
+            if isinstance(package, dict)
+            else None
+        )
+        if (
+            not package_issues
+            and isinstance(artifact_profile, dict)
+            and artifact_profile.get("name") == "runtime"
+        ):
+            rel_script = "scripts/runtime_self_test.mjs"
     if preflight.get("source_kind") == "bundled" and rel_script not in locked_script_paths(root):
         result = _common_result(
             preflight=preflight,

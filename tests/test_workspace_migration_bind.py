@@ -128,13 +128,13 @@ class WorkspaceMigrationBindTests(unittest.TestCase):
             assert isinstance(equivalence, dict)
             self.assertIn("README.md", equivalence.get("mismatched", []))
 
-    def test_npmignore_drift_refuses_bind(self) -> None:
+    def test_runtime_package_projection_drift_refuses_bind(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             external = root / "external-d-research"
             shutil.copytree(ROOT / "components" / "d-research", external)
-            npmignore = external / ".npmignore"
-            npmignore.write_bytes(npmignore.read_bytes() + b"\nmodified\n")
+            package = external / "package.json"
+            package.write_bytes(package.read_bytes() + b"\n")
 
             result = self._check_external(root, external)
 
@@ -142,7 +142,7 @@ class WorkspaceMigrationBindTests(unittest.TestCase):
             equivalence = result.get("external_equivalence")
             self.assertIsInstance(equivalence, dict)
             assert isinstance(equivalence, dict)
-            self.assertIn(".npmignore", equivalence.get("mismatched", []))
+            self.assertIn("package.json", equivalence.get("mismatched", []))
 
     def test_archived_upgrade_plan_drift_refuses_bind(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -172,7 +172,7 @@ class WorkspaceMigrationBindTests(unittest.TestCase):
             excluded = lock["components"]["d-research"]["snapshot_recipe"][
                 "excluded_paths"
             ]
-            self.assertNotIn(".npmignore", excluded)
+            self.assertIn(".npmignore", excluded)
             self.assertNotIn("docs/.archive/UPGRADE-PLAN.md", excluded)
             for relative in excluded:
                 path = external / relative

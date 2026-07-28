@@ -59,7 +59,7 @@ class ReleaseGateOrchestrationTests(unittest.TestCase):
         def record(name: str, command: list[str], cwd: Path) -> dict[str, object]:
             expected_cwd = (
                 ROOT / "components" / "d-research"
-                if name == "research-package-check"
+                if name == "research-runtime-check"
                 else ROOT
             )
             self.assertEqual(cwd, expected_cwd)
@@ -110,7 +110,7 @@ class ReleaseGateOrchestrationTests(unittest.TestCase):
         mandatory = {
             "component-lock",
             "research-self-test",
-            "research-package-check",
+            "research-runtime-check",
             "research-acceptance",
         }
         self.assertFalse(mandatory - {name for name, _ in observed}, observed)
@@ -169,7 +169,7 @@ class ReleaseGateOrchestrationTests(unittest.TestCase):
                 "release-zip-extract",
                 "release-zip-preflight",
                 "release-zip-component-lock",
-                "release-zip-component-package",
+                "release-zip-component-runtime",
                 "release-zip-skill-package",
             ],
         )
@@ -182,8 +182,8 @@ class ReleaseGateOrchestrationTests(unittest.TestCase):
             commands["release-zip-component-lock"],
         )
         self.assertEqual(
-            commands["release-zip-component-package"],
-            ["node", "scripts/package_manifest_check.mjs"],
+            commands["release-zip-component-runtime"],
+            ["node", "scripts/runtime_self_test.mjs"],
         )
         self.assertIn(
             "scripts/validate_skill_package.py",
@@ -219,10 +219,16 @@ class ReleaseGateOrchestrationTests(unittest.TestCase):
             stdout="plain success\n",
             stderr="",
         )
-        with patch.object(release_gate.subprocess, "run", return_value=completed):
+        with patch.object(
+            release_gate.subprocess, "run", return_value=completed
+        ) as run:
             check = release_gate._run("plain-tool", ["plain-tool"], ROOT)
         self.assertTrue(check["ok"])
         self.assertNotIn("json_error", check)
+        self.assertEqual(
+            run.call_args.kwargs["env"]["PYTHONDONTWRITEBYTECODE"],
+            "1",
+        )
 
     def test_missing_release_runtime_is_reported_instead_of_crashing(self) -> None:
         with patch.object(release_gate.subprocess, "run", side_effect=OSError("missing node")):

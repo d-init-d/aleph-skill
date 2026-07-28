@@ -27,9 +27,19 @@ class ReleaseContractTests(unittest.TestCase):
     def test_schema_catalog_is_complete_and_all_references_resolve(self) -> None:
         schema_root = ROOT / "schemas"
         catalog = json.loads((schema_root / "schema-catalog.json").read_text(encoding="utf-8"))
-        declared = set(catalog["artifacts"].values())
+        catalog_2_1 = json.loads(
+            (schema_root / "schema-catalog-2.1.json").read_text(encoding="utf-8")
+        )
+        declared = set(catalog["artifacts"].values()) | set(
+            catalog_2_1["artifacts"].values()
+        )
         published = {path.name for path in schema_root.glob("*.schema.json")}
         self.assertEqual(declared, published)
+        self.assertEqual(catalog_2_1["schema_version"], "2.1.0")
+        self.assertEqual(
+            catalog_2_1["artifacts"]["timeline_node"],
+            "timeline-node-2.1.schema.json",
+        )
 
         documents = {
             path.name: json.loads(path.read_text(encoding="utf-8"))

@@ -62,7 +62,7 @@ class ComponentPackagingTests(unittest.TestCase):
         self.assertEqual(entry["uri"], "aleph-component://d-research")
         self.assertEqual(entry["version"], "3.4.0")
         self.assertEqual(entry["source_tag"], "v3.4.0")
-        self.assertEqual(entry["file_count"], 219)
+        self.assertEqual(entry["file_count"], 210)
         self.assertEqual(entry["file_count"], len(entry["files"]))
         self.assertIn("scripts/evidence_ledger.py", entry["entrypoints"])
         self.assertIn("scripts/investigation_policy.py", entry["entrypoints"])
@@ -80,20 +80,38 @@ class ComponentPackagingTests(unittest.TestCase):
         )
         recipe = entry["snapshot_recipe"]
         self.assertEqual(recipe["text_eol"], "lf")
-        self.assertEqual(len(recipe["excluded_paths"]), 536)
+        self.assertEqual(len(recipe["excluded_paths"]), 545)
         self.assertIn(".github/workflows/release-attest.yml", recipe["excluded_paths"])
         self.assertIn("release-evidence/v3.2.1/promotion.json", recipe["excluded_paths"])
         self.assertIn(
             "release-evidence/v3.3.0/maintainer-override.json",
             recipe["excluded_paths"],
         )
-        self.assertNotIn(".npmignore", recipe["excluded_paths"])
+        self.assertIn(".npmignore", recipe["excluded_paths"])
+        self.assertIn(
+            "examples/evals/quality/fixtures/hostile/inject_ignore_instructions.html",
+            recipe["excluded_paths"],
+        )
         self.assertNotIn("docs/.archive/UPGRADE-PLAN.md", recipe["excluded_paths"])
         self.assertIn("scripts/investigation_policy.py", {item["path"] for item in entry["files"]})
         # New v3.4.0 runtime surfaces must be part of the locked snapshot.
         locked_paths = {item["path"] for item in entry["files"]}
         self.assertIn("templates/interop-contract.json", locked_paths)
         self.assertIn("scripts/lib/config.mjs", locked_paths)
+        self.assertNotIn(".npmignore", locked_paths)
+        self.assertFalse(
+            any(path.startswith("examples/evals/quality/fixtures/hostile/") for path in locked_paths)
+        )
+        source_artifacts = entry["source_artifacts"]
+        self.assertEqual(source_artifacts["runtime_profile"]["file_count"], 210)
+        self.assertEqual(
+            source_artifacts["workflow_source"]["sha256"],
+            "sha256:7de771335576bebb93b66e3f89aad87a6355b175c11e63d4b508feeddbd5d366",
+        )
+        self.assertEqual(
+            entry["source_archive_sha256"],
+            "sha256:19ebdb0281a6b24aa6cc252f4d8404f052b6f671366818eb913454eab3779795",
+        )
         self.assertIn("v3.4.0 commit 9f9ad303", entry["pin_note"])
 
     def test_component_lock_is_reproducible_and_fully_distributed(self) -> None:

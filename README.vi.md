@@ -10,7 +10,7 @@
 
 Aleph Skill biến câu hỏi “nếu như?” thành mô hình có thể kiểm toán: chứng cứ tạo thành cấu trúc nhân quả có kiểu, trace có thể replay và nhiều timeline với chế độ likelihood được khai báo rõ.
 
-Aleph có một core dùng chung, trung lập với host. Codex, OpenCode, Claude Code, Agent Skills, Gemini/Copilot CLI, Cursor, VS Code, Windsurf, Cline, Roo Code và JetBrains có thể nạp thư mục skill native. Continue dùng project rule được sinh tự động. Grok Build, Aider và CLI tùy biến dùng profile adapter dạng hợp đồng để host hoặc wrapper triển khai.
+Aleph có một core dùng chung, trung lập với host và registry gồm 16 adapter ID: 12 target skill native, một project rule Continue được sinh tự động và ba profile ngoài dạng hợp đồng cho Grok Build, Aider cùng CLI tùy biến.
 
 ## Tổng quan
 
@@ -148,7 +148,7 @@ Các vị trí cài đặt được hỗ trợ:
 
 ## Kiểm tra
 
-Khi nâng một workspace 2.0.0 hiện có, hãy giữ nguyên một bản sao lưu và chạy validation ở chế độ draft trước. Aleph 2.3.x vẫn dùng `schema_version: 2.0.0`, ghi `formula_version: 2.1.0` cho workspace mới và vẫn replay được artifact công thức 2.0.0. Các contract số học, binding component, likelihood, provenance, nghiên cứu có policy và sealed roleplay chặt hơn có thể yêu cầu tạo lại report, packet/receipt, research import và numerical artifact trước khi final validation đạt. Với workspace còn lưu đường dẫn D Research tuyệt đối, chạy `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, xem báo cáo tương thích byte, rồi chạy lại không có `--check`. Không dùng migrator 1.x hoặc sửa hash hay formula identifier bằng tay.
+Khi nâng một workspace 2.0.0 hiện có, hãy giữ nguyên một bản sao lưu và chạy validation ở chế độ draft trước. Aleph 2.4.0 vẫn dùng `schema_version: 2.0.0` làm mặc định ghi, cung cấp schema `2.1.0` qua thao tác nâng cấp sibling-only tường minh, ghi `formula_version: 2.1.0` cho workspace mới và vẫn replay được artifact công thức 2.0.0. Receipt gắn version cho numerical model, component, likelihood, provenance, research import và sealed roleplay có thể cần được tạo lại trước khi final validation đạt. Với workspace còn lưu đường dẫn D Research tuyệt đối, chạy `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, xem báo cáo tương thích byte, rồi chạy lại không có `--check`. Không dùng migrator 1.x hoặc sửa hash hay formula identifier bằng tay.
 
 ```powershell
 python "$env:ALEPH_SKILL_ROOT\scripts\validate_skill_package.py" "$env:ALEPH_SKILL_ROOT"

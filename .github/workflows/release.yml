@@ -69,6 +69,7 @@ jobs:
           uv run --no-sync python scripts/build_release_assets.py --output-dir dist
           uv run --no-sync python scripts/build_release_assets.py --output-dir dist-repro
           cmp "dist/aleph-skill-$GITHUB_REF_NAME.zip" "dist-repro/aleph-skill-$GITHUB_REF_NAME.zip"
+          cmp "dist/aleph-skill-runtime-$GITHUB_REF_NAME.zip" "dist-repro/aleph-skill-runtime-$GITHUB_REF_NAME.zip"
           cmp dist/distribution-manifest.json dist-repro/distribution-manifest.json
           cmp dist/SHA256SUMS.txt dist-repro/SHA256SUMS.txt
       - name: Attest release assets

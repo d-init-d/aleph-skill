@@ -146,7 +146,7 @@ jobs:
       - name: Verify locked component and package manifest
         run: |
           python -B scripts/lock_bundled_component.py
-          node components/d-research/scripts/package_manifest_check.mjs
+          node components/d-research/scripts/runtime_self_test.mjs
       - name: Require an honest no-browser self-test status
         shell: bash
         run: |

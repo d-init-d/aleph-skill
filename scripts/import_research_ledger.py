@@ -8,7 +8,11 @@ from pathlib import Path
 
 from aleph import EXIT_OK, EXIT_SECURITY, EXIT_SEMANTIC
 from aleph.discovery import discover_d_research
-from aleph.import_ledger import import_d_research_ledger, render_evidence_csv
+from aleph.import_ledger import (
+    build_import_audit_artifact,
+    import_d_research_ledger,
+    render_evidence_csv,
+)
 from aleph.io import canonical_hash, write_bytes_atomic, write_json_atomic, write_text_atomic
 
 
@@ -165,18 +169,7 @@ def main() -> None:
         if audit_out is not None:
             # Leads and process/blocker rows stay in the audit stream — never
             # promoted to evidence — with every source column preserved.
-            audit_artifact = {
-                "schema_version": "2.0.0",
-                "artifact_type": "d-research-import-audit",
-                "source_contract": result.get("source_contract"),
-                "column_count": result.get("column_count"),
-                "fieldnames": result.get("fieldnames"),
-                "raw_sha256": result.get("raw_sha256"),
-                "canonical_sha256": result.get("canonical_sha256"),
-                "lead_rows": result.get("lead_rows") or [],
-                "audit_rows": result.get("audit_rows") or [],
-                "source_provenance": result.get("source_provenance") or [],
-            }
+            audit_artifact = build_import_audit_artifact(result)
             write_json_atomic(audit_out, audit_artifact)
             audit_sha256 = hashlib.sha256(audit_out.read_bytes()).hexdigest()
         receipt = {

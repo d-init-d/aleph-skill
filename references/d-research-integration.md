@@ -37,7 +37,7 @@ All research subprocesses use `scripts/research_gateway.py`:
 
 Use `research:manifest` as the machine-readable route inventory. Stable routes cover ledger, plan, investigative policy, browser, API/search, citations, archives, Wikidata, social snapshots, PDF/OCR, translation, semantic retrieval, multi-format extraction, data cleanup, scoring, reports, quality evaluation, acceptance, and package checks. `scripts/run_python.mjs` is deliberately not dispatchable.
 
-For D Research 3.3 investigative routes, initialize and validate `investigation-scope.json` through `research:policy`, then bind it to the research plan through `research:plan bind-policy`. Keep the scope and plan inside the run workspace; `--scope` is path-confined by the gateway. Authorization binding records an independently established review or ownership attestation and never treats a user-declared purpose as proof of authority.
+For investigative routes whose interop contract exposes the policy and plan entrypoints, initialize and validate `investigation-scope.json` through `research:policy`, then bind it to the research plan through `research:plan bind-policy`. Keep the scope and plan inside the run workspace; `--scope` is path-confined by the gateway. Authorization binding records an independently established review or ownership attestation and never treats a user-declared purpose as proof of authority.
 
 ## Capability ladder
 

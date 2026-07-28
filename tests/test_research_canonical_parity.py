@@ -305,6 +305,35 @@ class CanonicalParityTests(unittest.TestCase):
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(json.dumps(dual_run, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
+    def test_semantic_acceptance_matches_upstream_for_every_official_width(self) -> None:
+        resolution = resolve_component(COMPONENT_URI, skill_root=ROOT)
+        helper = Path(resolution.root) / "scripts" / "evidence_ledger.py"
+        upstream = _load_bundled_evidence_ledger(helper)
+        for fields in (FIELDS_14, FIELDS_19, FIELDS_22, FIELDS_23, FIELDS_37):
+            with self.subTest(width=len(fields), case="invalid-enums"):
+                invalid = _claim_row(source_type="blog", contradiction="maybe")
+                path = self._write_temp(_csv_bytes(fields, [invalid]))
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    upstream_status = upstream.validate_ledger(path)
+                imported = import_d_research_ledger(path, package_major=3)
+                self.assertEqual(upstream_status, 1)
+                self.assertFalse(imported.get("ok"), imported)
+                pointers = {
+                    item.get("pointer") for item in imported.get("issues") or []
+                }
+                self.assertTrue(any(str(value).endswith("/source_type") for value in pointers))
+                self.assertTrue(any(str(value).endswith("/contradiction") for value in pointers))
+
+            with self.subTest(width=len(fields), case="empty-confidence"):
+                valid = _claim_row(confidence="")
+                path = self._write_temp(_csv_bytes(fields, [valid]))
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    upstream_status = upstream.validate_ledger(path)
+                imported = import_d_research_ledger(path, package_major=3)
+                self.assertEqual(upstream_status, 0)
+                self.assertTrue(imported.get("ok"), imported.get("issues"))
+                self.assertEqual(imported["evidence_rows"][0]["confidence"], "0.0")
+
     def test_raw_leak_leads_are_metadata_only_and_never_evidence(self) -> None:
         lead = _claim_row(
             claim_id="l1",

@@ -736,20 +736,6 @@ class ReceiptAndResearchHardeningTests(unittest.TestCase):
         body = buffer.getvalue()
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
-            d_research = workspace / "d-research"
-            (d_research / "scripts").mkdir(parents=True)
-            (d_research / "SKILL.md").write_text(
-                "---\nname: d-research\n---\n# D Research\n",
-                encoding="utf-8",
-            )
-            (d_research / "package.json").write_text(
-                json.dumps({"name": "d-research-skill-tools", "version": "3.2.0"}),
-                encoding="utf-8",
-            )
-            (d_research / "scripts" / "evidence_ledger.py").write_text(
-                "# canonical ledger helper\n",
-                encoding="utf-8",
-            )
             ledger = workspace / "source.csv"
             ledger.write_text(body, encoding="utf-8")
             canonical, _, _, issues = canonicalise_d_research_csv(ledger.read_bytes())
@@ -774,8 +760,6 @@ class ReceiptAndResearchHardeningTests(unittest.TestCase):
                     str(workspace / "evidence-map.csv"),
                     "--workspace",
                     str(workspace),
-                    "--d-research",
-                    str(d_research),
                 ],
                 cwd=ROOT,
                 env={**__import__("os").environ, "TEST_D_RESEARCH_KEY": key.decode()},
@@ -799,11 +783,50 @@ class ReceiptAndResearchHardeningTests(unittest.TestCase):
                 },
             }
             self.assertTrue(_d_research_verified(workspace, manifest, hmac_key=key))
+            receipt_path = workspace / "evidence-map.csv.import-receipt.json"
+            audit_path = workspace / "evidence-map.csv.audit.json"
+            original_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            original_audit = audit_path.read_bytes()
+
+            audit_path.unlink()
+            self.assertFalse(_d_research_verified(workspace, manifest, hmac_key=key))
+            audit_path.write_bytes(original_audit)
+
+            tampered_audit = json.loads(original_audit)
+            tampered_audit["source_provenance"][0]["raw_row"]["claim"] = "Changed"
+            audit_path.write_text(json.dumps(tampered_audit, indent=2) + "\n", encoding="utf-8")
+            tampered_receipt = json.loads(json.dumps(original_receipt))
+            tampered_receipt["audit_sha256"] = hashlib.sha256(audit_path.read_bytes()).hexdigest()
+            tampered_receipt.pop("receipt_hash")
+            tampered_receipt["receipt_hash"] = canonical_hash(tampered_receipt)
+            receipt_path.write_text(json.dumps(tampered_receipt), encoding="utf-8")
+            self.assertFalse(_d_research_verified(workspace, manifest, hmac_key=key))
+            audit_path.write_bytes(original_audit)
+
+            bad_count = json.loads(json.dumps(original_receipt))
+            bad_count["lead_count"] += 1
+            bad_count.pop("receipt_hash")
+            bad_count["receipt_hash"] = canonical_hash(bad_count)
+            receipt_path.write_text(json.dumps(bad_count), encoding="utf-8")
+            self.assertFalse(_d_research_verified(workspace, manifest, hmac_key=key))
+
+            legacy_without_audit = json.loads(json.dumps(original_receipt))
+            for field in (
+                "audit_ref",
+                "audit_sha256",
+                "evidence_count",
+                "lead_count",
+                "audit_count",
+            ):
+                legacy_without_audit.pop(field)
+            legacy_without_audit.pop("receipt_hash")
+            legacy_without_audit["receipt_hash"] = canonical_hash(legacy_without_audit)
+            receipt_path.write_text(json.dumps(legacy_without_audit), encoding="utf-8")
+            self.assertTrue(_d_research_verified(workspace, manifest, hmac_key=key))
+            receipt_path.write_text(json.dumps(original_receipt), encoding="utf-8")
             # A helper digest alone is not a portable provenance proof. Every
             # immutable component-binding field must be present in a bundled
             # receipt; deleting any one must fail closed.
-            receipt_path = workspace / "evidence-map.csv.import-receipt.json"
-            original_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             legacy_receipt = json.loads(json.dumps(original_receipt))
             legacy_receipt.pop("component_binding", None)
             legacy_receipt.pop("receipt_hash", None)

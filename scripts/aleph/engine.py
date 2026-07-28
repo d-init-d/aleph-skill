@@ -211,8 +211,12 @@ def _normalise_lag_distribution(value: Any) -> dict[str, Any] | None:
 def _context_multiplier(value: Any) -> float:
     if value is None:
         return 1.0
-    if not isinstance(value, list) or not value:
-        raise ValueError("context_modifiers must be a non-empty array")
+    if not isinstance(value, list):
+        raise ValueError("context_modifiers must be an array")
+    # An explicit empty list means that no context modulates the edge.
+    # Its multiplicative identity is one, matching semantic validation.
+    if not value:
+        return 1.0
     multiplier = 1.0
     for raw in value:
         if not isinstance(raw, dict):

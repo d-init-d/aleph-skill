@@ -201,6 +201,8 @@ def build_workspace(args: argparse.Namespace) -> Path:
         "subject_class": "public_role_person",
         "evidence_ids": ["evidence:example"],
     }
+    if manifest["schema_version"] == "2.1.0":
+        actor["actor_basis"] = "evidence"
     branches = load_json(templates / "branch-ledger.json")
     for branch in branches["branches"]:
         branch["end_state"]["time"] = simulation_end.isoformat()

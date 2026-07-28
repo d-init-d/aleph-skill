@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
 import re
 import shutil
 import stat
@@ -23,6 +24,7 @@ def _run(name: str, command: list[str], cwd: Path) -> dict[str, Any]:
         completed = subprocess.run(
             command,
             cwd=str(cwd),
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
             text=True,
             encoding="utf-8",
             errors="replace",
@@ -161,8 +163,8 @@ def _release_artifact_checks(root: Path, python: str) -> list[dict[str, Any]]:
                 frozenset({"pass"}),
             ),
             (
-                "release-zip-component-package",
-                ["node", "scripts/package_manifest_check.mjs"],
+                "release-zip-component-runtime",
+                ["node", "scripts/runtime_self_test.mjs"],
                 extracted / "components" / "d-research",
                 None,
             ),
@@ -280,8 +282,8 @@ def main() -> None:
             frozenset({"ok", "degraded"}),
         ),
         (
-            "research-package-check",
-            ["node", "scripts/package_manifest_check.mjs"],
+            "research-runtime-check",
+            ["node", "scripts/runtime_self_test.mjs"],
             None,
         ),
         (
@@ -392,7 +394,7 @@ def main() -> None:
 
     try:
         for name, command, statuses in commands:
-            cwd = root / "components" / "d-research" if name == "research-package-check" else root
+            cwd = root / "components" / "d-research" if name == "research-runtime-check" else root
             check = _run(name, command, cwd)
             checks.append(
                 _require_reported_status(check, statuses)

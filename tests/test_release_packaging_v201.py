@@ -102,7 +102,7 @@ class ReleasePackagingV201Tests(unittest.TestCase):
             self.assertEqual(json.loads(preflight.stdout)["status"], "pass")
 
             package_check = subprocess.run(
-                ["node", str(extracted / "components" / "d-research" / "scripts" / "package_manifest_check.mjs")],
+                ["node", str(extracted / "components" / "d-research" / "scripts" / "runtime_self_test.mjs")],
                 cwd=extracted / "components" / "d-research",
                 env=environment,
                 text=True,
@@ -260,6 +260,7 @@ class ReleasePackagingV201Tests(unittest.TestCase):
             "cancel-in-progress: false",
             "uv sync --locked --python 3.13",
             "scripts/build_release_assets.py --output-dir dist-repro",
+            'cmp "dist/aleph-skill-runtime-$GITHUB_REF_NAME.zip" "dist-repro/aleph-skill-runtime-$GITHUB_REF_NAME.zip"',
             "actions/attest-build-provenance@",
             "--verify-tag",
             "scripts/verify_release_tag.py",

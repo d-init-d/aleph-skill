@@ -88,12 +88,127 @@ def _read_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def _sha256_path(path: Path) -> str:
+    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _archive_members(path: Path) -> tuple[dict[str, bytes], bytes | None]:
+    """Read a single-root tar archive without extracting it."""
+
+    files: dict[str, bytes] = {}
+    embedded_manifest: bytes | None = None
+    with tarfile.open(path, mode="r:*") as bundle:
+        for member in bundle.getmembers():
+            if member.isdir():
+                continue
+            if not member.isfile():
+                raise ValueError(f"unsafe release archive member: {member.name}")
+            parts = Path(member.name).as_posix().split("/")
+            if len(parts) < 2 or any(part in {"", ".", ".."} for part in parts):
+                raise ValueError(f"unsafe release archive path: {member.name}")
+            relative = "/".join(parts[1:])
+            handle = bundle.extractfile(member)
+            if handle is None:
+                raise ValueError(f"cannot read release archive member: {member.name}")
+            payload = handle.read()
+            if relative == "ARTIFACT-MANIFEST.json":
+                embedded_manifest = payload
+                continue
+            if relative in files:
+                raise ValueError(f"duplicate release archive path: {relative}")
+            files[relative] = payload
+    return files, embedded_manifest
+
+
+def verify_release_assets(
+    root: Path,
+    assets_dir: Path,
+    rebuilt: dict[str, Any],
+    *,
+    component_id: str,
+) -> dict[str, Any]:
+    """Verify the published source/full/runtime assets and runtime projection."""
+
+    entry = rebuilt["components"][component_id]
+    artifacts = entry["source_artifacts"]
+    assets = assets_dir.resolve(strict=True)
+    verified: dict[str, str] = {}
+    for key in ("workflow_source", "full_profile", "runtime_profile"):
+        metadata = artifacts[key]
+        archive = assets / str(metadata["name"])
+        if not archive.is_file() or _sha256_path(archive) != metadata["sha256"]:
+            raise ValueError(f"published {key} archive differs from component lock")
+        verified[key] = str(metadata["sha256"])
+        if key.endswith("profile"):
+            manifest_path = assets / str(metadata["manifest_name"])
+            if not manifest_path.is_file() or _sha256_path(manifest_path) != metadata["manifest_sha256"]:
+                raise ValueError(f"published {key} manifest differs from component lock")
+
+    runtime_meta = artifacts["runtime_profile"]
+    runtime_manifest_path = assets / str(runtime_meta["manifest_name"])
+    runtime_manifest = _read_json(runtime_manifest_path)
+    if (
+        runtime_manifest.get("profile") != "runtime"
+        or runtime_manifest.get("package_version") != entry["version"]
+        or runtime_manifest.get("file_count") != runtime_meta["file_count"]
+        or runtime_manifest.get("tree_sha256") != runtime_meta["tree_sha256"]
+        or runtime_manifest.get("ordered_paths_sha256") != runtime_meta["ordered_paths_sha256"]
+    ):
+        raise ValueError("runtime profile manifest metadata differs from component lock")
+    manifest_entries = runtime_manifest.get("files")
+    if not isinstance(manifest_entries, list):
+        raise ValueError("runtime profile manifest files[] is invalid")
+    manifest_by_path = {
+        str(item.get("path")): item for item in manifest_entries if isinstance(item, dict)
+    }
+    runtime_files, embedded_manifest = _archive_members(assets / str(runtime_meta["name"]))
+    if embedded_manifest is None or hashlib.sha256(embedded_manifest).digest() != hashlib.sha256(
+        runtime_manifest_path.read_bytes()
+    ).digest():
+        raise ValueError("runtime archive embedded manifest differs from published manifest")
+    locked_paths = {str(item["path"]) for item in entry["files"]}
+    if set(runtime_files) != locked_paths or set(manifest_by_path) != locked_paths:
+        raise ValueError("runtime profile path set differs from the locked component")
+    component_root = root / "components" / component_id
+    for relative in sorted(locked_paths):
+        source_bytes = runtime_files[relative]
+        manifest_item = manifest_by_path[relative]
+        expected_source = str(manifest_item.get("sha256") or "")
+        if _sha256_path_from_bytes(source_bytes) != expected_source:
+            raise ValueError(f"runtime profile member digest differs: {relative}")
+        vendored_bytes = source_bytes.replace(b"\r\n", b"\n") if _is_text(Path(relative)) else source_bytes
+        if (component_root / relative).read_bytes() != vendored_bytes:
+            raise ValueError(f"vendored runtime profile byte differs: {relative}")
+
+    full_meta = artifacts["full_profile"]
+    full_manifest = _read_json(assets / str(full_meta["manifest_name"]))
+    if full_manifest.get("profile") != "full" or full_manifest.get("file_count") != full_meta["file_count"]:
+        raise ValueError("full profile manifest metadata differs from component lock")
+    interop_meta = artifacts["interop_contract"]
+    interop_source = runtime_files.get(str(interop_meta["path"]))
+    if interop_source is None or _sha256_path_from_bytes(interop_source) != interop_meta["source_sha256"]:
+        raise ValueError("published interop contract differs from component lock")
+    normalized_interop = interop_source.replace(b"\r\n", b"\n")
+    if _sha256_path_from_bytes(normalized_interop) != interop_meta["normalized_sha256"]:
+        raise ValueError("normalized interop contract differs from component lock")
+    return {
+        "assets_dir": str(assets),
+        "verified": verified,
+        "runtime_file_count": len(runtime_files),
+    }
+
+
+def _sha256_path_from_bytes(payload: bytes) -> str:
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
 def verify_upstream_snapshot(
     root: Path,
     upstream_repo: Path,
     rebuilt: dict[str, Any],
     *,
     component_id: str,
+    release_assets_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Verify tag, tree, archive, recipe, and bytes against a local upstream clone."""
 
@@ -176,12 +291,32 @@ def verify_upstream_snapshot(
         raise ValueError(f"snapshot recipe/lock path drift: missing={missing[:3]} extra={extra[:3]}")
 
     component_root = root / "components" / component_id
+    transforms = {
+        str(item["path"]): item
+        for item in recipe.get("content_transforms", [])
+        if isinstance(item, dict) and isinstance(item.get("path"), str)
+    }
     for relative in sorted(locked):
+        if relative in transforms:
+            output_digest = _sha256_path_from_bytes((component_root / relative).read_bytes())
+            if output_digest != transforms[relative].get("output_sha256"):
+                raise ValueError(f"snapshot transform output differs: {relative}")
+            continue
         upstream_bytes = archived_files[relative]
         if _is_text(Path(relative)):
             upstream_bytes = upstream_bytes.replace(b"\r\n", b"\n")
         if (component_root / relative).read_bytes() != upstream_bytes:
             raise ValueError(f"snapshot byte differs from upstream Git object: {relative}")
+    release_verification = (
+        verify_release_assets(
+            root,
+            release_assets_dir,
+            rebuilt,
+            component_id=component_id,
+        )
+        if release_assets_dir is not None
+        else None
+    )
     return {
         "tag_object": tag_object,
         "commit": commit,
@@ -190,6 +325,7 @@ def verify_upstream_snapshot(
         "tracked_file_count": len(archived_files),
         "excluded_file_count": len(excluded),
         "snapshot_file_count": len(locked),
+        "release_assets": release_verification,
     }
 
 
@@ -210,6 +346,11 @@ def main() -> None:
         type=Path,
         help="Local upstream Git clone used to verify tag/tree/archive/snapshot provenance.",
     )
+    parser.add_argument(
+        "--release-assets-dir",
+        type=Path,
+        help="Directory containing the published workflow, full, and runtime release assets.",
+    )
     args = parser.parse_args()
     if args.normalize_lf and not args.write:
         parser.error("--normalize-lf requires --write because it mutates the snapshot")
@@ -221,16 +362,25 @@ def main() -> None:
         if args.normalize_lf:
             changed = normalize_snapshot(root / "components" / args.component)
         rebuilt = build_component_lock(root, component_id=args.component)
-        upstream = (
-            verify_upstream_snapshot(
+        if args.upstream_repo is not None:
+            upstream = verify_upstream_snapshot(
                 root,
                 args.upstream_repo,
                 rebuilt,
                 component_id=args.component,
+                release_assets_dir=args.release_assets_dir,
             )
-            if args.upstream_repo is not None
-            else None
-        )
+        elif args.release_assets_dir is not None:
+            upstream = {
+                "release_assets": verify_release_assets(
+                    root,
+                    args.release_assets_dir,
+                    rebuilt,
+                    component_id=args.component,
+                )
+            }
+        else:
+            upstream = None
         existing = _read_json(lock_path)
         matches = existing == rebuilt
         if args.write and not matches:

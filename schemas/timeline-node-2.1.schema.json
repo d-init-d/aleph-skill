@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aleph.local/schemas/2.1/timeline-node.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "name", "description", "time", "state_before", "trigger", "mechanism", "state_after", "lag", "evidence_ids", "status", "timeline", "confidence"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^(entity|event|factor|context|indicator|claim|source):"},
+    "type": {"enum": ["entity", "event", "factor", "context", "indicator", "claim", "source"]},
+    "name": {"type": "string"},
+    "description": {"type": "string"},
+    "time": {"type": "string"},
+    "state_before": {"$ref": "#/$defs/state"},
+    "trigger": {"$ref": "#/$defs/trigger"},
+    "mechanism": {"type": "string"},
+    "state_after": {"$ref": "#/$defs/state"},
+    "lag": {"type": "string"},
+    "evidence_ids": {"type": "array", "items": {"type": "string", "pattern": "^evidence:"}},
+    "sources": {"type": "array", "items": {"type": "string"}},
+    "status": {"enum": ["fact", "inference", "simulation", "counterfactual", "assumption"]},
+    "timeline": {"enum": ["shared_baseline", "observed_baseline", "simulated_branch"]},
+    "probability": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "assumption_ref": {"type": "string"},
+    "alternative_explanations": {"type": "array", "items": {"type": "string"}},
+    "sensitivity": {"type": "object", "additionalProperties": false, "required": ["level", "drivers"], "properties": {"level": {"enum": ["low", "medium", "high"]}, "drivers": {"type": "array", "items": {"type": "string"}}}},
+    "role": {"type": "string"},
+    "datatype": {"type": "string"},
+    "unit": {"type": "string"},
+    "scale": {"enum": ["level", "flow", "stock"]},
+    "baseline": {"type": "number"},
+    "bounds": {"type": "array"},
+    "retention": {"oneOf": [{"type": "number", "minimum": 0, "maximum": 1}, {"$ref": "#/$defs/scalarDistribution"}]},
+    "decay_rate": {"oneOf": [{"type": "number", "minimum": 0}, {"$ref": "#/$defs/scalarDistribution"}]},
+    "details": {"type": "object"},
+    "extensions": {"type": "object", "propertyNames": {"pattern": "^[A-Za-z0-9_-]+(?:[./][A-Za-z0-9_-]+)+$"}}
+  },
+  "allOf": [
+    {"if": {"anyOf": [{"required": ["retention"]}, {"required": ["decay_rate"]}]}, "then": {"properties": {"scale": {"const": "stock"}}, "required": ["scale"]}},
+    {"not": {"required": ["retention", "decay_rate"]}},
+    {"if": {"properties": {"type": {"const": "entity"}}, "required": ["type"]}, "then": {"properties": {"details": {"$ref": "#/$defs/entityDetails"}}}},
+    {"if": {"properties": {"type": {"const": "event"}}, "required": ["type"]}, "then": {"properties": {"details": {"$ref": "#/$defs/eventDetails"}}}},
+    {"if": {"properties": {"type": {"const": "factor"}}, "required": ["type"]}, "then": {"properties": {"details": {"$ref": "#/$defs/factorDetails"}}}},
+    {"if": {"properties": {"type": {"const": "context"}}, "required": ["type"]}, "then": {"properties": {"details": {"$ref": "#/$defs/contextDetails"}}}},
+    {"if": {"properties": {"type": {"const": "indicator"}}, "required": ["type"]}, "then": {"properties": {"details": {"$ref": "#/$defs/indicatorDetails"}}}},
+    {"if": {"properties": {"type": {"const": "claim"}}, "required": ["type"]}, "then": {"properties": {"details": {"$ref": "#/$defs/claimDetails"}}}},
+    {"if": {"properties": {"type": {"const": "source"}}, "required": ["type"]}, "then": {"properties": {"details": {"$ref": "#/$defs/sourceDetails"}}}}
+  ],
+  "$defs": {
+    "state": {"type": "object", "additionalProperties": false, "required": ["summary"], "properties": {"summary": {"type": "string"}, "value": {"type": "number"}, "unit": {"type": "string"}, "category": {"type": "string"}, "lower": {"type": "number"}, "upper": {"type": "number"}}},
+    "trigger": {"type": "object", "additionalProperties": false, "required": ["kind", "description"], "properties": {"kind": {"type": "string"}, "description": {"type": "string"}, "source": {"type": "string"}, "magnitude": {"type": "number"}}},
+    "entityDetails": {"type": "object", "additionalProperties": false, "properties": {"entity_type": {}, "attributes": {}, "decision_patterns": {}, "relationships": {}, "behavioral_drivers": {}}},
+    "eventDetails": {"type": "object", "additionalProperties": false, "properties": {"start_time": {}, "end_time": {}, "duration": {}, "actors": {}, "location": {}, "caused_by": {}, "causes": {}, "significance": {}}},
+    "factorDetails": {"type": "object", "additionalProperties": false, "properties": {"unit": {}, "frequency": {}, "range": {}, "value_at_change_point": {}, "trend": {}, "thresholds": {}, "indicators": {}}},
+    "contextDetails": {"type": "object", "additionalProperties": false, "properties": {"active_conditions": {}, "historical_instances": {}, "typical_effects": {}, "activation_thresholds": {}}},
+    "indicatorDetails": {"type": "object", "additionalProperties": false, "properties": {"measures": {}, "source_organization": {}, "unit": {}, "frequency": {}, "current_value": {}, "current_date": {}, "historical_range": {}}},
+    "claimDetails": {"type": "object", "additionalProperties": false, "properties": {"statement": {}, "source": {}, "quote_or_value": {}, "quote_status": {}, "page_or_section": {}, "about": {}, "supports": {}, "contradicts": {}}},
+    "sourceDetails": {"type": "object", "additionalProperties": false, "properties": {"source_type": {}, "author": {}, "published_date": {}, "url": {}, "file_path": {}, "reliability_score": {}, "reliability_rationale": {}, "covers": {}}},
+    "scalarDistribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "distribution": {"enum": ["fixed", "uniform", "triangular", "normal"]},
+        "type": {"enum": ["fixed", "uniform", "triangular", "normal"]},
+        "value": {"type": "number"},
+        "min": {"type": "number"},
+        "mode": {"type": "number"},
+        "max": {"type": "number"},
+        "mean": {"type": "number"},
+        "sd": {"type": "number", "exclusiveMinimum": 0}
+      },
+      "oneOf": [
+        {"required": ["distribution"], "not": {"required": ["type"]}},
+        {"required": ["type"], "not": {"required": ["distribution"]}},
+        {"required": ["distribution", "type"], "oneOf": [
+          {"properties": {"distribution": {"const": "fixed"}, "type": {"const": "fixed"}}},
+          {"properties": {"distribution": {"const": "uniform"}, "type": {"const": "uniform"}}},
+          {"properties": {"distribution": {"const": "triangular"}, "type": {"const": "triangular"}}},
+          {"properties": {"distribution": {"const": "normal"}, "type": {"const": "normal"}}}
+        ]}
+      ],
+      "allOf": [
+        {"if": {"anyOf": [{"properties": {"distribution": {"const": "fixed"}}, "required": ["distribution"]}, {"properties": {"type": {"const": "fixed"}}, "required": ["type"]}]}, "then": {"required": ["value"], "propertyNames": {"enum": ["distribution", "type", "value"]}}},
+        {"if": {"anyOf": [{"properties": {"distribution": {"const": "uniform"}}, "required": ["distribution"]}, {"properties": {"type": {"const": "uniform"}}, "required": ["type"]}]}, "then": {"required": ["min", "max"], "propertyNames": {"enum": ["distribution", "type", "min", "max"]}}},
+        {"if": {"anyOf": [{"properties": {"distribution": {"const": "triangular"}}, "required": ["distribution"]}, {"properties": {"type": {"const": "triangular"}}, "required": ["type"]}]}, "then": {"required": ["min", "mode", "max"], "propertyNames": {"enum": ["distribution", "type", "min", "mode", "max"]}}},
+        {"if": {"anyOf": [{"properties": {"distribution": {"const": "normal"}}, "required": ["distribution"]}, {"properties": {"type": {"const": "normal"}}, "required": ["type"]}]}, "then": {"required": ["mean", "sd"], "propertyNames": {"enum": ["distribution", "type", "mean", "sd"]}}}
+      ]
+    }
+  }
+}

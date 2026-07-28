@@ -1317,7 +1317,10 @@ def validate_edges(
         elif eid in by_id:
             issues.append(issue("DUPLICATE_ID", pointer=f"{p}/id", actual=eid))
         else:
-            by_id[str(eid)] = raw
+            normalized = dict(raw)
+            if "evidence_confidence" not in normalized and "confidence" in normalized:
+                normalized["evidence_confidence"] = normalized["confidence"]
+            by_id[str(eid)] = normalized
             if not has_id_prefix(eid, "edge"):
                 issues.append(issue("SCHEMA", pointer=f"{p}/id", message="invalid edge ID prefix", actual=eid))
         for ep in ("from", "to"):

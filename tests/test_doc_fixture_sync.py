@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from aleph import SUPPORTED_SCHEMA_VERSIONS  # noqa: E402
+from aleph.engine import compile_model  # noqa: E402
 from aleph.validator import validate_edges, validate_nodes  # noqa: E402
 
 CANONICAL = ROOT / "tests" / "fixtures" / "canonical" / "minimal-graph.json"
@@ -66,12 +67,19 @@ class CanonicalFixtureTests(unittest.TestCase):
         edge = dict(graph["edges"][0])
         edge["confidence"] = edge.pop("evidence_confidence")
         node_types = {n["id"]: n["type"] for n in graph["nodes"]}
-        edge_result, _by_id = validate_edges(
+        edge_result, by_id = validate_edges(
             [edge], set(node_ids), evidence_ids, node_types
         )
         self.assertEqual(
             edge_result.status, "pass", [i.to_dict() for i in edge_result.issues]
         )
+        self.assertEqual(by_id[edge["id"]]["evidence_confidence"], edge["confidence"])
+
+    def test_fixture_compiles_with_empty_context_modifiers(self) -> None:
+        graph = _graph()
+        model = compile_model(graph["nodes"], graph["edges"])
+        self.assertEqual(len(model.edges), 1)
+        self.assertEqual(model.edges[0].context_multiplier, 1.0)
 
 
 class DocSyncTests(unittest.TestCase):
@@ -85,16 +93,53 @@ class DocSyncTests(unittest.TestCase):
         expected = json.dumps(graph["edges"][0], indent=2)
         self.assertIn(expected, EDGE_DOC.read_text(encoding="utf-8"))
 
-    def test_all_fenced_json_blocks_parse(self) -> None:
+    def test_all_fenced_json_blocks_parse_and_validate_semantically(self) -> None:
+        graph = _graph()
+        evidence_ids = set(graph["evidence_ids"])
+        manifest = {
+            "schema_version": "2.1.0",
+            "temporal_frame": {"observation_cutoff": "2026-01-01"},
+        }
         for doc in (NODE_DOC, EDGE_DOC):
             text = doc.read_text(encoding="utf-8")
             blocks = JSON_FENCE_RE.findall(text)
             self.assertTrue(blocks, f"{doc.name} advertises no JSON examples")
             for index, block in enumerate(blocks):
                 try:
-                    json.loads(block)
+                    value = json.loads(block)
                 except json.JSONDecodeError as exc:
                     self.fail(f"{doc.name} fenced JSON block {index} is invalid: {exc}")
+                if doc == NODE_DOC:
+                    if "id" in value:
+                        candidate = value
+                    elif set(value) <= {"details", "extensions"}:
+                        candidate = {**graph["nodes"][0], **value}
+                    else:
+                        self.fail(f"{doc.name} fenced JSON block {index} has no semantic route")
+                    result, _node_ids = validate_nodes([candidate], evidence_ids, manifest)
+                elif "id" in value:
+                    node_ids = {node["id"] for node in graph["nodes"]}
+                    node_types = {node["id"]: node["type"] for node in graph["nodes"]}
+                    result, _edges = validate_edges(
+                        [value], node_ids, evidence_ids, node_types
+                    )
+                elif set(value) <= {"context", "multiplier", "rationale", "active"}:
+                    candidate = {**graph["edges"][0], "context_modifiers": [value]}
+                    node_ids = {node["id"] for node in graph["nodes"]} | {
+                        str(value.get("context"))
+                    }
+                    node_types = {node["id"]: node["type"] for node in graph["nodes"]}
+                    node_types[str(value.get("context"))] = "context"
+                    result, _edges = validate_edges(
+                        [candidate], node_ids, evidence_ids, node_types
+                    )
+                else:
+                    self.fail(f"{doc.name} fenced JSON block {index} has no semantic route")
+                self.assertEqual(
+                    result.status,
+                    "pass",
+                    (doc.name, index, [item.to_dict() for item in result.issues]),
+                )
 
     def test_details_example_keys_match_schema_allowlist(self) -> None:
         from aleph.schema import NODE_DETAILS_FIELDS

@@ -6,6 +6,7 @@ import csv
 import hashlib
 import hmac
 import io
+import json
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -15,6 +16,7 @@ from .issues import Issue, issue
 
 SUPPORTED_MAJORS = frozenset({3})
 D_RESEARCH_SIGNATURE_VERSION = "d-research-skill/hmac-sha256/v1"
+D_RESEARCH_CANONICALIZATION_VERSION = "d-research-skill/csv/v1"
 FIELDS_LEGACY = [
     "claim_id", "claim", "sub_question", "source_title", "source_url", "source_type",
     "date_published", "date_accessed", "access_method", "evidence", "quote_or_anchor",
@@ -235,6 +237,45 @@ def render_evidence_csv(rows: list[dict[str, Any]]) -> bytes:
     return buffer.getvalue().encode("utf-8")
 
 
+def build_import_audit_artifact(
+    imported: dict[str, Any],
+    *,
+    schema_version: str = "2.0.0",
+) -> dict[str, Any]:
+    """Build the deterministic audit artifact bound into new import receipts."""
+    return {
+        "schema_version": schema_version,
+        "artifact_type": "d-research-import-audit",
+        "source_contract": imported.get("source_contract"),
+        "column_count": imported.get("column_count"),
+        "fieldnames": imported.get("fieldnames"),
+        "raw_sha256": imported.get("raw_sha256"),
+        "canonical_sha256": imported.get("canonical_sha256"),
+        "lead_rows": imported.get("lead_rows") or [],
+        "audit_rows": imported.get("audit_rows") or [],
+        "source_provenance": imported.get("source_provenance") or [],
+    }
+
+
+def render_import_audit_json(
+    imported: dict[str, Any],
+    *,
+    schema_version: str = "2.0.0",
+) -> bytes:
+    """Render the exact bytes written by ``write_json_atomic`` for replay."""
+    artifact = build_import_audit_artifact(imported, schema_version=schema_version)
+    return (
+        json.dumps(
+            artifact,
+            indent=2,
+            ensure_ascii=False,
+            sort_keys=False,
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
 def canonicalise_d_research_csv(raw: bytes) -> tuple[bytes | None, list[str], list[dict[str, str]], list[Issue]]:
     """Mirror D Research ``evidence_ledger.py canonicalise`` byte-for-byte."""
     issues: list[Issue] = []
@@ -348,6 +389,78 @@ def _valid_license(value: str) -> bool:
         suffix = value[len("LicenseRef-") :]
         return bool(suffix and _LICENSE_SPDX_RE.fullmatch(suffix))
     return bool(_LICENSE_SPDX_RE.fullmatch(value))
+
+
+def _standard_row_issues(
+    clean: dict[str, str],
+    *,
+    fieldnames: list[str],
+    record_type: str,
+    index: int,
+) -> list[Issue]:
+    """Mirror upstream validation for exact 14/19/22/23-column ledgers."""
+    problems: list[Issue] = []
+
+    def add(pointer: str, message: str, *, actual: Any = None) -> None:
+        problems.append(
+            issue(
+                "LEDGER_MALFORMED",
+                pointer=f"line/{index}/{pointer}" if pointer else f"line/{index}",
+                message=message,
+                actual=actual,
+            )
+        )
+
+    if not clean.get("claim"):
+        add("claim", "claim row is empty")
+    source_url = clean.get("source_url", "")
+    if record_type == "claim" and not source_url:
+        add("source_url", "claim row requires source_url")
+    if record_type in {"process", "blocker"}:
+        if not (source_url or clean.get("source_title")):
+            add("source_title", "audit row requires source_url or source_title")
+        if not (clean.get("notes") or clean.get("evidence")):
+            add("notes", "audit row requires a reason in evidence or notes")
+        status_fields = (
+            clean.get("snapshot_status", ""),
+            clean.get("robots_status", ""),
+            clean.get("verifiability", ""),
+        )
+        if not any(status_fields) and re.search(
+            r"\b(?:status|result|reason|fallback_result)\s*=\s*\S+",
+            clean.get("notes", ""),
+            flags=re.IGNORECASE,
+        ) is None:
+            add("notes", "audit row requires a structured status or result")
+
+    source_type = clean.get("source_type", "").lower()
+    if source_type and source_type not in _VALID_SOURCE_TYPES:
+        add("source_type", "invalid source type", actual=source_type)
+    confidence = clean.get("confidence", "").lower()
+    if confidence and confidence not in VALID_CONFIDENCE:
+        add("confidence", "invalid D Research confidence", actual=confidence)
+    contradiction = clean.get("contradiction", "").lower()
+    if contradiction not in _VALID_CONTRADICTIONS:
+        add("contradiction", "invalid contradiction value", actual=contradiction)
+
+    if len(fieldnames) >= 19:
+        verifiability = clean.get("verifiability", "").lower()
+        if verifiability not in _VALID_VERIFIABILITY:
+            add("verifiability", "invalid verifiability value", actual=verifiability)
+        snapshot_status = clean.get("snapshot_status", "").lower()
+        if snapshot_status not in _VALID_SNAPSHOT_STATUS:
+            add("snapshot_status", "invalid snapshot status", actual=snapshot_status)
+    if len(fieldnames) >= 22:
+        license_spdx = clean.get("license_spdx", "")
+        if not _valid_license(license_spdx):
+            add("license_spdx", "invalid SPDX-style license value", actual=license_spdx)
+        robots_status = clean.get("robots_status", "").lower()
+        if robots_status not in _VALID_ROBOTS_STATUS:
+            add("robots_status", "invalid robots status", actual=robots_status)
+        prov_activity_id = clean.get("prov_activity_id", "")
+        if prov_activity_id and not _TOKEN_128_RE.fullmatch(prov_activity_id):
+            add("prov_activity_id", "invalid provenance activity identifier")
+    return problems
 
 
 def _policy_row_issues(
@@ -671,6 +784,16 @@ def import_d_research_ledger(
             if policy_issues:
                 issues.extend(policy_issues)
                 continue
+        elif fieldnames != FIELDS_ALEPH_PROTOTYPE:
+            standard_issues = _standard_row_issues(
+                clean,
+                fieldnames=fieldnames,
+                record_type=record_type,
+                index=index,
+            )
+            if standard_issues:
+                issues.extend(standard_issues)
+                continue
 
         if record_type == "lead":
             lead_rows.append(clean)
@@ -684,7 +807,9 @@ def import_d_research_ledger(
             issues.append(issue("LEDGER_MALFORMED", pointer=f"line/{index}/claim", message="claim row is empty"))
             continue
         numeric_confidence: str | None = None
-        if confidence_label not in VALID_CONFIDENCE:
+        if not confidence_label and fieldnames != FIELDS_ALEPH_PROTOTYPE:
+            numeric_confidence = "0.0"
+        elif confidence_label not in VALID_CONFIDENCE:
             try:
                 parsed_confidence = float(confidence_label)
                 if 0.0 <= parsed_confidence <= 1.0:
@@ -698,7 +823,7 @@ def import_d_research_ledger(
         if not source_url:
             issues.append(issue("LEDGER_MALFORMED", pointer=f"line/{index}/source_url", message="claim row requires source_url"))
             continue
-        source_type = clean.get("source_type", "unknown")
+        source_type = clean.get("source_type") or "unknown"
         contradiction = clean.get("contradiction") or clean.get("contradiction_status") or "none"
         quote = clean.get("evidence")
         if policy_schema and not quote:

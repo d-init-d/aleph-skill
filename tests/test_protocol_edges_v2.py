@@ -57,6 +57,27 @@ def _make_d_research(root: Path, *, version: str = "3.2.0") -> Path:
     return root
 
 
+def _add_current_interop_contract(root: Path) -> None:
+    contract = json.loads(
+        (ROOT / "components" / "d-research" / "templates" / "interop-contract.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    package = json.loads((root / "package.json").read_text(encoding="utf-8"))
+    contract["package_version"] = package["version"]
+    (root / "templates").mkdir(exist_ok=True)
+    (root / "templates" / "interop-contract.json").write_text(
+        json.dumps(contract), encoding="utf-8"
+    )
+    for relative in (
+        "scripts/investigation_policy.py",
+        "scripts/research_plan.py",
+    ):
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# required interop entrypoint\n", encoding="utf-8")
+
+
 class DiscoveryAndAdapterEdgeTests(unittest.TestCase):
     def test_legacy_external_discovery_remains_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -209,6 +230,55 @@ class DiscoveryAndAdapterEdgeTests(unittest.TestCase):
                     )["source"],
                     "env:D_RESEARCH_SKILL",
                 )
+
+    def test_current_interop_is_enforced_and_explicit_opt_in_can_override_bundle(self) -> None:
+        bundled = discover_d_research(skill_root=ROOT)
+        self.assertEqual(bundled["status"], "available", bundled)
+        self.assertEqual(bundled["source"], "bundled")
+        interop = bundled["interop_contract"]
+        for key, value in interop.items():
+            if key.startswith("importer_supports_") or key.startswith("component_has_"):
+                self.assertTrue(value, (key, interop))
+
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            external = _make_d_research(base / "external", version="3.9.0")
+            selected = discover_d_research(
+                explicit=external,
+                allow_external=True,
+                require_bundled=True,
+                skill_root=ROOT,
+            )
+            self.assertEqual(selected["status"], "available", selected)
+            self.assertEqual(selected["source"], "explicit")
+            self.assertEqual(selected["source_kind"], "external")
+            self.assertEqual(Path(selected["resolved_path"]), external.resolve())
+
+            compatible = _make_d_research(base / "compatible", version="3.4.0")
+            _add_current_interop_contract(compatible)
+            report = _candidate_report("test", compatible)
+            self.assertTrue(report["ok"], report)
+            selected = discover_d_research(
+                explicit=compatible,
+                allow_external=True,
+                require_bundled=False,
+                skill_root=base / "no-bundle",
+            )
+            self.assertEqual(selected["status"], "available", selected)
+            self.assertIn("interop_contract", selected)
+            self.assertIn("importer_ledger_contract", selected)
+
+            contract_path = compatible / "templates" / "interop-contract.json"
+            contract = json.loads(contract_path.read_text(encoding="utf-8"))
+            contract["ledger"]["canonicalization"] = "future/csv/v2"
+            contract_path.write_text(json.dumps(contract), encoding="utf-8")
+            incompatible = _candidate_report("test", compatible)
+            self.assertFalse(incompatible["ok"])
+            self.assertFalse(
+                incompatible["interop_contract"][
+                    "importer_supports_declared_canonicalization"
+                ]
+            )
 
     def test_adapter_registry_generation_and_drift_errors(self) -> None:
         self.assertEqual(set(registry()["adapters"]), set(registry()["adapters"]))

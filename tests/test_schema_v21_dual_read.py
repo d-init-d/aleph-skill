@@ -145,6 +145,16 @@ class SchemaV21EdgeSurfaceTests(unittest.TestCase):
         )
         self.assertTrue(any(i.code == "RANGE" for i in result.issues))
 
+    def test_alias_alone_is_returned_with_canonical_confidence(self) -> None:
+        edges = json.loads(json.dumps(self.edges))
+        edges[0]["confidence"] = edges[0].pop("evidence_confidence")
+        result, by_id = validate_edges(
+            edges, self.node_ids, self.evidence_ids, self.node_types
+        )
+        self.assertEqual(result.status, "pass", [i.to_dict() for i in result.issues])
+        normalized = by_id[edges[0]["id"]]
+        self.assertEqual(normalized["evidence_confidence"], edges[0]["confidence"])
+
 
 class SchemaV21WorkspaceTests(unittest.TestCase):
     def test_fresh_2_1_workspace_passes_draft_validation(self) -> None:
@@ -171,6 +181,10 @@ class SchemaV21WorkspaceTests(unittest.TestCase):
                 (Path(workspace) / "simulation-manifest.json").read_text(encoding="utf-8")
             )
             self.assertEqual(manifest["schema_version"], SCHEMA_VERSION_2_1)
+            actors = json.loads(
+                (Path(workspace) / "actors.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(actors[0]["actor_basis"], "evidence")
             result = validate_workspace(Path(workspace), mode="draft", require_report=False)
             self.assertEqual(result["status"], "pass", result.get("errors"))
 

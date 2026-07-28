@@ -7,7 +7,11 @@ from typing import Any
 
 from . import LEGACY_FORMULA_VERSION, SCHEMA_VERSION, SUPPORTED_SCHEMA_VERSIONS
 from .discovery import discover_d_research
-from .import_ledger import import_d_research_ledger, render_evidence_csv
+from .import_ledger import (
+    import_d_research_ledger,
+    render_evidence_csv,
+    render_import_audit_json,
+)
 from .io import canonical_hash, load_json_secure, load_jsonl_secure, sha256_file
 from .packets import (
     receipt_binds_ledger_artifacts,
@@ -149,6 +153,43 @@ def _d_research_verified(
     if not isinstance(evidence_rows, list):
         return False
     expected_evidence = render_evidence_csv(evidence_rows)
+    audit_fields = {
+        "audit_ref",
+        "audit_sha256",
+        "evidence_count",
+        "lead_count",
+        "audit_count",
+    }
+    audit_fields_present = audit_fields & set(receipt)
+    audit_ok = True
+    if audit_fields_present:
+        if audit_fields_present != audit_fields:
+            return False
+        audit_ref = receipt.get("audit_ref")
+        if not isinstance(audit_ref, str):
+            return False
+        audit_path, audit_issues = resolve_in_workspace(
+            workspace,
+            audit_ref,
+            must_exist=True,
+            require_file=True,
+        )
+        if audit_path is None or audit_issues:
+            return False
+        expected_audit = render_import_audit_json(
+            imported,
+            schema_version=str(receipt.get("schema_version")),
+        )
+        try:
+            audit_ok = bool(
+                audit_path.read_bytes() == expected_audit
+                and receipt.get("audit_sha256") == sha256_file(audit_path)
+                and receipt.get("evidence_count") == len(evidence_rows)
+                and receipt.get("lead_count") == len(imported.get("lead_rows") or [])
+                and receipt.get("audit_count") == len(imported.get("audit_rows") or [])
+            )
+        except OSError:
+            return False
     try:
         return bool(
             imported.get("ok")
@@ -174,6 +215,7 @@ def _d_research_verified(
             and receipt.get("evidence_map_sha256") == sha256_file(evidence_path)
             and evidence_path.read_bytes() == expected_evidence
             and receipt.get("hmac_sidecar_sha256") == sha256_file(sidecar_path)
+            and audit_ok
         )
     except OSError:
         return False

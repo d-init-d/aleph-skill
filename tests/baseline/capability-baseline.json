@@ -1,5 +1,5 @@
 {
-  "baseline_schema": 1,
+  "baseline_schema": 2,
   "gateway_routes": [
     "research:acceptance",
     "research:adversarial",
@@ -146,7 +146,24 @@
     "trace_contract.py",
     "validator.py"
   ],
-  "adapters": [],
+  "adapters": [
+    "agents",
+    "aider",
+    "claude-code",
+    "cline",
+    "codex",
+    "continue",
+    "cursor",
+    "gemini-cli",
+    "generic-cli",
+    "github-copilot-cli",
+    "grok-build",
+    "jetbrains",
+    "opencode",
+    "roo-code",
+    "vscode-copilot",
+    "windsurf"
+  ],
   "packs": [
     "climate",
     "economics",
@@ -220,5 +237,1617 @@
   "readable_workspace_schemas": [
     "1.2.0",
     "2.0.0"
-  ]
+  ],
+  "cli_options": {
+    "acceptance.py": [
+      {
+        "flags": [
+          "--adversarial"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--skip-component-checks"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--skip-unit-tests"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "actor_packet.py": [
+      {
+        "flags": [
+          "--decision-id"
+        ],
+        "action": "store",
+        "default": "decision:main",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--actor-id"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--cutoff"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--decision-time"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--out"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--workspace"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "build_release_assets.py": [
+      {
+        "flags": [
+          "--output-dir"
+        ],
+        "action": "store",
+        "default": "Path('dist')",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "Path"
+      },
+      {
+        "flags": [
+          "--root"
+        ],
+        "action": "store",
+        "default": "Path(__file__).resolve().parents[1]",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "Path"
+      }
+    ],
+    "check_adapters.py": [
+      {
+        "flags": [
+          "--generate"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "compile_model.py": [
+      {
+        "flags": [
+          "--out"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--workspace"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "evaluate_simulation_quality.py": [
+      {
+        "flags": [
+          "--actor-receipt-hmac-key-env"
+        ],
+        "action": "store",
+        "default": "ALEPH_RECEIPT_KEY",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--d-research-hmac-key-env"
+        ],
+        "action": "store",
+        "default": "D_RESEARCH_LEDGER_KEY",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--threshold"
+        ],
+        "action": "store",
+        "default": 90.0,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "float"
+      },
+      {
+        "flags": [
+          "--out"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--workspace"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--enforce"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "finalize_simulation.py": [
+      {
+        "flags": [
+          "--workspace"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "import_research_ledger.py": [
+      {
+        "flags": [
+          "--hmac-key-env"
+        ],
+        "action": "store",
+        "default": "D_RESEARCH_LEDGER_KEY",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--major"
+        ],
+        "action": "store",
+        "default": 3,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "int"
+      },
+      {
+        "flags": [
+          "--d-research"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--hmac"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--ledger"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--out"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--raw-out"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--receipt-out"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--workspace"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "init_simulation_workspace.py": [
+      {
+        "flags": [
+          "--change-point"
+        ],
+        "action": "store",
+        "default": "Example change point",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--horizon"
+        ],
+        "action": "store",
+        "default": "P24M",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--time"
+        ],
+        "action": "store",
+        "default": "dt.date.today().isoformat()",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--geography"
+        ],
+        "action": "store",
+        "default": "global",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--domain"
+        ],
+        "action": "store",
+        "default": "mixed",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--observation-cutoff"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--out-dir"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--simulation-end"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--slug"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--force"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "install_adapters.py": [
+      {
+        "flags": [
+          "--mode"
+        ],
+        "action": "store",
+        "default": "dry-run",
+        "required": false,
+        "nargs": null,
+        "choices": [
+          "dry-run",
+          "copy",
+          "symlink"
+        ],
+        "type": null
+      },
+      {
+        "flags": [
+          "--scope"
+        ],
+        "action": "store",
+        "default": "user",
+        "required": false,
+        "nargs": null,
+        "choices": [
+          "user",
+          "project"
+        ],
+        "type": null
+      },
+      {
+        "flags": [
+          "--project-dir"
+        ],
+        "action": "store",
+        "default": ".",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--target"
+        ],
+        "action": "store",
+        "default": "agents",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--dest"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--receipt"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--copy"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--dry-run"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--force"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--symlink"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "lock_bundled_component.py": [
+      {
+        "flags": [
+          "--component"
+        ],
+        "action": "store",
+        "default": "COMPONENT_ID",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--root"
+        ],
+        "action": "store",
+        "default": "Path(__file__).resolve().parents[1]",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "Path"
+      },
+      {
+        "flags": [
+          "--upstream-repo"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "Path"
+      },
+      {
+        "flags": [
+          "--normalize-lf"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--write"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "migrate_workspace.py": [
+      {
+        "flags": [
+          "--backup-dir"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--out"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--source"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--bind-bundled-d-research"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--check"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--dual-run"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--dual-run-research"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--in-place"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "preflight.py": [
+      {
+        "flags": [
+          "--d-research"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--external-d-research"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--allow-external"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "release_gate.py": [
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--with-dev"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "render_simulation_report.py": [
+      {
+        "flags": [
+          "--out"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--workspace"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "replay_simulation.py": [
+      {
+        "flags": [
+          "--out"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--run"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--workspace"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "research_gateway.py": [
+      {
+        "flags": [
+          "--mode"
+        ],
+        "action": "store",
+        "default": "MODE_RESEARCH",
+        "required": false,
+        "nargs": null,
+        "choices": "[MODE_RESEARCH, MODE_ROLEPLAY]",
+        "type": null
+      },
+      {
+        "flags": [
+          "command"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": "sorted(COMMAND_ROUTES.keys())",
+        "type": null
+      },
+      {
+        "flags": [
+          "--timeout"
+        ],
+        "action": "store",
+        "default": "DEFAULT_TIMEOUT_SEC",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "int"
+      },
+      {
+        "flags": [
+          "--external-d-research"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--skill-root"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--workspace"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--allow-external"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--hmac"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--host-browser"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--host-fetch"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--host-search"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--network"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "run_hindcast.py": [
+      {
+        "flags": [
+          "--case"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--out"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--policy"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "run_sensitivity.py": [
+      {
+        "flags": [
+          "--method"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": [
+          "oat",
+          "morris",
+          "sobol"
+        ],
+        "type": null
+      },
+      {
+        "flags": [
+          "--seed"
+        ],
+        "action": "store",
+        "default": "0",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--spec"
+        ],
+        "action": "store",
+        "default": "sensitivity-config.json",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--out"
+        ],
+        "action": "store",
+        "default": "sensitivity-report.json",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--workspace"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "run_simulation.py": [
+      {
+        "flags": [
+          "--mode"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": [
+          "deterministic",
+          "monte_carlo"
+        ],
+        "type": null
+      },
+      {
+        "flags": [
+          "--batch-size"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "int"
+      },
+      {
+        "flags": [
+          "--max-runs"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "int"
+      },
+      {
+        "flags": [
+          "--out"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--runs"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "int"
+      },
+      {
+        "flags": [
+          "--seed"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--ticks"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "int"
+      },
+      {
+        "flags": [
+          "--workers"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "int"
+      },
+      {
+        "flags": [
+          "--workspace"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "score_butterfly.py": [
+      {
+        "flags": [
+          "--initial-change"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "float"
+      },
+      {
+        "flags": [
+          "--out"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--trace"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--workspace"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "validate_domain_packs.py": [
+      {
+        "flags": [
+          "--root"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "validate_simulation_artifacts.py": [
+      {
+        "flags": [
+          "--mode"
+        ],
+        "action": "store",
+        "default": "final",
+        "required": false,
+        "nargs": null,
+        "choices": [
+          "draft",
+          "final"
+        ],
+        "type": null
+      },
+      {
+        "flags": [
+          "--workspace"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--examples"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--require-report"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--write-report"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "validate_skill_package.py": [
+      {
+        "flags": [
+          "root"
+        ],
+        "action": "store",
+        "default": ".",
+        "required": false,
+        "nargs": "?",
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--generate-manifest"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "verify_receipts.py": [
+      {
+        "flags": [
+          "--hmac-key-env"
+        ],
+        "action": "store",
+        "default": "ALEPH_RECEIPT_KEY",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--receipts"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--research-id"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--roleplay-id"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--allow-unsigned"
+        ],
+        "action": "store_true",
+        "default": false,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ],
+    "verify_release_tag.py": [
+      {
+        "flags": [
+          "--repository"
+        ],
+        "action": "store",
+        "default": "Path.cwd()",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "Path"
+      },
+      {
+        "flags": [
+          "--main-branch"
+        ],
+        "action": "store",
+        "default": "main",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--remote"
+        ],
+        "action": "store",
+        "default": "origin",
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      },
+      {
+        "flags": [
+          "--expected-state"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "Path"
+      },
+      {
+        "flags": [
+          "--state-out"
+        ],
+        "action": "store",
+        "default": null,
+        "required": false,
+        "nargs": null,
+        "choices": null,
+        "type": "Path"
+      },
+      {
+        "flags": [
+          "--tag"
+        ],
+        "action": "store",
+        "default": null,
+        "required": true,
+        "nargs": null,
+        "choices": null,
+        "type": null
+      }
+    ]
+  },
+  "baseline_source": "v2.3.1"
 }

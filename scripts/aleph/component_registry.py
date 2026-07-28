@@ -11,6 +11,7 @@ import hashlib
 import os
 import re
 from dataclasses import asdict, dataclass
+from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
 
@@ -187,6 +188,23 @@ def _refuse_unsafe_relative(rel: str) -> None:
         raise ComponentError("COMPONENT_LOCK_INVALID", f"path traversal refused: {rel!r}")
 
 
+def _matches_forbidden_path(rel: str, patterns: list[str]) -> bool:
+    """Match profile forbidden paths as exact prefixes or POSIX globs."""
+
+    normalized = rel.replace("\\", "/").strip("/")
+    for raw_pattern in patterns:
+        pattern = raw_pattern.replace("\\", "/").strip("/")
+        if not pattern:
+            continue
+        if any(token in pattern for token in ("*", "?", "[")):
+            if fnmatchcase(normalized, pattern):
+                return True
+            continue
+        if normalized == pattern or normalized.startswith(pattern + "/"):
+            return True
+    return False
+
+
 def _load_lock(skill_root: Path) -> tuple[dict[str, Any], str]:
     lock_path = skill_root / LOCK_NAME
     if not lock_path.is_file() or _is_link_or_reparse(lock_path):
@@ -289,6 +307,7 @@ _LOCK_METADATA_FIELDS = (
     "upstream_tree",
     "source_archive_format",
     "source_archive_sha256",
+    "source_artifacts",
     "snapshot_recipe",
 )
 
@@ -322,6 +341,19 @@ def build_component_lock(
         metadata[field] = entry[field]
 
     actual = _collect_actual_files(component_root)
+    recipe = metadata.get("snapshot_recipe")
+    forbidden = recipe.get("forbidden_paths") if isinstance(recipe, dict) else None
+    if not isinstance(forbidden, list) or not all(isinstance(value, str) for value in forbidden):
+        raise ComponentError(
+            "COMPONENT_LOCK_INVALID",
+            "snapshot_recipe forbidden_paths must be available before rebuilding",
+        )
+    forbidden_actual = sorted(rel for rel in actual if _matches_forbidden_path(rel, forbidden))
+    if forbidden_actual:
+        raise ComponentError(
+            "COMPONENT_EXTRA_FILE",
+            f"forbidden profile path present: {forbidden_actual[0]}",
+        )
     files: list[dict[str, Any]] = []
     for rel, path in sorted(actual.items()):
         distribution_path = (COMPONENT_REL / rel).as_posix()
@@ -434,6 +466,48 @@ def verify_component_lock(
                 "source_archive_format must be git-archive-tar",
             )
         _normalize_digest(entry.get("source_archive_sha256"))
+        source_artifacts = entry.get("source_artifacts")
+        expected_artifact_names = {
+            "workflow_source",
+            "full_profile",
+            "runtime_profile",
+            "interop_contract",
+        }
+        if not isinstance(source_artifacts, dict) or set(source_artifacts) != expected_artifact_names:
+            raise ComponentError(
+                "COMPONENT_LOCK_INVALID",
+                "source_artifacts must bind workflow, full/runtime profiles, and interop",
+            )
+        for artifact_name in ("workflow_source", "full_profile", "runtime_profile"):
+            artifact = source_artifacts.get(artifact_name)
+            if not isinstance(artifact, dict) or not isinstance(artifact.get("name"), str):
+                raise ComponentError(
+                    "COMPONENT_LOCK_INVALID",
+                    f"source_artifacts.{artifact_name} is invalid",
+                )
+            _normalize_digest(artifact.get("sha256"))
+        for profile_name in ("full_profile", "runtime_profile"):
+            profile_artifact = source_artifacts[profile_name]
+            if not isinstance(profile_artifact.get("manifest_name"), str):
+                raise ComponentError(
+                    "COMPONENT_LOCK_INVALID",
+                    f"source_artifacts.{profile_name}.manifest_name is invalid",
+                )
+            _normalize_digest(profile_artifact.get("manifest_sha256"))
+            if not isinstance(profile_artifact.get("file_count"), int) or profile_artifact["file_count"] <= 0:
+                raise ComponentError(
+                    "COMPONENT_LOCK_INVALID",
+                    f"source_artifacts.{profile_name}.file_count is invalid",
+                )
+        runtime_artifact = source_artifacts["runtime_profile"]
+        _normalize_digest(runtime_artifact.get("tree_sha256"))
+        _normalize_digest(runtime_artifact.get("ordered_paths_sha256"))
+        interop_artifact = source_artifacts.get("interop_contract")
+        if not isinstance(interop_artifact, dict) or not isinstance(interop_artifact.get("path"), str):
+            raise ComponentError("COMPONENT_LOCK_INVALID", "source_artifacts.interop_contract is invalid")
+        _refuse_unsafe_relative(interop_artifact["path"])
+        _normalize_digest(interop_artifact.get("source_sha256"))
+        _normalize_digest(interop_artifact.get("normalized_sha256"))
         recipe = entry.get("snapshot_recipe")
         expected_recipe_fields = {
             "version",
@@ -442,14 +516,17 @@ def verify_component_lock(
             "excluded_paths",
             "text_eol",
             "forbidden_paths",
+            "profile",
+            "content_transforms",
         }
         if not isinstance(recipe, dict) or set(recipe) != expected_recipe_fields:
             raise ComponentError("COMPONENT_LOCK_INVALID", "snapshot_recipe fields are invalid")
         if (
-            recipe.get("version") != 1
-            or recipe.get("source") != "git-tree"
-            or recipe.get("include") != "all-tracked-files-except-excluded_paths"
+            recipe.get("version") != 2
+            or recipe.get("source") != "release-runtime-profile"
+            or recipe.get("include") != "runtime-profile-files"
             or recipe.get("text_eol") != "lf"
+            or recipe.get("profile") != "runtime"
         ):
             raise ComponentError("COMPONENT_LOCK_INVALID", "snapshot_recipe policy is invalid")
         raw_excluded = recipe.get("excluded_paths")
@@ -474,6 +551,29 @@ def verify_component_lock(
             )
         for excluded_path in raw_excluded:
             _refuse_unsafe_relative(excluded_path)
+        transforms = recipe.get("content_transforms")
+        if not isinstance(transforms, list):
+            raise ComponentError("COMPONENT_LOCK_INVALID", "snapshot_recipe content_transforms must be a list")
+        transformed_paths: set[str] = set()
+        for transform in transforms:
+            if not isinstance(transform, dict) or set(transform) != {
+                "path",
+                "transform",
+                "source_sha256",
+                "output_sha256",
+            }:
+                raise ComponentError("COMPONENT_LOCK_INVALID", "snapshot content transform is invalid")
+            transform_path = transform.get("path")
+            if not isinstance(transform_path, str):
+                raise ComponentError("COMPONENT_LOCK_INVALID", "snapshot transform path is invalid")
+            _refuse_unsafe_relative(transform_path)
+            if transform_path in transformed_paths:
+                raise ComponentError("COMPONENT_LOCK_INVALID", "duplicate snapshot transform path")
+            transformed_paths.add(transform_path)
+            if transform.get("transform") != "runtime-package-v1":
+                raise ComponentError("COMPONENT_LOCK_INVALID", "unsupported snapshot content transform")
+            _normalize_digest(transform.get("source_sha256"))
+            _normalize_digest(transform.get("output_sha256"))
         files = entry.get("files")
         if not isinstance(files, list) or not files:
             raise ComponentError("COMPONENT_LOCK_INVALID", "lock files[] must be a non-empty list")
@@ -512,6 +612,24 @@ def verify_component_lock(
                 "COMPONENT_LOCK_INVALID",
                 f"snapshot exclusion is also locked: {overlap[0]}",
             )
+        forbidden_locked = sorted(
+            rel for rel in seen_paths if _matches_forbidden_path(rel, raw_forbidden)
+        )
+        if forbidden_locked:
+            raise ComponentError(
+                "COMPONENT_LOCK_INVALID",
+                f"forbidden profile path is locked: {forbidden_locked[0]}",
+            )
+        if transformed_paths - seen_paths:
+            raise ComponentError(
+                "COMPONENT_FILE_MISSING",
+                f"transformed path missing from lock: {sorted(transformed_paths - seen_paths)[0]}",
+            )
+        if runtime_artifact.get("file_count") != len(seen_paths):
+            raise ComponentError(
+                "COMPONENT_LOCK_INVALID",
+                "runtime profile file_count does not match locked snapshot",
+            )
         tree_expected = _normalize_digest(entry.get("tree_sha256"))
         tree_actual = _tree_digest(normalized)
         if tree_actual != tree_expected:
@@ -531,6 +649,14 @@ def verify_component_lock(
         except ValueError as exc:
             raise ComponentError("COMPONENT_OVERRIDE_REFUSED", "component root escaped skill root") from exc
         actual = _collect_actual_files(component_root)
+        forbidden_actual = sorted(
+            rel for rel in actual if _matches_forbidden_path(rel, raw_forbidden)
+        )
+        if forbidden_actual:
+            raise ComponentError(
+                "COMPONENT_EXTRA_FILE",
+                f"forbidden profile path present: {forbidden_actual[0]}",
+            )
         missing = sorted(seen_paths - set(actual))
         extra = sorted(set(actual) - seen_paths)
         if missing:
@@ -569,6 +695,20 @@ def verify_component_lock(
                     f"digest mismatch for {item['path']}",
                     details={"expected": item["sha256"], "actual": digest},
                 )
+        for transform in transforms:
+            transformed_digest = _sha256_bytes(actual[str(transform["path"])].read_bytes())
+            if transformed_digest != _normalize_digest(transform["output_sha256"]):
+                raise ComponentError(
+                    "COMPONENT_DRIFT",
+                    f"profile transform output differs for {transform['path']}",
+                )
+        interop_path = str(interop_artifact["path"])
+        if interop_path not in actual:
+            raise ComponentError("COMPONENT_FILE_MISSING", "interop contract missing from component")
+        if _sha256_bytes(actual[interop_path].read_bytes()) != _normalize_digest(
+            interop_artifact["normalized_sha256"]
+        ):
+            raise ComponentError("COMPONENT_DRIFT", "normalized interop contract differs")
         entrypoints = entry.get("entrypoints")
         if not isinstance(entrypoints, list) or not entrypoints:
             raise ComponentError("COMPONENT_LOCK_INVALID", "entrypoints must be a non-empty list")
@@ -719,10 +859,50 @@ def discover_d_research(
     root = skill_root if skill_root is not None else skill_root_from(env=dict(environ))
     tried: list[dict[str, Any]] = []
 
-    # 1) Bundled component is always preferred when present.
+    # 1) Bundled component is preferred unless the caller explicitly supplies
+    # an external path and separately opts in to using it.
     verification = verify_component_lock(skill_root=root, component_id=COMPONENT_ID)
-    if verification.ok:
+    explicit_external_override = explicit is not None and allow_external
+    if verification.ok and not explicit_external_override:
         resolution = resolve_component(COMPONENT_URI, skill_root=root, require_verified=True)
+        compatibility = _candidate_report("bundled", Path(resolution.root))
+        if not compatibility.get("ok"):
+            return {
+                "status": "incompatible",
+                "path": COMPONENT_URI,
+                "resolved_path": resolution.root,
+                "source": "bundled",
+                "source_kind": "bundled",
+                "package_name": resolution.package_name,
+                "package_version": resolution.package_version,
+                "package_major": resolution.package_major,
+                "supported_majors": [3],
+                "compatible": False,
+                "identity_verified": bool(compatibility.get("identity_ok")),
+                "component_uri": COMPONENT_URI,
+                "component_binding": resolution.binding(),
+                "tried": [compatibility],
+                "assurance_cap": "limited",
+                "error_code": "COMPONENT_IDENTITY_MISMATCH",
+                "issues": [
+                    issue(
+                        "D_RESEARCH",
+                        message=compatibility.get(
+                            "reason", "bundled D Research interop contract is incompatible"
+                        ),
+                    ).to_dict()
+                ],
+                **(
+                    {"interop_contract": compatibility["interop_contract"]}
+                    if "interop_contract" in compatibility
+                    else {}
+                ),
+                **(
+                    {"importer_ledger_contract": compatibility["importer_ledger_contract"]}
+                    if "importer_ledger_contract" in compatibility
+                    else {}
+                ),
+            }
         tried.append(
             {
                 "source": "bundled",
@@ -854,7 +1034,7 @@ def discover_d_research(
             # Optional lock equivalence: matching helper digest elevates trust.
             helper = Path(str(report["resolved_path"])) / "scripts" / "evidence_ledger.py"
             helper_digest = _sha256_bytes(helper.read_bytes()) if helper.is_file() else None
-            return {
+            available = {
                 "status": "available",
                 "path": report["resolved_path"],
                 "resolved_path": report["resolved_path"],
@@ -872,6 +1052,13 @@ def discover_d_research(
                 "ledger_helper_sha256": helper_digest,
                 "tried": tried,
             }
+            if "interop_contract" in report:
+                available["interop_contract"] = report["interop_contract"]
+            if "importer_ledger_contract" in report:
+                available["importer_ledger_contract"] = report[
+                    "importer_ledger_contract"
+                ]
+            return available
         if authoritative:
             return {
                 "status": "incompatible",

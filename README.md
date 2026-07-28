@@ -12,7 +12,7 @@ Vietnamese overview: [README.vi.md](README.vi.md)
 
 > Aleph Skill turns a “what if?” into an auditable scenario model: evidence becomes typed causal structure, executable traces, and alternative timelines with explicit uncertainty and calibrated likelihood only when justified.
 
-It has one host-neutral core. Codex, OpenCode, Claude Code, Agent Skills, Gemini CLI, Copilot CLI, Cursor, VS Code, Windsurf, Cline, Roo Code, and JetBrains can load native skill directories. Continue uses a generated project rule. Grok Build, Aider, and generic CLIs use declarative adapter profiles implemented by their host or wrapper.
+It has one host-neutral core and a 16-ID adapter registry: 12 native skill targets, one generated Continue project rule, and three declarative external profiles for Grok Build, Aider, and generic CLIs.
 
 ## At a glance
 
@@ -24,7 +24,7 @@ It has one host-neutral core. Codex, OpenCode, Claude Code, Agent Skills, Gemini
 | Research depth | Adaptive expansion based on temporal span, domain breadth, geography, actor density, causal depth, evidence uncertainty, and stakes. |
 | Outputs | Professional scenario reports, evidence maps, causal graphs, branch ledgers, propagation traces, validation reports, and audit metadata. |
 | Runtime posture | Portable markdown skill with stdlib-first helper scripts and optional adapters for major agent environments. |
-| Creative scope | No Aleph-level topic or scenario restrictions; unsupported details remain explicit assumptions or simulation content. |
+| Creative scope | Aleph adds no topic or scenario restrictions of its own. Mandatory host/system/developer policy and applicable law take precedence; within that scope, unsupported details remain explicit assumptions or simulation content. |
 
 ## When to use it
 
@@ -38,7 +38,7 @@ Use Aleph Skill when an agent needs to:
 - reason creatively about any human decision while keeping sourced claims separate from simulation assumptions;
 - produce a decision-grade report that separates `fact`, `inference`, `simulation`, and `counterfactual`.
 
-Use any creative scenario. Aleph does not refuse or rewrite topics, actors, motives, conflicts, or outcomes; it separates observed evidence from invented simulation content so creative freedom does not become a false factual claim.
+Aleph adds no content restrictions of its own. Mandatory host, system, and developer policy and applicable law always take precedence; within that scope, Aleph executes the requested creative scenario to the maximum permitted extent and separates observed evidence from invented simulation content so creative freedom does not become a false factual claim.
 
 ## Product scope
 
@@ -152,7 +152,7 @@ Supported install locations:
 
 ## Verification
 
-When upgrading an existing 2.0.0 workspace, keep an untouched backup and run draft validation first. Aleph 2.3.x keeps `schema_version: 2.0.0`, writes `formula_version: 2.1.0` for new workspaces, and can still replay formula 2.0.0 artifacts. Its stricter numerical, component-binding, likelihood, provenance, policy-aware research, and sealed-roleplay contracts can require report, packet/receipt, research-import, and numerical-artifact regeneration before final validation succeeds. For a workspace that still stores an absolute D Research path, run `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, inspect the byte-equivalence report, then repeat without `--check`. Do not use the 1.x schema migrator or hand-edit hashes or formula identifiers.
+When upgrading an existing 2.0.0 workspace, keep an untouched backup and run draft validation first. Aleph 2.4.0 keeps `schema_version: 2.0.0` as the write default, offers schema `2.1.0` as an explicit sibling-only upgrade, writes `formula_version: 2.1.0` for new workspaces, and can still replay formula 2.0.0 artifacts. Version-bound numerical, component, likelihood, provenance, research-import, and sealed-roleplay receipts may require regeneration before final validation succeeds. For a workspace that still stores an absolute D Research path, run `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, inspect the byte-equivalence report, then repeat without `--check`. Do not use the 1.x schema migrator or hand-edit hashes or formula identifiers.
 
 Run the local release gate:
 
