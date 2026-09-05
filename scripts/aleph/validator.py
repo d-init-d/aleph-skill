@@ -3398,8 +3398,22 @@ def validate_calibration_artifacts(
             )
         )
 
-    # Metrics empty check (A01, F03)
+    # Metrics empty check (A01, F03, RV2-05)
     declared_metrics = calibration_data.get("metrics")
+    if (not isinstance(declared_metrics, dict) or len(declared_metrics) == 0) and isinstance(calibration_data.get("recomputed_metrics"), dict):
+        rm = calibration_data["recomputed_metrics"]
+        cand_m = rm.get("candidate_metrics", {})
+        base_m = rm.get("baseline_metrics", {})
+        synth_m = {}
+        for k in ("mae", "rmse", "brier_score", "log_score"):
+            if k in cand_m:
+                synth_m[k] = cand_m[k]
+        for k in ("mae", "rmse"):
+            if k in base_m:
+                synth_m[f"baseline_{k}"] = base_m[k]
+        if synth_m:
+            declared_metrics = synth_m
+
     if not isinstance(declared_metrics, dict) or len(declared_metrics) == 0:
         issues.append(issue("PACK_MATURITY", artifact=artifact_name, pointer="metrics", message="calibration metrics cannot be empty ({})"))
 
@@ -3408,7 +3422,9 @@ def validate_calibration_artifacts(
     if snapshots is None and "snapshot_list" in calibration_data:
         snapshots = calibration_data.get("snapshot_list")
 
-    if is_bundle:
+    # RV2-02: Promotion to calibrated status or calibrated_probability mode strictly requires verified dataset snapshots!
+    req_snapshots = is_bundle or (manifest.get("likelihood_mode") == "calibrated_probability") or (calibration_data.get("assurance_status") == "calibrated")
+    if req_snapshots:
         if not isinstance(snapshots, list) or len(snapshots) == 0:
             issues.append(issue("MISSING_ARTIFACT", artifact=artifact_name, pointer="dataset_snapshots", message="dataset_snapshots must be a non-empty list of verified source dataset files"))
     elif snapshots is not None:
@@ -3449,17 +3465,23 @@ def validate_calibration_artifacts(
             if isinstance(p, dict):
                 cid = str(p.get("case_id"))
                 out_obj = outs_by_id.get(cid, {})
+                bp_val = p.get("baseline_prediction")
+                if bp_val is None:
+                    bp_val = out_obj.get("baseline_prediction")
                 resolved_cases.append({
                     "case_id": cid,
                     "forecast_origin": p.get("forecast_origin"),
                     "target_period": p.get("target_period"),
                     "model_version": p.get("model_version"),
-                    "model_hash": p.get("model_hash"),
+                    "model_hash": p.get("model_hash") or p.get("model_config_hash"),
                     "formula_version": p.get("formula_version"),
                     "point_prediction": p.get("point_prediction"),
+                    "baseline_prediction": bp_val,
                     "actual_value": out_obj.get("actual_value"),
                     "official_release_date": out_obj.get("official_release_date"),
                     "is_synthetic": p.get("is_synthetic") or out_obj.get("is_synthetic", False),
+                    "evidence": p.get("evidence") or out_obj.get("evidence", []),
+                    "inputs": p.get("inputs") or p.get("features"),
                 })
     else:
         # Check files on disk
@@ -3830,7 +3852,16 @@ def validate_calibration_artifacts(
                         )
 
         rel_str = c.get("official_release_date")
-        if rel_str:
+        if not rel_str:
+            if manifest.get("likelihood_mode") == "calibrated_probability":
+                issues.append(
+                    issue(
+                        "MISSING_FIELD",
+                        pointer=f"cases/{cid}/official_release_date",
+                        message="official_release_date is mandatory for realized outcome validation in calibrated probability mode",
+                    )
+                )
+        else:
             rel_dt = _parse_iso_datetime(rel_str)
             if rel_dt and rel_dt < origin_dt:
                 issues.append(
@@ -4056,8 +4087,20 @@ def validate_calibration_artifacts(
             )
         )
 
-    # VAC22 / CR04: Error propagation: ANY error on calibration artifacts/policies blocks cal_verified
+    # VAC22 / CR04 / RV2-02: Error propagation & strict provenance: ANY error on calibration artifacts/policies blocks cal_verified
     has_any_error = any(i.severity == "error" for i in issues)
+    snapshots_ok = (
+        isinstance(snapshots, list)
+        and len(snapshots) > 0
+        and not any(i.pointer.startswith("dataset_snapshots") for i in issues)
+    )
+    conf_hash = calibration_data.get("config_hash")
+    conf_hash_ok = (conf_hash is not None and conf_hash != "0" * 64) or ("config_hash" not in calibration_data)
+    cases_provenance_ok = (
+        len(resolved_cases) >= 30
+        and all(c.get("forecast_origin") and c.get("official_release_date") for c in resolved_cases)
+    )
+
     cal_verified = (
         not has_any_error
         and raw_case_count >= 30
@@ -4066,6 +4109,9 @@ def validate_calibration_artifacts(
         and not has_malformed
         and recomputed_beats
         and not is_synthetic
+        and snapshots_ok
+        and conf_hash_ok
+        and cases_provenance_ok
     )
 
     # Determine bundle assurance status
