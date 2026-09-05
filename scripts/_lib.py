@@ -123,7 +123,7 @@ def load_optional_yaml(path: Path) -> Any:
 
     if importlib.util.find_spec("yaml") is None:
         raise RuntimeError("PyYAML is not installed; use JSON or install PyYAML explicitly")
-    import yaml  # type: ignore[import-untyped]
+    import yaml  # type: ignore[import-untyped,unused-ignore]
 
     with path.open("r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)

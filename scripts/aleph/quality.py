@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from . import LEGACY_FORMULA_VERSION, SCHEMA_VERSION, SUPPORTED_SCHEMA_VERSIONS
+from . import SCHEMA_VERSION, SUPPORTED_SCHEMA_VERSIONS
 from .discovery import discover_d_research
 from .import_ledger import (
     import_d_research_ledger,

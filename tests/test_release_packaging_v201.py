@@ -90,11 +90,13 @@ class ReleasePackagingV201Tests(unittest.TestCase):
 
             environment = os.environ.copy()
             environment["PYTHONDONTWRITEBYTECODE"] = "1"
+            environment["PYTHONIOENCODING"] = "utf-8"
             preflight = subprocess.run(
                 [sys.executable, str(extracted / "scripts" / "preflight.py"), "--json"],
                 cwd=extracted,
                 env=environment,
                 text=True,
+                encoding="utf-8",
                 capture_output=True,
                 check=False,
             )

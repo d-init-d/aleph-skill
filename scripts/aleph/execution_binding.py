@@ -238,7 +238,7 @@ def build_trace_execution_binding(
             source_tick = row.get("emission_tick", effect_tick - lag_ticks)
         else:
             timestamp = parse_time(row.get("time"))
-            if timestamp is None:
+            if timestamp is None or start is None:
                 problems.append(issue("TRACE_EXECUTION_BINDING", pointer=f"{pointer}/time"))
                 continue
             tick_float = (timestamp - start).total_seconds() / seconds_per_tick
@@ -279,6 +279,7 @@ def build_trace_execution_binding(
         source_state = history[source_tick].get(edge.source)
         target_state = history[effect_tick].get(edge.target)
 
+        checks: tuple[tuple[str, Any, Any], ...]
         if is_engine_trace:
             checks = (
                 ("tick", row.get("tick"), effect_tick),

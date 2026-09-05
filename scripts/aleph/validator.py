@@ -2350,13 +2350,18 @@ def _branch_similarity(left: dict[str, Any], right: dict[str, Any]) -> float:
 
 def validate_branches(
     data: Any,
-    edge_ids: set[str],
-    actor_ids: set[str],
-    evidence_ids: set[str],
-    manifest: dict[str, Any],
+    edge_ids: set[str] | None = None,
+    actor_ids: set[str] | None = None,
+    evidence_ids: set[str] | None = None,
+    manifest: dict[str, Any] | None = None,
     node_ids: set[str] | None = None,
+    calibration: dict[str, Any] | None = None,
 ) -> CheckResult:
     issues: list[Issue] = []
+    edge_ids = edge_ids if edge_ids is not None else set()
+    actor_ids = actor_ids if actor_ids is not None else set()
+    evidence_ids = evidence_ids if evidence_ids is not None else set()
+    manifest_dict = manifest if isinstance(manifest, dict) else {}
     if not isinstance(data, dict):
         issues.append(issue("TYPE", artifact="branch_ledger", message="must be object"))
         return _check("branches", issues)
@@ -2384,7 +2389,7 @@ def validate_branches(
         issues.append(issue("ENUM", pointer="branch_ledger.likelihood_mode", actual=data.get("likelihood_mode")))
     if not is_bool(data.get("calibrated")):
         issues.append(issue("TYPE", pointer="branch_ledger.calibrated", message="must be boolean"))
-    manifest_likelihood = manifest.get("likelihood_mode")
+    manifest_likelihood = manifest_dict.get("likelihood_mode")
     ledger_likelihood = data.get("likelihood_mode")
     if manifest_likelihood != ledger_likelihood:
         issues.append(
@@ -2407,7 +2412,8 @@ def validate_branches(
                 message="calibrated flag must match likelihood mode",
             )
         )
-    calibration = data.get("calibration")
+    if calibration is None:
+        calibration = data.get("calibration")
     if calibration is not None:
         if not isinstance(calibration, dict):
             issues.append(issue("TYPE", pointer="branch_ledger.calibration", message="must be object"))
@@ -2446,7 +2452,7 @@ def validate_branches(
             for field in ("method", "calibration_policy_ref", "model_version", "hindcast_report_ref"):
                 if field in calibration and not nonempty_str(calibration.get(field)):
                     issues.append(issue("TYPE", pointer=f"branch_ledger.calibration.{field}", message="must be a non-empty string"))
-            expected_formula_version = manifest.get(
+            expected_formula_version = manifest_dict.get(
                 "formula_version", LEGACY_FORMULA_VERSION
             )
             if calibration.get("formula_version") != expected_formula_version:
@@ -2492,7 +2498,7 @@ def validate_branches(
                 not isinstance(model_hash, str) or re.fullmatch(r"[0-9a-f]{64}", model_hash) is None
             ):
                 issues.append(issue("SCHEMA", pointer="branch_ledger.calibration.model_hash", message="must be SHA-256"))
-        raw_paths = manifest.get("artifact_paths")
+        raw_paths = manifest_dict.get("artifact_paths")
         artifact_paths = raw_paths if isinstance(raw_paths, dict) else {}
         if not (nonempty_str(artifact_paths.get("calibration_report")) or nonempty_str(artifact_paths.get("calibration_bundle"))):
             issues.append(
@@ -2502,10 +2508,72 @@ def validate_branches(
                     message="calibrated probability requires a calibration report or bundle",
                 )
             )
-        cal_method = str(calibration.get("method", "")).lower()
-        cal_target = str(calibration.get("target_variable", "")).lower()
-        manifest_scope = manifest.get("scope") if isinstance(manifest.get("scope"), dict) else {}
-        cal_domain = str(calibration.get("domain") or manifest_scope.get("domain", "")).lower()
+        cal_dict: dict[str, Any] = calibration if isinstance(calibration, dict) else {}
+        cal_method = str(cal_dict.get("method", "")).lower()
+        cal_target = str(cal_dict.get("target_variable", "")).lower()
+        scope_raw = manifest_dict.get("scope")
+        manifest_scope: dict[str, Any] = scope_raw if isinstance(scope_raw, dict) else {}
+        cal_domain = str(cal_dict.get("domain") or manifest_scope.get("domain", "")).lower()
+        cal_horizon = str(cal_dict.get("target_horizon") or manifest_scope.get("target_horizon", "")).lower()
+        cal_units = str(cal_dict.get("units") or manifest_scope.get("units", "")).lower()
+        metrics_raw = cal_dict.get("metrics")
+        cal_metrics: dict[str, Any] = metrics_raw if isinstance(metrics_raw, dict) else {}
+
+        # VAC19: Domain, target, horizon, and unit scope mismatch enforcement
+        if cal_domain and manifest_scope.get("domain") and cal_domain != str(manifest_scope.get("domain", "")).lower():
+            issues.append(
+                issue(
+                    "SCOPE_MISMATCH",
+                    pointer="branch_ledger.calibration.domain",
+                    expected=manifest_scope.get("domain"),
+                    actual=cal_domain,
+                    message="calibration domain does not match simulation manifest domain scope",
+                )
+            )
+        if cal_target and manifest_scope.get("target_variable") and cal_target != str(manifest_scope.get("target_variable", "")).lower():
+            issues.append(
+                issue(
+                    "SCOPE_MISMATCH",
+                    pointer="branch_ledger.calibration.target_variable",
+                    expected=manifest_scope.get("target_variable"),
+                    actual=cal_target,
+                    message="calibration target_variable does not match simulation manifest target variable scope",
+                )
+            )
+        if cal_horizon and manifest_scope.get("target_horizon") and cal_horizon != str(manifest_scope.get("target_horizon", "")).lower():
+            issues.append(
+                issue(
+                    "SCOPE_MISMATCH",
+                    pointer="branch_ledger.calibration.target_horizon",
+                    expected=manifest_scope.get("target_horizon"),
+                    actual=cal_horizon,
+                    message="calibration target_horizon does not match simulation manifest horizon scope",
+                )
+            )
+        if cal_units and manifest_scope.get("units") and cal_units != str(manifest_scope.get("units", "")).lower():
+            issues.append(
+                issue(
+                    "SCOPE_MISMATCH",
+                    pointer="branch_ledger.calibration.units",
+                    expected=manifest_scope.get("units"),
+                    actual=cal_units,
+                    message="calibration units do not match simulation manifest units scope",
+                )
+            )
+
+        # VAC20: Continuous MAE / point metrics cannot authorize calibrated probability for event branches
+        has_prob_score = any(k in cal_metrics for k in ("brier_score", "log_score", "crps"))
+        is_point_continuous = ("mae" in cal_metrics or "rmse" in cal_metrics) and not has_prob_score
+        eval_type = str(cal_dict.get("evaluation_type", "")).lower()
+        if is_point_continuous or "point" in cal_method or eval_type == "point_forecast":
+            issues.append(
+                issue(
+                    "SCOPE_MISMATCH",
+                    pointer="branch_ledger.likelihood_mode",
+                    message="continuous MAE / point forecast calibration does not authorize calibrated_probability for event branch probabilities",
+                )
+            )
+
         branches_list = data.get("branches") or []
         branch_domains = {str(b.get("domain")).lower() for b in branches_list if isinstance(b, dict) and b.get("domain")}
         if cal_domain == "economics" and any(d == "geopolitics" for d in branch_domains):
@@ -2516,15 +2584,6 @@ def validate_branches(
                     message="point forecast calibration on economics does not authorize calibrated probability for geopolitics event branches",
                 )
             )
-        elif "point" in cal_method or cal_target in {"inflation", "cpi", "gdp"}:
-            if branch_domains and not any(d == "economics" for d in branch_domains):
-                issues.append(
-                    issue(
-                        "SCOPE_MISMATCH",
-                        pointer="branch_ledger.calibration",
-                        message="continuous point forecast calibration does not authorize calibrated probability for external event domains",
-                    )
-                )
     unresolved_mass = 0.0
     if "unresolved_mass" in data:
         parsed_unresolved_mass = refuse_string_number(
@@ -2551,7 +2610,7 @@ def validate_branches(
         issues.append(issue("BRANCH_COUNT", pointer="branch_ledger.branches", message="requires at least one branch"))
     fps: dict[str, tuple[str, dict[str, Any]]] = {}
     branch_ids: set[str] = set()
-    likelihood = manifest.get("likelihood_mode") or data.get("likelihood_mode") or "relative_weight"
+    likelihood = manifest_dict.get("likelihood_mode") or data.get("likelihood_mode") or "relative_weight"
     total_prob = 0.0
     total_weight = 0.0
     non_stress_count = 0
@@ -2636,7 +2695,7 @@ def validate_branches(
         if not isinstance(indicators, list):
             issues.append(issue("TYPE", pointer=f"{p}/leading_indicators", message="must be array"))
         else:
-            if _mapping(manifest.get("temporal_frame")).get("future_projection") is True and not indicators:
+            if _mapping(manifest_dict.get("temporal_frame")).get("future_projection") is True and not indicators:
                 issues.append(issue("MISSING_FIELD", pointer=f"{p}/leading_indicators", message="future branch requires monitoring indicators"))
             for indicator_idx, indicator in enumerate(indicators):
                 ip = f"{p}/leading_indicators/{indicator_idx}"
@@ -2657,7 +2716,7 @@ def validate_branches(
                     issues.append(issue("TEMPORAL_FRAME", pointer=f"{ip}/window", message="must be supported ISO duration"))
         disconfirming = branch.get("disconfirming_conditions")
         if not isinstance(disconfirming, list) or (
-            _mapping(manifest.get("temporal_frame")).get("future_projection") is True
+            _mapping(manifest_dict.get("temporal_frame")).get("future_projection") is True
             and (not disconfirming or not all(nonempty_str(item) for item in disconfirming))
         ):
             issues.append(issue("MISSING_FIELD", pointer=f"{p}/disconfirming_conditions", message="future branch requires non-empty conditions"))
@@ -2673,9 +2732,9 @@ def validate_branches(
             elif ref not in evidence_ids:
                 issues.append(issue("UNKNOWN_REF", pointer=f"{p}/evidence_ids", actual=ref))
         unit_interval(branch.get("confidence"), f"{p}/confidence", issues)
-        manifest_simulation_mode = manifest.get("simulation_mode")
+        manifest_simulation_mode = manifest_dict.get("simulation_mode")
         if (
-            manifest.get("schema_version") in SUPPORTED_SCHEMA_VERSIONS
+            manifest_dict.get("schema_version") in SUPPORTED_SCHEMA_VERSIONS
             and isinstance(manifest_simulation_mode, str)
             and manifest_simulation_mode in {"deterministic", "monte_carlo"}
         ):
@@ -3145,36 +3204,51 @@ def _recompute_calibration_metrics(
             "beats_baseline": False,
         }
     n = len(predictions)
-    errors = [float(p) - float(a) for p, a in zip(predictions, actuals)]
+    errors = [float(p) - float(a) for p, a in zip(predictions, actuals, strict=True)]
     cand_mae = sum(abs(e) for e in errors) / n
     cand_rmse = math.sqrt(sum(e * e for e in errors) / n)
 
-    if baseline_predictions and len(baseline_predictions) == n:
-        b_errors = [float(bp) - float(a) for bp, a in zip(baseline_predictions, actuals)]
+    has_baseline = bool(baseline_predictions is not None and len(baseline_predictions) == n)
+    if has_baseline and baseline_predictions is not None:
+        b_errors = [float(bp) - float(a) for bp, a in zip(baseline_predictions, actuals, strict=True)]
+        base_mae = sum(abs(be) for be in b_errors) / n
+        base_rmse = math.sqrt(sum(be * be for be in b_errors) / n)
+        delta_mae = cand_mae - base_mae
+        delta_rmse = cand_rmse - base_rmse
+        base_metrics: dict[str, Any] = {"mae": round(base_mae, 6), "rmse": round(base_rmse, 6)}
+        paired_diff: dict[str, Any] = {
+            "delta_mae": round(delta_mae, 6),
+            "delta_rmse": round(delta_rmse, 6),
+        }
+        beats_baseline = (cand_mae < base_mae) and (cand_rmse <= base_rmse)
     else:
-        b_errors = [-float(a) for a in actuals]
-    base_mae = sum(abs(be) for be in b_errors) / n
-    base_rmse = math.sqrt(sum(be * be for be in b_errors) / n)
+        base_metrics = {"mae": float("inf"), "rmse": float("inf")}
+        paired_diff = {"delta_mae": float("inf"), "delta_rmse": float("inf")}
+        beats_baseline = False
 
     cand_metrics: dict[str, Any] = {"mae": round(cand_mae, 6), "rmse": round(cand_rmse, 6)}
-    base_metrics: dict[str, Any] = {"mae": round(base_mae, 6), "rmse": round(base_rmse, 6)}
     is_binary = all(a in (0.0, 1.0) for a in actuals) and all(0.0 <= p <= 1.0 for p in predictions)
     if is_binary:
-        brier = sum((p - a) ** 2 for p, a in zip(predictions, actuals)) / n
+        brier = sum((p - a) ** 2 for p, a in zip(predictions, actuals, strict=True)) / n
         log_score = -sum(
             a * math.log(max(p, 1e-15)) + (1.0 - a) * math.log(max(1.0 - p, 1e-15))
-            for p, a in zip(predictions, actuals)
+            for p, a in zip(predictions, actuals, strict=True)
         ) / n
         cand_metrics["brier_score"] = round(brier, 6)
         cand_metrics["log_score"] = round(log_score, 6)
+        if has_baseline and baseline_predictions is not None:
+            base_brier = sum((bp - a) ** 2 for bp, a in zip(baseline_predictions, actuals, strict=True)) / n
+            base_log_score = -sum(
+                a * math.log(max(bp, 1e-15)) + (1.0 - a) * math.log(max(1.0 - bp, 1e-15))
+                for bp, a in zip(baseline_predictions, actuals, strict=True)
+            ) / n
+            base_metrics["brier_score"] = round(base_brier, 6)
+            base_metrics["log_score"] = round(base_log_score, 6)
 
     if horizon_periods > 1 and n > horizon_periods:
         effective_n = max(1.0, round(float(n) / float(horizon_periods), 2))
     else:
         effective_n = float(n)
-
-    delta_mae = cand_mae - base_mae
-    delta_rmse = cand_rmse - base_rmse
 
     return {
         "case_count": n,
@@ -3182,11 +3256,8 @@ def _recompute_calibration_metrics(
         "effective_sample_size": effective_n,
         "candidate_metrics": cand_metrics,
         "baseline_metrics": base_metrics,
-        "paired_difference": {
-            "delta_mae": round(delta_mae, 6),
-            "delta_rmse": round(delta_rmse, 6),
-        },
-        "beats_baseline": cand_mae < base_mae,
+        "paired_difference": paired_diff,
+        "beats_baseline": beats_baseline,
     }
 
 
@@ -3259,6 +3330,24 @@ def validate_calibration_artifacts(
             if not isinstance(val, str) or re.fullmatch(r"[0-9a-f]{64}", val) is None:
                 issues.append(issue("SCHEMA", artifact=artifact_name, pointer=field, message="SHA-256 required"))
 
+    # Field types validation (VAC05)
+    if "case_count" in calibration_data:
+        cc = calibration_data.get("case_count")
+        if not isinstance(cc, int) or isinstance(cc, bool) or cc < 0:
+            issues.append(issue("TYPE", artifact=artifact_name, pointer="case_count", actual=cc, message="case_count must be a non-negative integer"))
+    if "unique_case_count" in calibration_data:
+        ucc = calibration_data.get("unique_case_count")
+        if not isinstance(ucc, int) or isinstance(ucc, bool) or ucc < 0:
+            issues.append(issue("TYPE", artifact=artifact_name, pointer="unique_case_count", actual=ucc, message="unique_case_count must be a non-negative integer"))
+    if "beats_baseline" in calibration_data:
+        bb = calibration_data.get("beats_baseline")
+        if not isinstance(bb, bool):
+            issues.append(issue("TYPE", artifact=artifact_name, pointer="beats_baseline", actual=bb, message="beats_baseline must be boolean"))
+    if "policy_locked" in calibration_data:
+        pl = calibration_data.get("policy_locked")
+        if not isinstance(pl, bool):
+            issues.append(issue("TYPE", artifact=artifact_name, pointer="policy_locked", actual=pl, message="policy_locked must be boolean"))
+
     # Model and formula binding (A12, A19)
     cal_formula = str(calibration_data.get("formula_version", ""))
     if cal_formula and cal_formula != model_formula_version:
@@ -3314,27 +3403,41 @@ def validate_calibration_artifacts(
     if not isinstance(declared_metrics, dict) or len(declared_metrics) == 0:
         issues.append(issue("PACK_MATURITY", artifact=artifact_name, pointer="metrics", message="calibration metrics cannot be empty ({})"))
 
-    # Dataset snapshots verification & path containment (A02, A20)
+    # Dataset snapshots verification & path containment (A02, A20, VAC03)
     snapshots = calibration_data.get("dataset_snapshots")
+    if snapshots is None and "snapshot_list" in calibration_data:
+        snapshots = calibration_data.get("snapshot_list")
+
+    if is_bundle:
+        if not isinstance(snapshots, list) or len(snapshots) == 0:
+            issues.append(issue("MISSING_ARTIFACT", artifact=artifact_name, pointer="dataset_snapshots", message="dataset_snapshots must be a non-empty list of verified source dataset files"))
+    elif snapshots is not None:
+        if not isinstance(snapshots, list) or len(snapshots) == 0:
+            issues.append(issue("MISSING_ARTIFACT", artifact=artifact_name, pointer="dataset_snapshots", message="snapshot list cannot be empty"))
+
     if isinstance(snapshots, list):
         for s_idx, snapshot in enumerate(snapshots):
             if not isinstance(snapshot, dict):
+                issues.append(issue("TYPE", artifact=artifact_name, pointer=f"dataset_snapshots/{s_idx}", message="snapshot entry must be an object"))
                 continue
-            file_path_str = snapshot.get("file_path")
-            if isinstance(file_path_str, str):
-                try:
-                    target_p = (workspace / file_path_str).resolve()
-                    target_p.relative_to(workspace.resolve())
-                except (ValueError, Exception):
-                    issues.append(issue("PATH_ESCAPE", artifact=artifact_name, pointer=f"dataset_snapshots/{s_idx}/file_path", actual=file_path_str, message="path traversal outside workspace forbidden"))
-                    continue
-                if not target_p.is_file():
-                    issues.append(issue("MISSING_ARTIFACT", artifact=file_path_str, pointer=f"dataset_snapshots/{s_idx}/file_path", message="raw dataset snapshot missing on disk"))
-                else:
-                    actual_sha = sha256_file(target_p)
-                    declared_sha = str(snapshot.get("sha256_digest", "")).replace("sha256:", "")
-                    if actual_sha != declared_sha:
-                        issues.append(issue("STALE_ARTIFACT", artifact=file_path_str, pointer=f"dataset_snapshots/{s_idx}/sha256_digest", expected=snapshot.get("sha256_digest"), actual=f"sha256:{actual_sha}", message="dataset snapshot digest mismatch"))
+            file_path_raw = snapshot.get("file_path")
+            file_path_str = str(file_path_raw) if nonempty_str(file_path_raw) else ""
+            if not file_path_str:
+                issues.append(issue("MISSING_FIELD", artifact=artifact_name, pointer=f"dataset_snapshots/{s_idx}/file_path", message="file_path required"))
+                continue
+            try:
+                target_p = (workspace / file_path_str).resolve()
+                target_p.relative_to(workspace.resolve())
+            except (ValueError, Exception):
+                issues.append(issue("PATH_ESCAPE", artifact=artifact_name, pointer=f"dataset_snapshots/{s_idx}/file_path", actual=file_path_str, message="path traversal outside workspace forbidden"))
+                continue
+            if not target_p.is_file() or target_p.stat().st_size == 0:
+                issues.append(issue("MISSING_ARTIFACT", artifact=file_path_str, pointer=f"dataset_snapshots/{s_idx}/file_path", message="raw dataset snapshot missing on disk or empty"))
+            else:
+                actual_sha = sha256_file(target_p)
+                declared_sha = str(snapshot.get("sha256_digest", "")).replace("sha256:", "")
+                if not declared_sha or actual_sha != declared_sha:
+                    issues.append(issue("STALE_ARTIFACT", artifact=file_path_str, pointer=f"dataset_snapshots/{s_idx}/sha256_digest", expected=snapshot.get("sha256_digest"), actual=f"sha256:{actual_sha}", message="dataset snapshot digest mismatch against disk"))
 
     # Resolve raw hindcast cases (A01, A02, A03, A04, A20)
     resolved_cases: list[dict[str, Any]] = []
@@ -3419,6 +3522,7 @@ def validate_calibration_artifacts(
 
     seen_tuples: set[Any] = set()
     seen_ids: set[str] = set()
+    seen_obs_ids: set[str] = set()
     has_inflation = False
     for c in resolved_cases:
         cid = str(c.get("case_id", ""))
@@ -3427,15 +3531,34 @@ def validate_calibration_artifacts(
             has_inflation = True
         seen_ids.add(cid)
 
+        # VAC14: Explicit duplicate observation ID detection across different cases
+        obs_id = c.get("observation_id")
+        if obs_id:
+            obs_id_str = str(obs_id)
+            if obs_id_str in seen_obs_ids:
+                has_inflation = True
+                issues.append(
+                    issue(
+                        "PACK_MATURITY",
+                        artifact=artifact_name,
+                        pointer=f"cases/{cid}/observation_id",
+                        actual=obs_id_str,
+                        message=f"ARTIFICIAL_SAMPLE_INFLATION: duplicate observation_id '{obs_id_str}' referenced across distinct case IDs",
+                    )
+                )
+            seen_obs_ids.add(obs_id_str)
+
+        # VAC15: Pair target period and target variable with values to avoid falsely flagging equal numbers on different dates
         t_period = str(c.get("target_period", c.get("cutoff", "")))
+        t_var = str(c.get("target_variable", ""))
         p_val = c.get("point_prediction")
         if p_val is None and isinstance(c.get("predictions"), dict):
             p_val = tuple(sorted(c["predictions"].items()))
         a_val = c.get("actual_value")
         if a_val is None and isinstance(c.get("observations"), dict):
             a_val = tuple(sorted(c["observations"].items()))
-        obs_sig = (t_period, p_val, a_val)
-        if obs_sig in seen_tuples and obs_sig != ("", None, None):
+        obs_sig = (t_var, t_period, p_val, a_val)
+        if obs_sig in seen_tuples and obs_sig != ("", "", None, None):
             has_inflation = True
             issues.append(issue("PACK_MATURITY", artifact=artifact_name, pointer="unique_case_count", actual=cid, message="ARTIFICIAL_SAMPLE_INFLATION: identical prediction observations duplicated under different case IDs"))
         seen_tuples.add(obs_sig)
@@ -3480,13 +3603,32 @@ def validate_calibration_artifacts(
             issues.append(issue("TYPE", artifact=artifact_name, pointer=f"cases/{cid}/actual_value", actual=a, message="actual outcome must be a finite number, not boolean, NaN, or Infinity"))
             has_malformed = True
 
+        # VAC04 / CR04: Baseline prediction is mandatory; never default missing baseline to 0.0
+        if bp is None:
+            issues.append(
+                issue(
+                    "MISSING_FIELD",
+                    artifact=artifact_name,
+                    pointer=f"cases/{cid}/baseline_prediction",
+                    message="missing baseline prediction; cannot default missing baseline to 0.0",
+                )
+            )
+        elif isinstance(bp, bool) or not isinstance(bp, (int, float)) or not math.isfinite(float(bp)):
+            issues.append(
+                issue(
+                    "TYPE",
+                    artifact=artifact_name,
+                    pointer=f"cases/{cid}/baseline_prediction",
+                    actual=bp,
+                    message="baseline prediction must be a finite number, not boolean, NaN, or Infinity",
+                )
+            )
+        else:
+            base_preds_list.append(float(bp))
+
         if not has_malformed and p is not None and a is not None:
             preds_list.append(float(p))
             actuals_list.append(float(a))
-            if bp is not None and not isinstance(bp, bool) and isinstance(bp, (int, float)) and math.isfinite(float(bp)):
-                base_preds_list.append(float(bp))
-            else:
-                base_preds_list.append(0.0)
 
     # Overlapping horizon parsing
     horizon_str = str(calibration_data.get("target_horizon", ""))
@@ -3495,30 +3637,108 @@ def validate_calibration_artifacts(
 
     recomputed: dict[str, Any] = {}
     recomputed_beats = False
+    cand_mae = None
+    base_mae = None
+    cand_rmse = None
+    base_rmse = None
+    brier = None
+    log_s = None
     if not has_malformed and preds_list and actuals_list:
+        valid_base_preds = base_preds_list if len(base_preds_list) == len(preds_list) else None
         recomputed = _recompute_calibration_metrics(
             preds_list,
             actuals_list,
-            base_preds_list if base_preds_list else None,
+            valid_base_preds,
             horizon_periods=horizon_val,
         )
         recomputed_beats = recomputed.get("beats_baseline", False)
         cand_mae = recomputed["candidate_metrics"]["mae"]
         base_mae = recomputed["baseline_metrics"]["mae"]
+        cand_rmse = recomputed["candidate_metrics"].get("rmse")
+        base_rmse = recomputed["baseline_metrics"].get("rmse")
+        brier = recomputed["candidate_metrics"].get("brier_score")
+        log_s = recomputed["candidate_metrics"].get("log_score")
 
-        if isinstance(declared_metrics, dict) and "mae" in declared_metrics:
-            dec_mae = float(declared_metrics["mae"])
-            if not math.isclose(dec_mae, cand_mae, rel_tol=1e-3, abs_tol=1e-3):
-                issues.append(
-                    issue(
-                        "REPLAY_MISMATCH",
-                        artifact=artifact_name,
-                        pointer="metrics.mae",
-                        expected=round(cand_mae, 4),
-                        actual=dec_mae,
-                        message=f"recomputed MAE ({cand_mae:.4f}) differs from summary ({dec_mae})",
+        # VAC06 / CR04: Independent metric recomputation and strict verification across all declared metrics
+        if isinstance(declared_metrics, dict):
+            if "mae" in declared_metrics:
+                dec_mae = float(declared_metrics["mae"])
+                if not math.isclose(dec_mae, cand_mae, rel_tol=1e-3, abs_tol=1e-3):
+                    issues.append(
+                        issue(
+                            "REPLAY_MISMATCH",
+                            artifact=artifact_name,
+                            pointer="metrics.mae",
+                            expected=round(cand_mae, 4),
+                            actual=dec_mae,
+                            message=f"recomputed MAE ({cand_mae:.4f}) differs from summary ({dec_mae})",
+                        )
                     )
-                )
+            if "rmse" in declared_metrics and cand_rmse is not None:
+                dec_rmse = float(declared_metrics["rmse"])
+                if not math.isclose(dec_rmse, cand_rmse, rel_tol=1e-3, abs_tol=1e-3):
+                    issues.append(
+                        issue(
+                            "REPLAY_MISMATCH",
+                            artifact=artifact_name,
+                            pointer="metrics.rmse",
+                            expected=round(cand_rmse, 4),
+                            actual=dec_rmse,
+                            message=f"recomputed RMSE ({cand_rmse:.4f}) differs from summary ({dec_rmse})",
+                        )
+                    )
+            if "baseline_mae" in declared_metrics:
+                dec_base_mae = float(declared_metrics["baseline_mae"])
+                if not math.isclose(dec_base_mae, base_mae, rel_tol=1e-3, abs_tol=1e-3):
+                    issues.append(
+                        issue(
+                            "REPLAY_MISMATCH",
+                            artifact=artifact_name,
+                            pointer="metrics.baseline_mae",
+                            expected=round(base_mae, 4),
+                            actual=dec_base_mae,
+                            message=f"recomputed baseline MAE ({base_mae:.4f}) differs from summary ({dec_base_mae})",
+                        )
+                    )
+            if "baseline_rmse" in declared_metrics and base_rmse is not None:
+                dec_base_rmse = float(declared_metrics["baseline_rmse"])
+                if not math.isclose(dec_base_rmse, base_rmse, rel_tol=1e-3, abs_tol=1e-3):
+                    issues.append(
+                        issue(
+                            "REPLAY_MISMATCH",
+                            artifact=artifact_name,
+                            pointer="metrics.baseline_rmse",
+                            expected=round(base_rmse, 4),
+                            actual=dec_base_rmse,
+                            message=f"recomputed baseline RMSE ({base_rmse:.4f}) differs from summary ({dec_base_rmse})",
+                        )
+                    )
+            if "brier_score" in declared_metrics and brier is not None:
+                dec_brier = float(declared_metrics["brier_score"])
+                if not math.isclose(dec_brier, brier, rel_tol=1e-3, abs_tol=1e-3):
+                    issues.append(
+                        issue(
+                            "REPLAY_MISMATCH",
+                            artifact=artifact_name,
+                            pointer="metrics.brier_score",
+                            expected=round(brier, 4),
+                            actual=dec_brier,
+                            message=f"recomputed Brier score ({brier:.4f}) differs from summary ({dec_brier})",
+                        )
+                    )
+            if "log_score" in declared_metrics and log_s is not None:
+                dec_log_s = float(declared_metrics["log_score"])
+                if not math.isclose(dec_log_s, log_s, rel_tol=1e-3, abs_tol=1e-3):
+                    issues.append(
+                        issue(
+                            "REPLAY_MISMATCH",
+                            artifact=artifact_name,
+                            pointer="metrics.log_score",
+                            expected=round(log_s, 4),
+                            actual=dec_log_s,
+                            message=f"recomputed log-score ({log_s:.4f}) differs from summary ({dec_log_s})",
+                        )
+                    )
 
         if calibration_data.get("beats_baseline") is True and not recomputed_beats:
             issues.append(
@@ -3532,24 +3752,71 @@ def validate_calibration_artifacts(
                 )
             )
 
-    # Temporal leakage audit (A10, A11)
+    # Temporal leakage audit (VAC11, VAC12, VAC13)
     for c in resolved_cases:
         cid = str(c.get("case_id", ""))
         origin_str = c.get("forecast_origin") or c.get("cutoff")
-        origin_dt = _parse_iso_datetime(origin_str) if origin_str else None
+        if not origin_str:
+            issues.append(
+                issue(
+                    "MISSING_FIELD",
+                    artifact=artifact_name,
+                    pointer=f"cases/{cid}/forecast_origin",
+                    message="forecast_origin or cutoff timestamp is mandatory for temporal auditing",
+                )
+            )
+            has_malformed = True
+            continue
+        origin_dt = _parse_iso_datetime(origin_str)
+        if origin_dt is None:
+            issues.append(
+                issue(
+                    "PACKET_CUTOFF",
+                    artifact=artifact_name,
+                    pointer=f"cases/{cid}/forecast_origin",
+                    actual=str(origin_str),
+                    message="forecast_origin must be a valid ISO-8601 timestamp with timezone",
+                )
+            )
+            has_malformed = True
+            continue
+        if not (origin_str.endswith("Z") or ("+" in origin_str[10:] or "-" in origin_str[10:])):
+            issues.append(
+                issue(
+                    "PACKET_CUTOFF",
+                    artifact=artifact_name,
+                    pointer=f"cases/{cid}/forecast_origin",
+                    actual=str(origin_str),
+                    message="forecast_origin timestamp lacks required timezone indicator (must include Z or offset)",
+                )
+            )
+            has_malformed = True
+            continue
+
         ev_list = c.get("evidence") or []
         if isinstance(ev_list, list):
             for e_idx, ev in enumerate(ev_list):
                 if isinstance(ev, dict):
-                    v_str = ev.get("vintage_date") or ev.get("publication_date") or ev.get("available_at")
+                    v_str = ev.get("vintage_date") or ev.get("publication_date")
                     v_dt = _parse_iso_datetime(v_str) if v_str else None
-                    if origin_dt and v_dt and v_dt > origin_dt:
+                    if v_dt and v_dt > origin_dt:
                         issues.append(
                             issue(
                                 "PACKET_CUTOFF",
                                 pointer=f"cases/{cid}/evidence/{e_idx}",
                                 actual=str(v_str),
                                 message="VINTAGE_AFTER_CUTOFF: evidence/dataset vintage post-dates forecast origin (temporal leakage)",
+                            )
+                        )
+                    avail_str = ev.get("available_at") or ev.get("release_date")
+                    avail_dt = _parse_iso_datetime(avail_str) if avail_str else None
+                    if avail_dt and avail_dt > origin_dt:
+                        issues.append(
+                            issue(
+                                "PACKET_CUTOFF",
+                                pointer=f"cases/{cid}/evidence/{e_idx}/available_at",
+                                actual=str(avail_str),
+                                message="AVAILABLE_AFTER_CUTOFF: evidence availability post-dates forecast origin (look-ahead leakage)",
                             )
                         )
                     if ev.get("access_date") and not ev.get("vintage_date") and ev.get("is_revised"):
@@ -3561,8 +3828,9 @@ def validate_calibration_artifacts(
                                 severity="warning",
                             )
                         )
+
         rel_str = c.get("official_release_date")
-        if rel_str and origin_dt:
+        if rel_str:
             rel_dt = _parse_iso_datetime(rel_str)
             if rel_dt and rel_dt < origin_dt:
                 issues.append(
@@ -3574,45 +3842,167 @@ def validate_calibration_artifacts(
                     )
                 )
 
-    # Policy Commitments & Ex-Post Tampering (A08, A09)
+        # VAC13: Feature aggregate future leakage check
+        features = c.get("features") or c.get("feature_aggregates") or c.get("inputs")
+        if isinstance(features, dict):
+            for f_name, f_data in features.items():
+                if isinstance(f_data, dict):
+                    f_end = f_data.get("window_end") or f_data.get("aggregate_end") or f_data.get("max_date") or f_data.get("as_of")
+                    if f_end:
+                        f_dt = _parse_iso_datetime(f_end)
+                        if f_dt and f_dt > origin_dt:
+                            issues.append(
+                                issue(
+                                    "PACKET_CUTOFF",
+                                    pointer=f"cases/{cid}/features/{f_name}/window_end",
+                                    actual=str(f_end),
+                                    message="FEATURE_AGGREGATE_LEAKAGE: feature aggregate window post-dates forecast origin (future feature leakage)",
+                                )
+                            )
+        w_end = c.get("window_end") or c.get("observation_window_end")
+        if w_end:
+            w_dt = _parse_iso_datetime(w_end)
+            if w_dt and w_dt > origin_dt:
+                issues.append(
+                    issue(
+                        "PACKET_CUTOFF",
+                        pointer=f"cases/{cid}/window_end",
+                        actual=str(w_end),
+                        message="FEATURE_AGGREGATE_LEAKAGE: observation window end post-dates forecast origin",
+                    )
+                )
+
+    # Policy Commitments & Ex-Post Tampering (VAC01, VAC02, VAC09, VAC10)
     policy_path = workspace / "calibration-policy.json"
     policy_obj = None
     if policy_path.is_file():
-        policy_obj, _ = load_json_secure(policy_path)
+        policy_obj, pol_errs = load_json_secure(policy_path)
+        if pol_errs or not isinstance(policy_obj, dict):
+            issues.append(
+                issue(
+                    "CORRUPTED_ARTIFACT",
+                    artifact="calibration-policy.json",
+                    message="failed to parse calibration-policy.json",
+                )
+            )
+            policy_obj = None
     elif isinstance(calibration_data.get("policy_manifest"), dict):
         policy_obj = calibration_data["policy_manifest"]
 
-    if isinstance(policy_obj, dict):
+    # VAC01: Policy is mandatory on disk/workspace
+    if policy_obj is None or not isinstance(policy_obj, dict) or len(policy_obj) == 0:
+        issues.append(
+            issue(
+                "MISSING_ARTIFACT",
+                artifact="calibration-policy.json",
+                pointer="policy_manifest",
+                message="calibration-policy.json or policy_manifest is mandatory on workspace disk",
+            )
+        )
+    else:
+        # VAC02: Policy must be precommitted and locked
+        is_locked = (policy_obj.get("policy_locked") is True) or (policy_obj.get("precommitted") is True)
+        if not is_locked:
+            issues.append(
+                issue(
+                    "POLICY_THRESHOLD_TAMPERING",
+                    artifact="calibration-policy.json",
+                    pointer="policy_locked",
+                    message="POLICY_THRESHOLD_TAMPERING: calibration policy must be explicitly locked (policy_locked: true)",
+                )
+            )
+
         exp_pol_hash = policy_obj.get("policy_hash")
-        if exp_pol_hash:
+        if not exp_pol_hash:
+            issues.append(
+                issue(
+                    "MISSING_FIELD",
+                    artifact="calibration-policy.json",
+                    pointer="policy_hash",
+                    message="policy_hash is required to cryptographically bind policy thresholds",
+                )
+            )
+        else:
             pol_body = {k: v for k, v in policy_obj.items() if k != "policy_hash"}
             act_pol_hash = canonical_hash(pol_body)
-            if exp_pol_hash != act_pol_hash:
+            norm_exp = str(exp_pol_hash).removeprefix("sha256:")
+            norm_act = str(act_pol_hash).removeprefix("sha256:")
+            if norm_exp != norm_act and exp_pol_hash != act_pol_hash:
                 issues.append(
                     issue(
                         "POLICY_THRESHOLD_TAMPERING",
                         artifact="calibration-policy.json",
                         pointer="policy_hash",
+                        expected=act_pol_hash,
+                        actual=exp_pol_hash,
                         message="POLICY_THRESHOLD_TAMPERING: evaluation thresholds or case commitments modified ex-post",
                     )
                 )
-        case_commits = policy_obj.get("case_commitments")
-        if isinstance(case_commits, dict):
-            for c in resolved_cases:
-                cid = str(c.get("case_id", ""))
-                if cid in case_commits:
-                    exp_c_hash = case_commits[cid]
-                    act_c_hash = c.get("commitment_hash") or canonical_hash(c)
-                    if act_c_hash != exp_c_hash:
-                        issues.append(
-                            issue(
-                                "STALE_ARTIFACT",
-                                pointer=f"policy/case_commitments/{cid}",
-                                expected=exp_c_hash,
-                                actual=act_c_hash,
-                                message="case prediction/outcome modified after commitment hash was signed; receipts invalidated",
-                            )
+
+        # VAC10: Threshold tamper and precommitment checks
+        precommit_hash = manifest.get("precommitted_policy_hash") or policy_obj.get("precommitted_policy_hash")
+        if precommit_hash and exp_pol_hash:
+            norm_pre = str(precommit_hash).removeprefix("sha256:")
+            norm_curr = str(exp_pol_hash).removeprefix("sha256:")
+            if norm_pre != norm_curr:
+                issues.append(
+                    issue(
+                        "POLICY_THRESHOLD_TAMPERING",
+                        artifact="calibration-policy.json",
+                        pointer="precommitted_policy_hash",
+                        expected=precommit_hash,
+                        actual=exp_pol_hash,
+                        message="POLICY_THRESHOLD_TAMPERING: thresholds modified ex-post invalidating precommitment receipt",
+                    )
+                )
+
+        policy_thresholds = policy_obj.get("thresholds")
+        if isinstance(policy_thresholds, dict) and "candidate_metrics" in recomputed:
+            c_mae = recomputed["candidate_metrics"].get("mae")
+            max_mae = policy_thresholds.get("max_mae")
+            if c_mae is not None and max_mae is not None and not isinstance(max_mae, bool) and isinstance(max_mae, (int, float)):
+                if float(c_mae) > float(max_mae):
+                    issues.append(
+                        issue(
+                            "POLICY_THRESHOLD_TAMPERING",
+                            artifact="calibration-policy.json",
+                            pointer="thresholds.max_mae",
+                            expected=f"<= {max_mae}",
+                            actual=c_mae,
+                            message=f"recomputed candidate MAE ({c_mae}) exceeds policy threshold ({max_mae})",
                         )
+                    )
+                    recomputed_beats = False
+
+        # VAC09: Case bytes tamper rehash detection
+        case_commits = policy_obj.get("case_commitments")
+        for c in resolved_cases:
+            cid = str(c.get("case_id", ""))
+            c_clean = {k: v for k, v in c.items() if k not in ("commitment_hash", "_file_path")}
+            recomputed_case_hash = canonical_hash(c_clean)
+            declared_c_hash = c.get("commitment_hash")
+            if declared_c_hash is not None and declared_c_hash != recomputed_case_hash:
+                issues.append(
+                    issue(
+                        "STALE_ARTIFACT",
+                        pointer=f"cases/{cid}/commitment_hash",
+                        expected=recomputed_case_hash,
+                        actual=declared_c_hash,
+                        message="case bytes modified; declared commitment_hash does not match recomputed case hash",
+                    )
+                )
+            if isinstance(case_commits, dict) and cid in case_commits:
+                exp_c_hash = case_commits[cid]
+                if recomputed_case_hash != exp_c_hash:
+                    issues.append(
+                        issue(
+                            "STALE_ARTIFACT",
+                            pointer=f"policy/case_commitments/{cid}",
+                            expected=exp_c_hash,
+                            actual=recomputed_case_hash,
+                            message="case prediction/outcome modified after commitment hash was signed; receipts invalidated",
+                        )
+                    )
 
     # Model and Formula per-case Binding (A12)
     for c in resolved_cases:
@@ -3640,7 +4030,7 @@ def validate_calibration_artifacts(
                 )
             )
 
-    # Synthetic Fixtures / Experimental Pack Guard (A15)
+    # Synthetic Fixtures / Experimental Pack Guard (A15, VAC18)
     is_synthetic = False
     if isinstance(snapshots, list):
         if any(s.get("is_synthetic") or s.get("provenance") == "synthetic" for s in snapshots if isinstance(s, dict)):
@@ -3648,6 +4038,8 @@ def validate_calibration_artifacts(
     for c in resolved_cases:
         if c.get("is_synthetic") or c.get("provenance") == "synthetic":
             is_synthetic = True
+    if calibration_data.get("provenance") == "synthetic" or calibration_data.get("is_synthetic"):
+        is_synthetic = True
     pack_manifest_path = workspace / "pack-manifest.json"
     if pack_manifest_path.is_file():
         p_man, _ = load_json_secure(pack_manifest_path)
@@ -3664,8 +4056,10 @@ def validate_calibration_artifacts(
             )
         )
 
+    # VAC22 / CR04: Error propagation: ANY error on calibration artifacts/policies blocks cal_verified
+    has_any_error = any(i.severity == "error" for i in issues)
     cal_verified = (
-        not any(i.severity == "error" for i in issues if i.artifact == artifact_name or (i.pointer and ("case" in i.pointer or "dataset" in i.pointer)))
+        not has_any_error
         and raw_case_count >= 30
         and unique_case_count >= 30
         and not has_inflation
@@ -3693,10 +4087,32 @@ def validate_calibration_artifacts(
     elif calibration_data.get("status") == "pass" and calibration_data.get("beats_baseline") is True and not recomputed_beats:
         issues.append(issue("REPLAY_MISMATCH", artifact=artifact_name, pointer="beats_baseline", message="calibration summary falsely claims beats_baseline"))
 
-    # Internal HMAC check (A21)
+    # VAC07, VAC08 / CR04: Cryptographic HMAC key scoping
     attestation_type = "unattested"
-    if calibration_data.get("hmac_signature") or calibration_data.get("policy_hash"):
-        attestation_type = "internal_hmac"
+    hmac_sig = calibration_data.get("hmac_signature")
+    key_scope = calibration_data.get("key_scope")
+    if isinstance(hmac_sig, str) and hmac_sig:
+        if hmac_sig.startswith("test-key-signed:") or key_scope == "test":
+            attestation_type = "test_only_hmac"
+            if cal_verified:
+                cal_verified = False
+                bundle_assurance_status = "test_attested"
+        elif hmac_sig.startswith("internal-key-signed:") and len(hmac_sig.split(":", 1)[1]) == 64:
+            attestation_type = "internal_hmac"
+        else:
+            attestation_type = "unattested"
+            issues.append(issue("SECURITY_VIOLATION", pointer="hmac_signature", message="unverified or invalid HMAC signature"))
+    elif isinstance(hmac_sig, dict):
+        if hmac_sig.get("key_scope") == "test":
+            attestation_type = "test_only_hmac"
+            if cal_verified:
+                cal_verified = False
+                bundle_assurance_status = "test_attested"
+        elif hmac_sig.get("key_scope") == "production" and hmac_sig.get("signature"):
+            attestation_type = "internal_hmac"
+        else:
+            attestation_type = "unattested"
+            issues.append(issue("SECURITY_VIOLATION", pointer="hmac_signature", message="unverified HMAC signature"))
 
     return {
         "calibration_present": True,
@@ -4120,10 +4536,11 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                         else:
                             trace_rows = []
                     else:
-                        _, trace_rows, trace_load_issues = load_workspace_artifact(
+                        _, raw_trace_rows, trace_load_issues = load_workspace_artifact(
                             workspace, str(trace_relative), kind="jsonl"
                         )
                         issues.extend(trace_load_issues)
+                        trace_rows = raw_trace_rows if isinstance(raw_trace_rows, list) else []
                     if isinstance(trace_rows, list) and row_count != len(trace_rows):
                         issues.append(
                             issue(
@@ -4542,6 +4959,8 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
             "beats_baseline": cal_eval.get("beats_baseline", False),
             "attestation_type": cal_eval.get("attestation_type", "unattested"),
             "assurance_status": cal_eval.get("assurance_status", "uncalibrated"),
+            "case_count": cal_eval.get("case_count"),
+            "unique_case_count": cal_eval.get("unique_case_count"),
         },
     )
 
