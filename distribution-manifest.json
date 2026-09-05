@@ -3,8 +3,8 @@
   "package_version": "2.4.1",
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
-  "file_count": 475,
-  "tree_sha256": "cdfc0136442e3304b6b8540a8eeea6cea332c4d8433a13644eedf67365329478",
+  "file_count": 484,
+  "tree_sha256": "c717d52ef09fe66146119662da462718f6d7f345bffd4bf60cf7ce0fbd640fba",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -1758,13 +1758,13 @@
     },
     {
       "path": "scripts/aleph/engine.py",
-      "sha256": "6c5b10277910fd4b5fab3a3dd633f40638dbc3fe2f8ecf81b49212ced16afe4f",
-      "size": 63359
+      "sha256": "5551965fefd321c79c2cd229c7e5a9bed9f86cddc7f5f631c9d796ccc198261b",
+      "size": 83771
     },
     {
       "path": "scripts/aleph/execution_binding.py",
-      "sha256": "c724c0870e26a1e9c6821d2b4b1b842d7bf5b26e723c98cab1bf9ca65908259e",
-      "size": 18758
+      "sha256": "4000096894d238281090497e2d04497d873c867a520547cb7c9f96b144c35a2c",
+      "size": 21687
     },
     {
       "path": "scripts/aleph/finalize.py",
@@ -1843,13 +1843,13 @@
     },
     {
       "path": "scripts/aleph/trace_contract.py",
-      "sha256": "ce2037b03cb337d3450b628a471cde749a615fbe2e0b9714c09f171d98564137",
-      "size": 2112
+      "sha256": "786940413fe5bf3ee447506716217bbad1464884dcae571eddd3807ff37c549c",
+      "size": 10435
     },
     {
       "path": "scripts/aleph/validator.py",
-      "sha256": "9a4dd95d29738d9b32c14ec7e23db2b27780a329766b7d8beb2cd5520e48fb8a",
-      "size": 247007
+      "sha256": "4da7b793077973cb4bb4cede2ab4228d93767523ffda12daabde41741b65c855",
+      "size": 249471
     },
     {
       "path": "scripts/build_release_assets.py",
@@ -1863,8 +1863,8 @@
     },
     {
       "path": "scripts/compile_model.py",
-      "sha256": "dfda1214fd69247712b9a8da568e9ba8284fe44db3e158eb06e7a8cc0ae4d58e",
-      "size": 12068
+      "sha256": "01960ad3052da20ffe1d74b5912d0e6a164a46121fa2dd8661564a8a314e893a",
+      "size": 12801
     },
     {
       "path": "scripts/evaluate_simulation_quality.py",
@@ -1918,8 +1918,8 @@
     },
     {
       "path": "scripts/replay_simulation.py",
-      "sha256": "eec3685262d6d086e00f2717299323edd95405fc87ec604440eba16800f6f624",
-      "size": 16367
+      "sha256": "ac931b27b0957b7db97fd9e9417e0abe1fa8d23a8a8ae3a5baf88cf70a7842f3",
+      "size": 21459
     },
     {
       "path": "scripts/research_gateway.py",
@@ -1938,8 +1938,8 @@
     },
     {
       "path": "scripts/run_simulation.py",
-      "sha256": "d2adc52f6070a1381850bb5a716861b3545a44509ca657e56ecea75d2f10cdfb",
-      "size": 14444
+      "sha256": "d213a7c58c7761701c78783736894b7c57d7b5d3de94993bd092da50d5ce1a80",
+      "size": 18070
     },
     {
       "path": "scripts/score_butterfly.py",
@@ -2167,9 +2167,14 @@
       "size": 9241
     },
     {
+      "path": "tests/test_atomic_io.py",
+      "sha256": "0de8f0109a46b38683e68181b24cd73eafa830827344cf069caea4392e6b73e3",
+      "size": 3653
+    },
+    {
       "path": "tests/test_backward_compatibility.py",
-      "sha256": "7ab249f881fca756a786ebc02f357c14f928517d47d28ef8f33635250e7c99a4",
-      "size": 5546
+      "sha256": "adce5740e06305d551692b93a4f690bb5c0b1042bed234d499d526617e384433",
+      "size": 10195
     },
     {
       "path": "tests/test_calibration_validator.py",
@@ -2193,8 +2198,13 @@
     },
     {
       "path": "tests/test_containment_security.py",
-      "sha256": "5f700847372fab9ee326ebfd87111620ce83790cb527c5723bdd4a67e1a34151",
-      "size": 4647
+      "sha256": "5b7df7ef7a0bd37544eb9b59837841b4337da8e1a635a88e439ca52f4c00cae0",
+      "size": 10311
+    },
+    {
+      "path": "tests/test_deterministic_replay.py",
+      "sha256": "1d778788b8523eef9cfbf68b0ddf567bbe5e2648c8df9b80e6a147e97333fab9",
+      "size": 12784
     },
     {
       "path": "tests/test_discovery_interop_contract.py",
@@ -2242,6 +2252,11 @@
       "size": 38409
     },
     {
+      "path": "tests/test_formula_2_1_transforms.py",
+      "sha256": "a7b6542d5791ddd9ea97ab48ebd51ef5eb7b27fbc4567e59b8f9967143ef591f",
+      "size": 5846
+    },
+    {
       "path": "tests/test_formula_v21_contract.py",
       "sha256": "47cbfb48ed56d6f04f9ec85e64347de45fed8aa1ed5e7bd701fc28ca27ab1dce",
       "size": 18960
@@ -2265,6 +2280,31 @@
       "path": "tests/test_likelihood_contract_v201.py",
       "sha256": "95422cfc7e3ce7d325577ef93b5fc9c3be1d6beebd40f7c58fcd382db2fcc36c",
       "size": 10099
+    },
+    {
+      "path": "tests/test_numerical_cold_start.py",
+      "sha256": "7b6f7a7da3af49b2936109e85a286ce1e0affb8d211914c433ee0b657cd68c63",
+      "size": 6799
+    },
+    {
+      "path": "tests/test_numerical_cycles.py",
+      "sha256": "1594b6cd8e4379effa70847f202740cf5d1a4eea74deeae560e14d990299db59",
+      "size": 3841
+    },
+    {
+      "path": "tests/test_numerical_engine_traces.py",
+      "sha256": "74a3bef615265f33e5f910bc1752bb09030bc5334245b450f566d8e6872ea4a8",
+      "size": 13351
+    },
+    {
+      "path": "tests/test_numerical_interventions.py",
+      "sha256": "a6cb5ad96a65dc27399061a77edad7c56a9525c6f6449d872ad19a5e5eb69f6d",
+      "size": 4174
+    },
+    {
+      "path": "tests/test_packaging_relocatability.py",
+      "sha256": "5008f71181c03dfdcce64d5b89f54cf8cf11b179b845f47d2c3dbc64f98d9423",
+      "size": 7780
     },
     {
       "path": "tests/test_protocol_edges_v2.py",
@@ -2345,6 +2385,11 @@
       "path": "tests/test_security_parser_v201.py",
       "sha256": "86e6f48e325164c9d5a88e18326825b83de47d0e5bf84d54c4f91847e86fd1b7",
       "size": 10629
+    },
+    {
+      "path": "tests/test_stock_flow_integration.py",
+      "sha256": "1a17007862e532ff9376b9f972077641f70e3e78fa287bc318c129cd2a8283fe",
+      "size": 3405
     },
     {
       "path": "tests/test_temporal_leakage.py",

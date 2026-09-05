@@ -99,7 +99,7 @@ def _hysteresis_timeline(
 
 
 def build_trace_execution_binding(
-    rows: list[dict[str, Any]],
+    rows: list[dict[str, Any]] | dict[str, Any],
     model: ComputationalModel,
     config: EngineConfig,
     *,
@@ -124,9 +124,18 @@ def build_trace_execution_binding(
                 actual=version,
             )
         ]
+    trace_meta = None
+    if isinstance(rows, dict):
+        trace_meta = rows
+        rows = rows.get("steps", [])
+    if not isinstance(rows, list):
+        return None, [issue("TRACE_EXECUTION_BINDING", message="trace rows must be a list")]
+
+    is_engine_trace = bool(rows and isinstance(rows[0], dict) and ("sample_id" in rows[0] or "emission_tick" in rows[0]))
+
     frame = manifest.get("temporal_frame")
     start = parse_time(frame.get("simulation_start")) if isinstance(frame, dict) else None
-    if start is None:
+    if start is None and not is_engine_trace:
         return None, [issue("TRACE_EXECUTION_BINDING", message="simulation_start is required")]
     try:
         seconds_per_tick = float(config.timestep) * 86400.0
@@ -147,34 +156,53 @@ def build_trace_execution_binding(
     hysteresis_timelines: dict[tuple[int, str], list[tuple[bool, bool]]] = {}
     for index, row in enumerate(rows):
         pointer = f"/propagation_trace/{index}"
-        refs = row.get("sample_refs")
-        run_refs = [RUN_REF_RE.fullmatch(str(value)) for value in refs] if isinstance(refs, list) else []
-        run_ids = [int(match.group(1)) for match in run_refs if match is not None]
-        declared_run_id = row.get("run_id")
-        if (
-            not isinstance(refs, list)
-            or len(refs) != 1
-            or len(run_ids) != 1
-            or not isinstance(declared_run_id, int)
-            or isinstance(declared_run_id, bool)
-            or declared_run_id != run_ids[0]
-        ):
-            problems.append(
-                issue(
-                    "TRACE_EXECUTION_BINDING",
-                    pointer=f"{pointer}/sample_refs",
-                    message="exactly one run:N reference matching run_id is required",
+        if is_engine_trace or "sample_id" in row:
+            raw_sample_id = row.get("sample_id")
+            if not isinstance(raw_sample_id, int) or isinstance(raw_sample_id, bool):
+                problems.append(
+                    issue("TRACE_EXECUTION_BINDING", pointer=f"{pointer}/sample_id", message="integer sample_id required")
                 )
-            )
-            continue
-        run_id = run_ids[0]
-        if run_id < 0 or run_id >= n_runs:
-            problems.append(issue("TRACE_EXECUTION_BINDING", pointer=f"{pointer}/run_id", actual=run_id))
-            continue
-        edge = edge_by_id.get(str(row.get("edge_id")))
+                continue
+            run_id = raw_sample_id
+            if run_id < 0 or run_id >= n_runs:
+                problems.append(issue("TRACE_EXECUTION_BINDING", pointer=f"{pointer}/sample_id", actual=run_id, message="sample_id out of bounds"))
+                continue
+        else:
+            refs = row.get("sample_refs")
+            run_refs = [RUN_REF_RE.fullmatch(str(value)) for value in refs] if isinstance(refs, list) else []
+            run_ids = [int(match.group(1)) for match in run_refs if match is not None]
+            declared_run_id = row.get("run_id")
+            if (
+                not isinstance(refs, list)
+                or len(refs) != 1
+                or len(run_ids) != 1
+                or not isinstance(declared_run_id, int)
+                or isinstance(declared_run_id, bool)
+                or declared_run_id != run_ids[0]
+            ):
+                problems.append(
+                    issue(
+                        "TRACE_EXECUTION_BINDING",
+                        pointer=f"{pointer}/sample_refs",
+                        message="exactly one run:N reference matching run_id is required",
+                    )
+                )
+                continue
+            run_id = run_ids[0]
+            if run_id < 0 or run_id >= n_runs:
+                problems.append(issue("TRACE_EXECUTION_BINDING", pointer=f"{pointer}/run_id", actual=run_id))
+                continue
+
+        raw_edge_id = str(row.get("edge_id"))
+        edge = edge_by_id.get(raw_edge_id)
+        if edge is None and ":" in raw_edge_id:
+            edge = edge_by_id.get(raw_edge_id.split(":", 1)[1])
+        if edge is None and not raw_edge_id.startswith(("edge:", "causal:")):
+            edge = edge_by_id.get(f"edge:{raw_edge_id}") or edge_by_id.get(f"causal:{raw_edge_id}")
         if edge is None:
             problems.append(issue("UNKNOWN_REF", pointer=f"{pointer}/edge_id", actual=row.get("edge_id")))
             continue
+
         row_formula_version = row.get("formula_version")
         if row_formula_version is not None and row_formula_version != model.formula_version:
             problems.append(
@@ -204,25 +232,31 @@ def build_trace_execution_binding(
         if not run.get("ok") or not isinstance(history, list):
             problems.append(issue("TRACE_EXECUTION_BINDING", pointer=pointer, message="trace references an invalid run"))
             continue
-        timestamp = parse_time(row.get("time"))
-        if timestamp is None:
-            problems.append(issue("TRACE_EXECUTION_BINDING", pointer=f"{pointer}/time"))
-            continue
-        tick_float = (timestamp - start).total_seconds() / seconds_per_tick
-        if not math.isfinite(tick_float):
-            problems.append(
-                issue(
-                    "TRACE_EXECUTION_BINDING",
-                    pointer=f"{pointer}/time",
-                    message="time cannot be represented on the engine timestep grid",
+
+        if is_engine_trace or "emission_tick" in row or "delivery_tick" in row:
+            effect_tick = row.get("delivery_tick", row.get("tick", 0))
+            source_tick = row.get("emission_tick", effect_tick - lag_ticks)
+        else:
+            timestamp = parse_time(row.get("time"))
+            if timestamp is None:
+                problems.append(issue("TRACE_EXECUTION_BINDING", pointer=f"{pointer}/time"))
+                continue
+            tick_float = (timestamp - start).total_seconds() / seconds_per_tick
+            if not math.isfinite(tick_float):
+                problems.append(
+                    issue(
+                        "TRACE_EXECUTION_BINDING",
+                        pointer=f"{pointer}/time",
+                        message="time cannot be represented on the engine timestep grid",
+                    )
                 )
-            )
-            continue
-        effect_tick = int(round(tick_float))
-        source_tick = effect_tick - lag_ticks
-        if not nearly_equal(tick_float, float(effect_tick), abs_tol=1e-9, rel_tol=0.0):
-            problems.append(issue("TRACE_EXECUTION_BINDING", pointer=f"{pointer}/time", message="time is off the engine timestep grid"))
-            continue
+                continue
+            effect_tick = int(round(tick_float))
+            source_tick = effect_tick - lag_ticks
+            if not nearly_equal(tick_float, float(effect_tick), abs_tol=1e-9, rel_tol=0.0):
+                problems.append(issue("TRACE_EXECUTION_BINDING", pointer=f"{pointer}/time", message="time is off the engine timestep grid"))
+                continue
+
         if _target_is_blocked(model, edge.target, effect_tick):
             problems.append(
                 issue(
@@ -244,15 +278,26 @@ def build_trace_execution_binding(
             continue
         source_state = history[source_tick].get(edge.source)
         target_state = history[effect_tick].get(edge.target)
-        checks = (
-            ("tick", row.get("tick"), effect_tick),
-            ("source_tick", row.get("source_tick"), source_tick),
-            ("source_state", row.get("source_state"), source_state),
-            ("target_state", row.get("target_state"), target_state),
-            ("sampled_strength", row.get("sampled_strength"), strength),
-            ("input_effect", row.get("input_effect"), source_state),
-            ("noise", row.get("noise"), 0.0),
-        )
+
+        if is_engine_trace:
+            checks = (
+                ("tick", row.get("tick"), effect_tick),
+                ("emission_tick", row.get("emission_tick"), source_tick),
+                ("delivery_tick", row.get("delivery_tick"), effect_tick),
+                ("source_state", row.get("source_state"), source_state),
+                ("target_state_after", row.get("target_state_after", row.get("target_state")), target_state),
+                ("drawn_strength", row.get("drawn_strength", row.get("sampled_strength")), strength),
+            )
+        else:
+            checks = (
+                ("tick", row.get("tick"), effect_tick),
+                ("source_tick", row.get("source_tick"), source_tick),
+                ("source_state", row.get("source_state"), source_state),
+                ("target_state", row.get("target_state"), target_state),
+                ("sampled_strength", row.get("sampled_strength"), strength),
+                ("input_effect", row.get("input_effect"), source_state),
+                ("noise", row.get("noise"), 0.0),
+            )
         row_ok = True
         for field, actual, expected in checks:
             equal = _trajectory_value_equal(actual, expected)
@@ -282,6 +327,8 @@ def build_trace_execution_binding(
             }
             if version == BINDING_V2:
                 declared_parameters = row.get("resolved_transform_parameters")
+                if declared_parameters is None and is_engine_trace:
+                    declared_parameters = resolved_parameters
                 if declared_parameters is not None and declared_parameters != resolved_parameters:
                     problems.append(
                         issue(
@@ -294,6 +341,8 @@ def build_trace_execution_binding(
                     continue
                 if model.variables[edge.target].scale == "stock":
                     declared_retention = row.get("target_retention_factor")
+                    if declared_retention is None and is_engine_trace and "stock_flow_integrations" in row:
+                        declared_retention = (row["stock_flow_integrations"] or {}).get("retention_factor")
                     if declared_retention is not None and not _trajectory_value_equal(
                         declared_retention, target_retention_factor
                     ):
@@ -372,6 +421,8 @@ def build_trace_execution_binding(
                         ("threshold_active_after", expected_after),
                     ):
                         actual = row.get(field)
+                        if actual is None and is_engine_trace and "transform_applied" in row:
+                            actual = (row["transform_applied"] or {}).get(field)
                         if not isinstance(actual, bool) or actual != expected:
                             latch_mismatch = True
                             problems.append(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -13,6 +14,7 @@ SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+from compile_model import compile_workspace  # noqa: E402
 from aleph.io import canonical_hash, write_json_atomic  # noqa: E402
 from aleph.quality import evaluate  # noqa: E402
 from aleph.validator import (  # noqa: E402
@@ -115,6 +117,96 @@ class BackwardCompatibilityAcceptanceTests(unittest.TestCase):
                 i for i in result.issues if i.code in {"TRACK_MISMATCH", "REPLAY_MISMATCH"} and "formula_version" in str(i.pointer)
             ]
             self.assertTrue(len(mismatch_issues) > 0)
+
+    def test_t17_formula_version_isolation(self) -> None:
+        """T17: Replay runner invoked on golden formula 2.0 workspace and new formula 2.1 workspace.
+
+        Both workspaces replay bit-exact according to respective formula versions; mixed-version workspace fails compilation.
+        """
+        # 1. Golden formula 2.0 workspace replays bit-exact under 2.0.0
+        with tempfile.TemporaryDirectory() as temporary_20:
+            workspace_20 = Path(temporary_20) / "workspace"
+            shutil.copytree(FIXTURE, workspace_20)
+
+            proc_20 = subprocess.run(
+                [sys.executable, str(SCRIPTS / "replay_simulation.py"), "--workspace", str(workspace_20)],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc_20.returncode, 0, f"2.0 replay failed: {proc_20.stderr}")
+            report_20 = json.loads(proc_20.stdout)
+            self.assertTrue(report_20.get("match"))
+            self.assertEqual(report_20.get("formula_version"), "2.0.0")
+
+        # 2. New formula 2.1 workspace replays bit-exact under 2.1.0
+        with tempfile.TemporaryDirectory() as temporary_21:
+            workspace_21 = Path(temporary_21) / "workspace"
+            workspace_21.mkdir(parents=True, exist_ok=True)
+
+            manifest_21 = {
+                "schema_version": "2.0.0",
+                "manifest_version": "2.1.0",
+                "simulation_mode": "deterministic",
+                "formula_version": "2.1.0",
+                "temporal_frame": {
+                    "simulation_start": "2026-01-01T00:00:00Z",
+                    "timestep": "1d",
+                    "horizon_ticks": 3,
+                },
+                "artifact_paths": {
+                    "nodes": "nodes.json",
+                    "edges": "edges.json",
+                    "run_ledger": "simulation-run.json",
+                    "execution_trace": "execution-trace.json",
+                    "compiled_model": "simulation-model.json",
+                    "replay_report": "replay-report.json",
+                },
+                "seed": 42,
+            }
+            write_json_atomic(workspace_21 / "simulation-manifest.json", manifest_21)
+
+            nodes_21 = [
+                {"id": "node:x", "name": "Node X", "category": "driver", "scale": "level", "domain": [-100.0, 100.0], "initial_value": 5.0},
+                {"id": "node:y", "name": "Node Y", "category": "state", "scale": "level", "domain": [-100.0, 100.0], "initial_value": 1.0},
+            ]
+            write_json_atomic(workspace_21 / "nodes.json", nodes_21)
+
+            edges_21 = [
+                {"id": "causal:x_to_y", "source": "node:x", "target": "node:y", "sign": 1, "strength": 0.5, "lag_ticks": 0, "transform": "linear", "transform_parameters": {}},
+            ]
+            write_json_atomic(workspace_21 / "edges.json", edges_21)
+
+            # Run 2.1 simulation
+            proc_run = subprocess.run(
+                [sys.executable, str(SCRIPTS / "run_simulation.py"), "--workspace", str(workspace_21), "--ticks", "3"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc_run.returncode, 0, f"2.1 run failed: {proc_run.stderr}")
+
+            # Replay 2.1 simulation
+            proc_replay_21 = subprocess.run(
+                [sys.executable, str(SCRIPTS / "replay_simulation.py"), "--workspace", str(workspace_21)],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc_replay_21.returncode, 0, f"2.1 replay failed: {proc_replay_21.stderr}")
+            report_21 = json.loads(proc_replay_21.stdout)
+            self.assertTrue(report_21.get("match"))
+            self.assertEqual(report_21.get("formula_version"), "2.1.0")
+
+        # 3. Mixed-version workspace fails compilation
+        with tempfile.TemporaryDirectory() as temporary_mixed:
+            workspace_mixed = Path(temporary_mixed) / "workspace"
+            shutil.copytree(FIXTURE, workspace_mixed)
+            manifest_mixed = json.loads((workspace_mixed / "simulation-manifest.json").read_text(encoding="utf-8"))
+            # Manifest asserts 2.1.0 but compiled model and run ledger are 2.0.0
+            manifest_mixed["formula_version"] = "2.1.0"
+            write_json_atomic(workspace_mixed / "simulation-manifest.json", manifest_mixed)
+
+            with self.assertRaises(ValueError) as ctx:
+                compile_workspace(workspace_mixed)
+            self.assertIn("workspace formula contracts disagree", str(ctx.exception))
 
 
 if __name__ == "__main__":

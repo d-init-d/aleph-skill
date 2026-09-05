@@ -8,13 +8,15 @@ configuration are hashed into every run contract.
 
 from __future__ import annotations
 
+import hashlib
 import math
+from datetime import datetime, timezone
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any, cast
 
 from . import FORMULA_VERSION, LEGACY_FORMULA_VERSION, SUPPORTED_FORMULA_VERSIONS
 from .formula import evaluate_output_effect, expected_output_effect
-from .io import canonical_hash
+from .io import canonical_hash, canonical_json_bytes
 from .issues import Issue, issue
 from .rng import normal01, sample_triangular, sample_uniform, uniform01
 from .schema import TRANSFORMS, parse_duration_seconds
@@ -1490,3 +1492,448 @@ def hand_calc_three_node_chain() -> dict[str, Any]:
         ModelEdge(id="edge:bc", source="factor:B", target="factor:C", sign=1, strength=0.4),
     ]
     return {"model": model, "expected": {"factor:A": 1.0, "factor:B": 0.5, "factor:C": 0.2}}
+
+
+def generate_numerical_execution_trace(
+    model: ComputationalModel,
+    config: EngineConfig,
+    *,
+    ticks: int = 10,
+    run_id: int = 0,
+    model_id: str = "model:compiled",
+    execution_timestamp: str | None = None,
+    formula_version: str | None = None,
+) -> dict[str, Any]:
+    """Execute model deterministically and construct a schema-compliant numerical execution trace."""
+    active_formula = formula_version or model.formula_version
+    ticks_int = max(0, int(ticks))
+
+    param_payload = {
+        "model": model_payload(model),
+        "config": config_payload(config),
+        "interventions": sorted(model.interventions, key=lambda v: str(v.get("id", ""))),
+        "ticks": ticks_int,
+    }
+    parameters_hash = f"sha256:{canonical_hash(param_payload)}"
+
+    issues: list[Issue] = _config_errors(config)
+    if isinstance(ticks, bool) or not isinstance(ticks, int) or ticks < 0:
+        issues.append(issue("RANGE", pointer="/ticks", actual=ticks, message="non-negative integer required"))
+
+    state = {key: var.baseline for key, var in sorted(model.variables.items())}
+    history: list[dict[str, float]] = []
+    scheduled: dict[int, list[dict[str, Any]]] = {}
+    unresolved = False
+    event_storm = False
+    events = 0
+    steps: list[dict[str, Any]] = []
+    step_counter = 1
+
+    retention_factors: dict[str, float] = {}
+    try:
+        retention_factors = {
+            key: sampled_retention_factor(variable, config, run_id)
+            for key, variable in sorted(model.variables.items())
+            if variable.scale == "stock"
+        }
+    except (OverflowError, TypeError, ValueError) as exc:
+        unresolved = True
+        issues.append(issue("RANGE", pointer="/variables", message=f"stock dynamics sampling failed: {exc}"))
+
+    sampled_edges: list[ModelEdge] = []
+    edge_strengths: dict[str, float] = {}
+    for edge in sorted(model.edges, key=lambda value: value.id):
+        try:
+            strength, lag_ticks, exists = sampled_edge_parameters(edge, config, run_id)
+            transform_params = sampled_transform_parameters(edge, config, run_id)
+        except (OverflowError, TypeError, ValueError, ZeroDivisionError) as exc:
+            unresolved = True
+            issues.append(issue("RANGE", pointer=f"/edges/{edge.id}/lag_distribution", message=f"edge sampling failed: {exc}"))
+            continue
+        if exists:
+            s_edge = replace(edge, lag_ticks=lag_ticks, transform_parameters=transform_params)
+            sampled_edges.append(s_edge)
+            edge_strengths[edge.id] = strength
+
+    edge_gate_state: dict[str, bool] = {}
+
+    for tick in range(ticks_int):
+        released_resets = _reset_releases(model, tick)
+        base: dict[str, float] = {}
+        for key, variable in sorted(model.variables.items()):
+            if active_formula != LEGACY_FORMULA_VERSION and variable.scale == "stock":
+                previous_state = state[key]
+                retention_factor = retention_factors.get(key, 1.0)
+                reset = key in released_resets
+                retained_state = variable.baseline if reset else previous_state * retention_factor
+                base[key] = retained_state
+            else:
+                base[key] = variable.baseline
+
+        active = _active_interventions(model, tick)
+        blocked = {str(value["target"]) for value in active if value.get("op") == "set"}
+        interventions_by_target = {str(value["target"]): value for value in active}
+
+        # Check releases from previous tick
+        previous_active = _active_interventions(model, tick - 1) if tick > 0 else []
+        previous_targets = {str(value["target"]) for value in previous_active}
+        current_targets = {str(value["target"]) for value in active}
+        released_targets = previous_targets - current_targets
+
+        # Deliver scheduled delayed edges arriving at tick
+        for delayed_item in scheduled.pop(tick, []):
+            target = delayed_item["target"]
+            delta = delayed_item["delta"]
+            edge = delayed_item["edge"]
+            strength = delayed_item["strength"]
+            emission_tick = delayed_item["emission_tick"]
+            source_state = delayed_item["source_state"]
+            output = delayed_item["output"]
+            gate_before_step = delayed_item["gate_before"]
+            gate_after_step = delayed_item["gate_after"]
+
+            target_blocked = target in blocked
+            actual_delta = 0.0 if target_blocked else delta
+            target_state_before = base.get(target, 0.0)
+            if not target_blocked and target in base:
+                base[target] += actual_delta
+            target_state_after = base.get(target, 0.0)
+
+            interv_type = "do_set" if target_blocked else interventions_by_target.get(target, {}).get("op", "none")
+            if target in released_targets and not target_blocked:
+                interv_type = "release"
+            elif interv_type in {"add", "multiply", "set"}:
+                interv_type = f"do_{interv_type}"
+            if interv_type not in {"none", "do_set", "do_add", "do_multiply", "release"}:
+                interv_type = "none"
+
+            norm_edge_id = edge.id if edge.id.startswith(("causal:", "edge:")) else f"edge:{edge.id}"
+            step_dict = {
+                "step": step_counter,
+                "sample_id": run_id,
+                "tick": tick,
+                "emission_tick": emission_tick,
+                "delivery_tick": tick,
+                "source_node_id": edge.source,
+                "node_id": target,
+                "edge_id": norm_edge_id,
+                "drawn_strength": strength,
+                "sampled_parameters": {
+                    "lag": edge.lag_ticks,
+                    "strength": strength,
+                    **edge.transform_parameters,
+                },
+                "source_state": source_state,
+                "target_state_before": target_state_before,
+                "target_state_after": target_state_after,
+                "state_transitions": {
+                    "delta": actual_delta,
+                    "previous_value": target_state_before,
+                    "new_value": target_state_after,
+                    "mechanism": edge.transform or "linear",
+                    "intervention_type": interv_type,
+                },
+            }
+            if target in model.variables and model.variables[target].scale == "stock":
+                ret_factor = retention_factors.get(target, 1.0)
+                decay_rate = model.variables[target].decay_rate or 0.0
+                outflow_rate = target_state_before * (1.0 - ret_factor) / float(config.timestep)
+                step_dict["stock_flow_integrations"] = {
+                    "stock_variable": target,
+                    "inflow_rate": output,
+                    "outflow_rate": outflow_rate,
+                    "retention_factor": ret_factor,
+                    "decay_constant": decay_rate,
+                    "dt": float(config.timestep),
+                    "integrated_level": target_state_after,
+                }
+            if edge.transform in {"threshold", "logistic", "hysteresis", "saturation"}:
+                mode = edge.transform_parameters.get("mode", edge.transform) if edge.transform == "threshold" else edge.transform
+                if mode not in {"linear", "logistic", "hysteresis", "saturation"}:
+                    mode = "linear"
+                step_dict["transform_applied"] = {
+                    "mode": mode,
+                    "threshold_active_before": bool(gate_before_step),
+                    "threshold_active_after": bool(gate_after_step),
+                }
+            steps.append(step_dict)
+            step_counter += 1
+
+        # Apply direct interventions to base
+        for intervention in sorted(active, key=lambda value: str(value.get("id", ""))):
+            target = str(intervention["target"])
+            value = float(intervention["value"])
+            if intervention["op"] == "set":
+                base[target] = value
+            elif intervention["op"] == "add":
+                base[target] += value
+            elif intervention["op"] == "multiply":
+                base[target] *= value
+
+        zero = [edge for edge in sampled_edges if edge.lag_ticks == 0 and edge.target not in blocked]
+        gate_before = dict(edge_gate_state)
+        current = dict(base)
+        for component in _component_order(sorted(model.variables), zero):
+            internal = [edge for edge in zero if edge.source in component and edge.target in component]
+            incoming = [edge for edge in zero if edge.target in component and edge.source not in component]
+            component_base = {node: base[node] for node in component}
+            for edge in incoming:
+                try:
+                    output, _ = _edge_effect(
+                        edge,
+                        edge_strengths[edge.id],
+                        current[edge.source],
+                        formula_version=active_formula,
+                        threshold_active=gate_before.get(edge.id),
+                    )
+                    component_base[edge.target] += _integrate_edge_output(model, edge, output, config)
+                except (OverflowError, ValueError) as exc:
+                    unresolved = True
+                    issues.append(issue("NONCONVERGENCE", pointer=edge.id, message=str(exc)))
+            cyclic = len(component) > 1 or any(edge.source == edge.target for edge in internal)
+            if cyclic:
+                x = {node: current[node] for node in component}
+                converged = False
+                for _iteration in range(max(1, config.jacobi_max_iter)):
+                    candidate = dict(component_base)
+                    try:
+                        for edge in internal:
+                            output, _ = _edge_effect(
+                                edge,
+                                edge_strengths[edge.id],
+                                x[edge.source],
+                                formula_version=active_formula,
+                                threshold_active=gate_before.get(edge.id),
+                            )
+                            candidate[edge.target] += _integrate_edge_output(model, edge, output, config)
+                    except (OverflowError, ValueError):
+                        break
+                    residual = max((abs(candidate[node] - x[node]) for node in component), default=0.0)
+                    scale = max(1.0, *(abs(val) for val in x.values()), *(abs(val) for val in candidate.values()))
+                    if residual <= config.jacobi_abs_tol + config.jacobi_rel_tol * scale:
+                        x = candidate
+                        converged = True
+                        break
+                    for node in component:
+                        x[node] = (1.0 - config.jacobi_relax) * x[node] + config.jacobi_relax * candidate[node]
+                if not converged:
+                    unresolved = True
+                    issues.append(issue("NONCONVERGENCE", actual=component, message="zero-lag SCC did not converge"))
+                for node in component:
+                    current[node] = x[node]
+            else:
+                current[component[0]] = component_base[component[0]]
+
+        for intervention in active:
+            if intervention["op"] == "set":
+                current[str(intervention["target"])] = float(intervention["value"])
+        for node, val in list(current.items()):
+            if not math.isfinite(val):
+                unresolved = True
+                issues.append(issue("NON_FINITE", pointer=node, actual=val, message="non-finite state"))
+                val = model.variables[node].baseline
+            current[node] = _apply_bounds(model.variables[node], val)
+        state = current
+
+        # Record zero-lag edges
+        all_zero = [edge for edge in sampled_edges if edge.lag_ticks == 0]
+        for edge in all_zero:
+            edge_is_blocked = edge.target in blocked
+            try:
+                output, next_gate = _edge_effect(
+                    edge,
+                    edge_strengths[edge.id],
+                    state[edge.source],
+                    formula_version=active_formula,
+                    threshold_active=gate_before.get(edge.id),
+                )
+                if next_gate is not None:
+                    edge_gate_state[edge.id] = next_gate
+                if edge_is_blocked:
+                    output = 0.0
+                    delta = 0.0
+                else:
+                    delta = _integrate_edge_output(model, edge, output, config)
+            except (OverflowError, ValueError) as exc:
+                unresolved = True
+                issues.append(issue("NONCONVERGENCE", pointer=edge.id, message=str(exc)))
+                output = 0.0
+                delta = 0.0
+
+            target_state_before = base.get(edge.target, 0.0)
+            target_state_after = state.get(edge.target, 0.0)
+            interv_type = "do_set" if edge_is_blocked else interventions_by_target.get(edge.target, {}).get("op", "none")
+            if edge.target in released_targets and not edge_is_blocked:
+                interv_type = "release"
+            elif interv_type in {"add", "multiply", "set"}:
+                interv_type = f"do_{interv_type}"
+            if interv_type not in {"none", "do_set", "do_add", "do_multiply", "release"}:
+                interv_type = "none"
+
+            norm_edge_id = edge.id if edge.id.startswith(("causal:", "edge:")) else f"edge:{edge.id}"
+            step_dict = {
+                "step": step_counter,
+                "sample_id": run_id,
+                "tick": tick,
+                "emission_tick": tick,
+                "delivery_tick": tick,
+                "source_node_id": edge.source,
+                "node_id": edge.target,
+                "edge_id": norm_edge_id,
+                "drawn_strength": edge_strengths[edge.id],
+                "sampled_parameters": {
+                    "lag": 0,
+                    "strength": edge_strengths[edge.id],
+                    **edge.transform_parameters,
+                },
+                "source_state": state[edge.source],
+                "target_state_before": target_state_before,
+                "target_state_after": target_state_after,
+                "state_transitions": {
+                    "delta": delta,
+                    "previous_value": target_state_before,
+                    "new_value": target_state_after,
+                    "mechanism": edge.transform or "linear",
+                    "intervention_type": interv_type,
+                },
+            }
+            if edge.target in model.variables and model.variables[edge.target].scale == "stock":
+                ret_factor = retention_factors.get(edge.target, 1.0)
+                decay_rate = model.variables[edge.target].decay_rate or 0.0
+                outflow_rate = target_state_before * (1.0 - ret_factor) / float(config.timestep)
+                step_dict["stock_flow_integrations"] = {
+                    "stock_variable": edge.target,
+                    "inflow_rate": output,
+                    "outflow_rate": outflow_rate,
+                    "retention_factor": ret_factor,
+                    "decay_constant": decay_rate,
+                    "dt": float(config.timestep),
+                    "integrated_level": target_state_after,
+                }
+            if edge.transform in {"threshold", "logistic", "hysteresis", "saturation"}:
+                mode = edge.transform_parameters.get("mode", edge.transform) if edge.transform == "threshold" else edge.transform
+                if mode not in {"linear", "logistic", "hysteresis", "saturation"}:
+                    mode = "linear"
+                step_dict["transform_applied"] = {
+                    "mode": mode,
+                    "threshold_active_before": bool(gate_before.get(edge.id, False)),
+                    "threshold_active_after": bool(edge_gate_state.get(edge.id, False)),
+                }
+            steps.append(step_dict)
+            step_counter += 1
+
+        # Schedule delayed edges for future ticks
+        for edge in sampled_edges:
+            if edge.lag_ticks <= 0:
+                continue
+            gate_before_step = edge_gate_state.get(edge.id, False)
+            try:
+                output, next_gate = _edge_effect(
+                    edge,
+                    edge_strengths[edge.id],
+                    state[edge.source],
+                    formula_version=active_formula,
+                    threshold_active=edge_gate_state.get(edge.id),
+                )
+                if next_gate is not None:
+                    edge_gate_state[edge.id] = next_gate
+                delta = _integrate_edge_output(model, edge, output, config)
+            except (OverflowError, ValueError) as exc:
+                unresolved = True
+                issues.append(issue("NONCONVERGENCE", pointer=edge.id, message=str(exc)))
+                continue
+            due = tick + edge.lag_ticks
+            scheduled.setdefault(due, []).append(
+                {
+                    "target": edge.target,
+                    "delta": delta,
+                    "edge": edge,
+                    "strength": edge_strengths[edge.id],
+                    "emission_tick": tick,
+                    "source_state": state[edge.source],
+                    "output": output,
+                    "gate_before": gate_before_step,
+                    "gate_after": edge_gate_state.get(edge.id, False),
+                }
+            )
+            events += 1
+        events += len(zero)
+        if events > config.max_events:
+            event_storm = True
+            unresolved = True
+            issues.append(issue("EVENT_STORM", actual=events, expected=config.max_events, message="event limit exceeded"))
+            break
+        history.append(dict(sorted(state.items())))
+
+    # Calculate hash_chain
+    prev_hash = "0" * 64
+    for step in steps:
+        step_data = {k: v for k, v in step.items() if k != "hash_chain"}
+        step_bytes = canonical_json_bytes(step_data)
+        hasher = hashlib.sha256()
+        hasher.update(prev_hash.encode("utf-8") + b":" + step_bytes)
+        current_hash = hasher.hexdigest()
+        step["hash_chain"] = current_hash
+        prev_hash = current_hash
+
+    replay_hash = prev_hash
+    invalid_mass = 1.0 if (unresolved or event_storm) else 0.0
+
+    raw_seed = config.seed
+    try:
+        seed_int = int(raw_seed)
+    except (TypeError, ValueError):
+        seed_int = abs(hash(str(raw_seed))) % (2**31)
+
+    trace = {
+        "schema_version": "2.1.0" if active_formula == FORMULA_VERSION else "2.0.0",
+        "run_id": f"run:{run_id}",
+        "model_id": model_id,
+        "formula_version": active_formula,
+        "generated_by": "aleph.engine.numerical",
+        "generation_mode": "engine_derived",
+        "execution_timestamp": execution_timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "seed": seed_int,
+        "parameters_hash": parameters_hash,
+        "total_ticks": max(1, ticks_int),
+        "total_samples": 1,
+        "invalid_mass": invalid_mass,
+        "steps": steps,
+        "final_state_vector": dict(sorted(state.items())),
+        "replay_hash": replay_hash,
+    }
+    return trace
+
+
+def stream_numerical_execution_trace(
+    model: ComputationalModel,
+    config: EngineConfig,
+    *,
+    ticks: int = 10,
+    run_id: int = 0,
+    model_id: str = "model:compiled",
+    execution_timestamp: str | None = None,
+    formula_version: str | None = None,
+) -> dict[str, Any]:
+    """Execute simulation with performance telemetry for large workloads."""
+    import time
+
+    start_time = time.perf_counter()
+    trace = generate_numerical_execution_trace(
+        model,
+        config,
+        ticks=ticks,
+        run_id=run_id,
+        model_id=model_id,
+        execution_timestamp=execution_timestamp,
+        formula_version=formula_version,
+    )
+    elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+    trace["telemetry"] = {
+        "elapsed_ms": elapsed_ms,
+        "step_count": len(trace["steps"]),
+        "steps_per_second": (len(trace["steps"]) / (elapsed_ms / 1000.0)) if elapsed_ms > 0 else 0.0,
+    }
+    return trace
+
+

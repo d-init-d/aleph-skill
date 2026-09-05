@@ -75,6 +75,16 @@ def main() -> None:
     out_path, out_path_issues = resolve_in_workspace(workspace, str(declared_report), must_exist=False, require_file=False)
     node_path, node_path_issues = resolve_in_workspace(workspace, str(node_relative), must_exist=True)
     edge_path, edge_path_issues = resolve_in_workspace(workspace, str(edge_relative), must_exist=True)
+    trace_alias_candidates = []
+    if isinstance(artifact_paths, dict):
+        if artifact_paths.get("execution_trace"):
+            trace_alias_candidates.append(workspace / str(artifact_paths["execution_trace"]))
+        if artifact_paths.get("propagation_trace"):
+            trace_alias_candidates.append(workspace / str(artifact_paths["propagation_trace"]))
+    if not trace_alias_candidates:
+        trace_alias_candidates.append(workspace / "execution-trace.json")
+        trace_alias_candidates.append(workspace / "propagation-trace.jsonl")
+
     if out_path is not None:
         if out_path.exists() and not out_path.is_file():
             out_path_issues.append(
@@ -90,9 +100,7 @@ def main() -> None:
                         node_path,
                         edge_path,
                         workspace / "simulation-manifest.json",
-                        workspace / str(artifact_paths.get("propagation_trace", "propagation-trace.jsonl"))
-                        if isinstance(artifact_paths, dict)
-                        else workspace / "propagation-trace.jsonl",
+                        *trace_alias_candidates,
                     )
                     if value is not None
                 ],
@@ -189,11 +197,14 @@ def main() -> None:
     trace_contract_ok = False
     current_trace_hash = None
     artifact_paths = manifest.get("artifact_paths") if isinstance(manifest, dict) else None
-    declared_trace = (
-        artifact_paths.get("propagation_trace")
-        if isinstance(artifact_paths, dict)
-        else "propagation-trace.jsonl"
-    )
+    declared_trace = None
+    if isinstance(artifact_paths, dict):
+        declared_trace = artifact_paths.get("execution_trace") or artifact_paths.get("propagation_trace")
+    if declared_trace is None:
+        if isinstance(recorded_trace, dict) and recorded_trace.get("path"):
+            declared_trace = recorded_trace.get("path")
+        else:
+            declared_trace = "execution-trace.json" if formula_version == FORMULA_VERSION else "propagation-trace.jsonl"
     trace_path: Path | None = None
     if recorded_trace is None:
         trace_issues.append(
@@ -250,19 +261,28 @@ def main() -> None:
         trace_issues.append(
             issue("TYPE", pointer="/trace_contract", message="trace_contract must be object or null")
         )
+    trace_json: dict[str, Any] | None = None
     if isinstance(recorded_trace, dict) and trace_path is not None and trace_path.is_file():
         _, rows, semantic_issues = validate_declared_trace(
             workspace,
             manifest if isinstance(manifest, dict) else {},
             nodes if isinstance(nodes, list) else [],
             edges if isinstance(edges, list) else [],
+            config=raw_config if isinstance(raw_config, dict) else None,
         )
         trace_issues.extend(semantic_issues)
         trace_rows = len(rows)
         validated_rows = rows
-        trace_formula_versions = {
-            row.get("formula_version") for row in rows if isinstance(row, dict)
-        }
+        if trace_path.suffix == ".json":
+            raw_tjson, _ = load_json_secure(trace_path)
+            if isinstance(raw_tjson, dict):
+                trace_json = raw_tjson
+            trace_fv = trace_json.get("formula_version") if isinstance(trace_json, dict) else None
+            trace_formula_versions = {trace_fv} if trace_fv is not None else set()
+        else:
+            trace_formula_versions = {
+                row.get("formula_version") for row in rows if isinstance(row, dict)
+            }
         if trace_formula_versions != {formula_version}:
             trace_contract_ok = False
             trace_issues.append(
@@ -288,6 +308,83 @@ def main() -> None:
                     message="trace row count changed",
                 )
             )
+        if trace_path.suffix == ".json" and isinstance(trace_json, dict):
+            from aleph.engine import generate_numerical_execution_trace
+
+            expected_trace = generate_numerical_execution_trace(
+                model,
+                config,
+                ticks=ticks,
+                run_id=0,
+                model_id=recorded.get("model_id", "model:compiled"),
+                formula_version=str(formula_version),
+            )
+            # Parameters hash verification
+            if trace_json.get("parameters_hash") != expected_trace.get("parameters_hash"):
+                trace_contract_ok = False
+                trace_issues.append(
+                    issue(
+                        "PARAMETERS_HASH_MISMATCH",
+                        artifact=str(recorded_trace.get("path")),
+                        pointer="/parameters_hash",
+                        expected=expected_trace.get("parameters_hash"),
+                        actual=trace_json.get("parameters_hash"),
+                        message="trace parameters_hash differs from replay config",
+                    )
+                )
+            # Replay hash verification
+            if trace_json.get("replay_hash") != expected_trace.get("replay_hash"):
+                trace_contract_ok = False
+                trace_issues.append(
+                    issue(
+                        "REPLAY_MISMATCH",
+                        artifact=str(recorded_trace.get("path")),
+                        pointer="/replay_hash",
+                        expected=expected_trace.get("replay_hash"),
+                        actual=trace_json.get("replay_hash"),
+                        message="trace replay_hash differs from independent recomputation",
+                    )
+                )
+            # Step transitions verification
+            exp_steps = expected_trace.get("steps", [])
+            act_steps = trace_json.get("steps", [])
+            if len(act_steps) != len(exp_steps):
+                trace_contract_ok = False
+                trace_issues.append(
+                    issue(
+                        "REPLAY_MISMATCH",
+                        artifact=str(recorded_trace.get("path")),
+                        pointer="/steps",
+                        expected=len(exp_steps),
+                        actual=len(act_steps),
+                        message="trace step count differs from independent recomputation",
+                    )
+                )
+            else:
+                for step_idx, (act_s, exp_s) in enumerate(zip(act_steps, exp_steps)):
+                    diverged = False
+                    for check_key in ("node_id", "edge_id", "tick", "emission_tick", "delivery_tick", "drawn_strength", "source_state", "target_state_before", "target_state_after"):
+                        if act_s.get(check_key) != exp_s.get(check_key):
+                            diverged = True
+                            break
+                    if not diverged:
+                        act_tr = act_s.get("state_transitions", {})
+                        exp_tr = exp_s.get("state_transitions", {})
+                        for tr_key in ("delta", "previous_value", "new_value", "mechanism", "intervention_type"):
+                            if act_tr.get(tr_key) != exp_tr.get(tr_key):
+                                diverged = True
+                                break
+                    if diverged:
+                        trace_contract_ok = False
+                        trace_issues.append(
+                            issue(
+                                "REPLAY_MISMATCH",
+                                artifact=str(recorded_trace.get("path")),
+                                pointer=f"/steps/{step_idx}",
+                                message="trace step diverges from independent engine calculation",
+                            )
+                        )
+                        break
     trace_ok = trace_contract_ok and not any(value.severity == "error" for value in trace_issues)
     current_execution_binding = None
     binding_issues: list[Issue] = []

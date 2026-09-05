@@ -4000,6 +4000,7 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                     )
                 )
         trace_rows_for_binding: list[dict[str, Any]] | None = None
+        trace_data_for_binding: dict[str, Any] | None = None
         bound_trace_hash: str | None = None
         trace_contract = run.get("trace_contract")
         if not isinstance(trace_contract, dict):
@@ -4014,7 +4015,7 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
         else:
             reject_unknown_fields(
                 trace_contract,
-                frozenset({"path", "sha256", "row_count"}),
+                frozenset({"path", "sha256", "row_count", "replay_hash"}),
                 "run_ledger.trace_contract",
                 issues,
             )
@@ -4029,7 +4030,7 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                         )
                     )
             trace_relative = trace_contract.get("path")
-            declared_trace = paths.get("propagation_trace")
+            declared_trace = paths.get("execution_trace") or paths.get("propagation_trace")
             if not nonempty_str(trace_relative):
                 issues.append(
                     issue(
@@ -4095,10 +4096,34 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                                 message="propagation trace digest changed",
                             )
                         )
-                    _, trace_rows, trace_load_issues = load_workspace_artifact(
-                        workspace, str(trace_relative), kind="jsonl"
-                    )
-                    issues.extend(trace_load_issues)
+                    if str(trace_relative).endswith(".json"):
+                        _, trace_doc, trace_load_issues = load_workspace_artifact(
+                            workspace, str(trace_relative), kind="json"
+                        )
+                        issues.extend(trace_load_issues)
+                        if isinstance(trace_doc, dict):
+                            trace_data_for_binding = trace_doc
+                            steps = trace_doc.get("steps")
+                            trace_rows = steps if isinstance(steps, list) else []
+                            trace_formula = trace_doc.get("formula_version")
+                            if trace_formula is not None and trace_formula != run_formula_version:
+                                issues.append(
+                                    issue(
+                                        "TRACK_MISMATCH",
+                                        artifact=str(trace_relative),
+                                        pointer="formula_version",
+                                        message="trace formula version differs from the numerical run",
+                                        expected=run_formula_version,
+                                        actual=[trace_formula],
+                                    )
+                                )
+                        else:
+                            trace_rows = []
+                    else:
+                        _, trace_rows, trace_load_issues = load_workspace_artifact(
+                            workspace, str(trace_relative), kind="jsonl"
+                        )
+                        issues.extend(trace_load_issues)
                     if isinstance(trace_rows, list) and row_count != len(trace_rows):
                         issues.append(
                             issue(
@@ -4112,20 +4137,21 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                         )
                     if isinstance(trace_rows, list) and all(isinstance(row, dict) for row in trace_rows):
                         trace_rows_for_binding = cast(list[dict[str, Any]], trace_rows)
-                        trace_formula_versions = {
-                            row.get("formula_version") for row in trace_rows_for_binding
-                        }
-                        if trace_formula_versions != {run_formula_version}:
-                            issues.append(
-                                issue(
-                                    "TRACK_MISMATCH",
-                                    artifact=str(trace_relative),
-                                    pointer="formula_version",
-                                    message="trace formula version differs from the numerical run",
-                                    expected=run_formula_version,
-                                    actual=sorted(str(value) for value in trace_formula_versions),
+                        if not str(trace_relative).endswith(".json"):
+                            trace_formula_versions = {
+                                row.get("formula_version") for row in trace_rows_for_binding
+                            }
+                            if trace_formula_versions != {run_formula_version}:
+                                issues.append(
+                                    issue(
+                                        "TRACK_MISMATCH",
+                                        artifact=str(trace_relative),
+                                        pointer="formula_version",
+                                        message="trace formula version differs from the numerical run",
+                                        expected=run_formula_version,
+                                        actual=sorted(str(value) for value in trace_formula_versions),
+                                    )
                                 )
-                            )
 
         execution_binding = run.get("trace_execution_binding")
         if not isinstance(execution_binding, dict):
@@ -4217,7 +4243,7 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                 and not isinstance(ticks, bool)
             ):
                 expected_binding, binding_issues = build_trace_execution_binding(
-                    trace_rows_for_binding,
+                    trace_data_for_binding if trace_data_for_binding is not None else trace_rows_for_binding,
                     independent_model,
                     independent_config,
                     ticks=ticks,
@@ -4610,11 +4636,25 @@ def validate_workspace(
     checks["branches"] = c_br.to_dict()
     all_issues.extend(c_br.issues)
 
-    _, trace_rows, t_iss = load_workspace_artifact(workspace, rel("propagation_trace", "propagation-trace.jsonl"), kind="jsonl")
-    all_issues.extend(t_iss)
-    c_tr = validate_trace(trace_rows or [], node_ids, edge_by_id, evidence_ids, manifest, nodes_by_id)
-    checks["trace"] = c_tr.to_dict()
-    all_issues.extend(c_tr.issues)
+    trace_rel = rel("execution_trace", "") or rel("propagation_trace", "propagation-trace.jsonl")
+    if trace_rel.endswith(".json"):
+        _, trace_doc, t_iss = load_workspace_artifact(workspace, trace_rel, kind="json")
+        all_issues.extend(t_iss)
+        trace_rows = trace_doc.get("steps", []) if isinstance(trace_doc, dict) else []
+        try:
+            from .trace_contract import validate_execution_trace_data
+            if isinstance(trace_doc, dict):
+                all_issues.extend(validate_execution_trace_data(trace_doc, node_ids=node_ids, edge_by_id=edge_by_id, manifest=manifest))
+        except Exception:
+            pass
+        c_tr = _check("trace", t_iss)
+        checks["trace"] = c_tr.to_dict()
+    else:
+        _, trace_rows, t_iss = load_workspace_artifact(workspace, trace_rel, kind="jsonl")
+        all_issues.extend(t_iss)
+        c_tr = validate_trace(trace_rows or [], node_ids, edge_by_id, evidence_ids, manifest, nodes_by_id)
+        checks["trace"] = c_tr.to_dict()
+        all_issues.extend(c_tr.issues)
 
     c_numerical = validate_numerical_artifacts(workspace, manifest)
     checks["numerical_artifacts"] = c_numerical.to_dict()

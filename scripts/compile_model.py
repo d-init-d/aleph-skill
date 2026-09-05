@@ -124,26 +124,40 @@ def resolve_workspace_formula_version(workspace: Path, manifest: dict[str, Any])
             declared = generation_map.get(generation) if isinstance(generation, str) else None
         add(relative.replace("\\", "/"), declared)
 
-    trace_relative = str(artifact_paths.get("propagation_trace", "propagation-trace.jsonl"))
-    trace_path, trace_path_issues = resolve_in_workspace(
-        workspace, trace_relative, must_exist=False, require_file=False
-    )
-    if trace_path_issues:
-        raise ValueError("invalid propagation trace path while resolving formula version")
-    if trace_path is not None and trace_path.is_file():
-        rows, row_issues = load_jsonl_secure(trace_path)
-        if row_issues:
-            detail = "; ".join(f"{value.code}: {value.message}" for value in row_issues)
-            raise ValueError(f"cannot load {trace_path}: {detail}")
-        versions = {
-            row.get("formula_version")
-            for row in rows
-            if isinstance(row, dict) and row.get("formula_version") is not None
-        }
-        if len(versions) > 1:
-            raise ValueError("propagation trace mixes formula versions")
-        if versions:
-            add(trace_relative.replace("\\", "/"), next(iter(versions)))
+    trace_candidates = []
+    if "execution_trace" in artifact_paths:
+        trace_candidates.append(str(artifact_paths["execution_trace"]))
+    if "propagation_trace" in artifact_paths:
+        trace_candidates.append(str(artifact_paths["propagation_trace"]))
+    if not trace_candidates:
+        trace_candidates = ["execution-trace.json", "propagation-trace.jsonl"]
+
+    for trace_relative in trace_candidates:
+        trace_path, trace_path_issues = resolve_in_workspace(
+            workspace, trace_relative, must_exist=False, require_file=False
+        )
+        if trace_path_issues:
+            raise ValueError("invalid trace path while resolving formula version")
+        if trace_path is not None and trace_path.is_file():
+            if trace_path.suffix == ".json":
+                data = _load_json_or_raise(trace_path)
+                if isinstance(data, dict) and data.get("formula_version"):
+                    add(trace_relative.replace("\\", "/"), data["formula_version"])
+            else:
+                rows, row_issues = load_jsonl_secure(trace_path)
+                if row_issues:
+                    detail = "; ".join(f"{value.code}: {value.message}" for value in row_issues)
+                    raise ValueError(f"cannot load {trace_path}: {detail}")
+                versions = {
+                    row.get("formula_version")
+                    for row in rows
+                    if isinstance(row, dict) and row.get("formula_version") is not None
+                }
+                if len(versions) > 1:
+                    raise ValueError("propagation trace mixes formula versions")
+                if versions:
+                    add(trace_relative.replace("\\", "/"), next(iter(versions)))
+            break
 
     unique = set(candidates.values())
     if len(unique) > 1:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -20,6 +21,7 @@ from aleph.engine import (
     EngineConfig,
     compile_model,
     config_payload,
+    generate_numerical_execution_trace,
     run_deterministic,
     run_monte_carlo,
 )
@@ -185,14 +187,24 @@ def main() -> None:
         if isinstance(artifact_paths, dict)
         else "simulation-model.json"
     )
+    declared_trace = (
+        artifact_paths.get("execution_trace")
+        or artifact_paths.get("propagation_trace")
+        or "execution-trace.json"
+        if isinstance(artifact_paths, dict)
+        else "execution-trace.json"
+    )
     out, out_issues = resolve_in_workspace(
         workspace, str(declared_run), must_exist=False, require_file=False
     )
     model_out, model_issues = resolve_in_workspace(
         workspace, str(declared_model), must_exist=False, require_file=False
     )
-    path_issues = [*out_issues, *model_issues]
-    for candidate in (out, model_out):
+    trace_out, trace_out_issues = resolve_in_workspace(
+        workspace, str(declared_trace), must_exist=False, require_file=False
+    )
+    path_issues = [*out_issues, *model_issues, *trace_out_issues]
+    for candidate in (out, model_out, trace_out):
         if candidate is not None and candidate.exists() and not candidate.is_file():
             path_issues.append(
                 issue("TYPE", artifact=str(candidate), message="declared output must be a regular file")
@@ -208,10 +220,11 @@ def main() -> None:
             else "interventions.json"
         ),
     ]
-    if out is not None and model_out is not None:
-        path_issues.extend(output_alias_issues(out, [model_out, *protected]))
-        path_issues.extend(output_alias_issues(model_out, [out, *protected]))
-    if path_issues or out is None or model_out is None:
+    if out is not None and model_out is not None and trace_out is not None:
+        path_issues.extend(output_alias_issues(out, [model_out, trace_out, *protected]))
+        path_issues.extend(output_alias_issues(model_out, [out, trace_out, *protected]))
+        path_issues.extend(output_alias_issues(trace_out, [out, model_out, *protected]))
+    if path_issues or out is None or model_out is None or trace_out is None:
         print(json.dumps({"ok": False, "issues": [value.to_dict() for value in path_issues]}, indent=2))
         raise SystemExit(EXIT_USAGE)
     try:
@@ -270,88 +283,147 @@ def main() -> None:
     except (OSError, TypeError, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc), "code": "MODEL_COMPILE"}, indent=2))
         raise SystemExit(EXIT_SEMANTIC) from exc
-    declared_trace = (
-        artifact_paths.get("propagation_trace")
-        if isinstance(artifact_paths, dict)
-        else "propagation-trace.jsonl"
-    )
     trace_path, trace_rows, trace_issues = validate_declared_trace(
         workspace,
         manifest if isinstance(manifest, dict) else {},
         nodes if isinstance(nodes, list) else [],
         edges if isinstance(edges, list) else [],
     )
-    if trace_issues or trace_path is None or not trace_rows:
-        print(
-            json.dumps(
-                {
-                    "ok": False,
-                    "error": "declared propagation trace failed semantic validation",
-                    "code": "TRACE_EMPTY",
-                    "issues": [value.to_dict() for value in trace_issues],
-                },
-                indent=2,
-            )
+    is_cold_start = trace_path is None or not trace_path.is_file() or not trace_rows
+
+    if is_cold_start:
+        # Engine-derived numerical execution trace (R06 / F07 cold start)
+        model_id = manifest.get("model_id", compiled.get("model_id", "model:compiled")) if isinstance(manifest, dict) else "model:compiled"
+        trace_data = generate_numerical_execution_trace(
+            model,
+            config,
+            ticks=ticks,
+            run_id=0,
+            model_id=str(model_id),
+            formula_version=formula_version,
         )
-        raise SystemExit(EXIT_SEMANTIC)
-    if {row.get("formula_version") for row in trace_rows} != {formula_version}:
-        print(
-            json.dumps(
-                {
-                    "ok": False,
-                    "error": "trace and run formula versions differ",
-                    "code": "FORMULA_VERSION_MISMATCH",
-                    "expected": formula_version,
-                    "actual": sorted({str(row.get("formula_version")) for row in trace_rows}),
-                },
-                indent=2,
-            )
+        trace_rows = trace_data["steps"]
+        trace_path = trace_out
+        trace_execution_binding, binding_issues = build_trace_execution_binding(
+            trace_data,
+            model,
+            config,
+            ticks=ticks,
+            result=result,
+            manifest=manifest if isinstance(manifest, dict) else {},
         )
-        raise SystemExit(EXIT_SEMANTIC)
-    trace_execution_binding, binding_issues = build_trace_execution_binding(
-        trace_rows,
-        model,
-        config,
-        ticks=ticks,
-        result=result,
-        manifest=manifest if isinstance(manifest, dict) else {},
-    )
-    if binding_issues or trace_execution_binding is None:
-        print(
-            json.dumps(
-                {
-                    "ok": False,
-                    "error": "declared propagation trace is not bound to the engine trajectory",
-                    "code": "TRACE_EXECUTION_BINDING",
-                    "issues": [value.to_dict() for value in binding_issues],
-                },
-                indent=2,
+        if binding_issues or trace_execution_binding is None:
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": "generated execution trace could not be bound to engine trajectory",
+                        "code": "TRACE_EXECUTION_BINDING",
+                        "issues": [value.to_dict() for value in binding_issues],
+                    },
+                    indent=2,
+                )
             )
+            raise SystemExit(EXIT_SEMANTIC)
+        trace_bytes = json.dumps(trace_data, indent=2, ensure_ascii=False, sort_keys=False, allow_nan=False).encode("utf-8") + b"\n"
+        trace_digest = hashlib.sha256(trace_bytes).hexdigest()
+        trace_contract = {
+            "path": str(declared_trace).replace("\\", "/"),
+            "sha256": trace_digest,
+            "row_count": len(trace_rows),
+            "replay_hash": trace_data.get("replay_hash"),
+        }
+        contract = {
+            "schema_version": "2.0.0",
+            "run_contract_version": "aleph-run-2.0" if formula_version == LEGACY_FORMULA_VERSION else "aleph-run-2.1",
+            "mode": config.mode,
+            "ticks": ticks,
+            "model_hash": compiled["model_hash"],
+            "config": config_payload(config),
+            "config_hash": canonical_hash(config_payload(config)),
+            "result_hash": result_hash,
+            "result": result,
+            "trace_contract": trace_contract,
+            "trace_execution_binding": trace_execution_binding,
+        }
+        if formula_version != LEGACY_FORMULA_VERSION:
+            contract["formula_version"] = formula_version
+        contract["contract_hash"] = canonical_hash(contract)
+        artifacts_to_commit = [(model_out, compiled), (out, contract), (trace_out, trace_data)]
+    else:
+        if trace_issues or trace_path is None or not trace_rows:
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": "declared propagation trace failed semantic validation",
+                        "code": "TRACE_EMPTY",
+                        "issues": [value.to_dict() for value in trace_issues],
+                    },
+                    indent=2,
+                )
+            )
+            raise SystemExit(EXIT_SEMANTIC)
+        if {row.get("formula_version") for row in trace_rows if isinstance(row, dict) and row.get("formula_version")} not in [{formula_version}, set()]:
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": "trace and run formula versions differ",
+                        "code": "FORMULA_VERSION_MISMATCH",
+                        "expected": formula_version,
+                        "actual": sorted({str(row.get("formula_version")) for row in trace_rows if isinstance(row, dict)}),
+                    },
+                    indent=2,
+                )
+            )
+            raise SystemExit(EXIT_SEMANTIC)
+        trace_execution_binding, binding_issues = build_trace_execution_binding(
+            trace_rows,
+            model,
+            config,
+            ticks=ticks,
+            result=result,
+            manifest=manifest if isinstance(manifest, dict) else {},
         )
-        raise SystemExit(EXIT_SEMANTIC)
-    trace_contract = {
-        "path": str(declared_trace).replace("\\", "/"),
-        "sha256": sha256_file(trace_path),
-        "row_count": len(trace_rows),
-    }
-    contract = {
-        "schema_version": "2.0.0",
-        "run_contract_version": "aleph-run-2.0" if formula_version == LEGACY_FORMULA_VERSION else "aleph-run-2.1",
-        "mode": config.mode,
-        "ticks": ticks,
-        "model_hash": compiled["model_hash"],
-        "config": config_payload(config),
-        "config_hash": canonical_hash(config_payload(config)),
-        "result_hash": result_hash,
-        "result": result,
-        "trace_contract": trace_contract,
-        "trace_execution_binding": trace_execution_binding,
-    }
-    if formula_version != LEGACY_FORMULA_VERSION:
-        contract["formula_version"] = formula_version
-    contract["contract_hash"] = canonical_hash(contract)
+        if binding_issues or trace_execution_binding is None:
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": "declared propagation trace is not bound to the engine trajectory",
+                        "code": "TRACE_EXECUTION_BINDING",
+                        "issues": [value.to_dict() for value in binding_issues],
+                    },
+                    indent=2,
+                )
+            )
+            raise SystemExit(EXIT_SEMANTIC)
+        trace_contract = {
+            "path": str(declared_trace).replace("\\", "/"),
+            "sha256": sha256_file(trace_path),
+            "row_count": len(trace_rows),
+        }
+        contract = {
+            "schema_version": "2.0.0",
+            "run_contract_version": "aleph-run-2.0" if formula_version == LEGACY_FORMULA_VERSION else "aleph-run-2.1",
+            "mode": config.mode,
+            "ticks": ticks,
+            "model_hash": compiled["model_hash"],
+            "config": config_payload(config),
+            "config_hash": canonical_hash(config_payload(config)),
+            "result_hash": result_hash,
+            "result": result,
+            "trace_contract": trace_contract,
+            "trace_execution_binding": trace_execution_binding,
+        }
+        if formula_version != LEGACY_FORMULA_VERSION:
+            contract["formula_version"] = formula_version
+        contract["contract_hash"] = canonical_hash(contract)
+        artifacts_to_commit = [(model_out, compiled), (out, contract)]
+
     try:
-        _commit_json_pair([(model_out, compiled), (out, contract)])
+        _commit_json_pair(artifacts_to_commit)
     except (OSError, RuntimeError, TypeError, ValueError) as exc:
         print(json.dumps({"ok": False, "code": "ARTIFACT_COMMIT", "error": str(exc)}, indent=2))
         raise SystemExit(EXIT_SEMANTIC) from exc
