@@ -154,6 +154,7 @@ SCRIPT_INVENTORY: tuple[str, ...] = (
     "scripts/data_clean.py",
     "scripts/dedup_near.py",
     "scripts/embed_corpus.py",
+    "scripts/eval_harness.py",
     "scripts/evidence_ledger.py",
     "scripts/extract_tables.py",
     "scripts/generate_test_pdf.py",
@@ -425,6 +426,7 @@ COMMAND_ROUTES: dict[str, dict[str, Any]] = {
     "research:embed": _route(
         "scripts/embed_corpus.py", network=True, env_allow=("COHERE_API_KEY",)
     ),
+    "research:eval-harness": _route("scripts/eval_harness.py"),
     "research:extract": _route("scripts/multi_extract.py"),
     "research:pdf": _route("scripts/pdf_extract.py"),
     "research:ocr": _route("scripts/ocr.py"),

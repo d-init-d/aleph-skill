@@ -395,14 +395,20 @@ def build_component_lock(
     rebuilt_entry["files"] = files
     # Preserve the documented exclusion/pinning note without copying unknown
     # mutable fields into a release lock.
-    for field in ("excluded", "pin_note"):
+    rebuilt_entry["tree_hash"] = rebuilt_entry["tree_sha256"]
+    rebuilt_entry["file_manifest"] = files
+    for field in ("excluded", "pin_note", "upstream_repo", "synced_at"):
         if field in entry:
             rebuilt_entry[field] = entry[field]
-    return {
+    result = {
         "schema_version": 1,
         "algorithm": "sha256",
         "components": {component_id: rebuilt_entry},
     }
+    for field in ("upstream_repo", "upstream_commit", "synced_at", "version"):
+        if field in lock:
+            result[field] = lock[field]
+    return result
 
 
 def locked_component_paths(

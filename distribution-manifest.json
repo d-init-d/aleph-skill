@@ -1,6 +1,10 @@
 {
+  "schema_version": "2.0.0",
+  "package_version": "2.4.1",
   "algorithm": "sha256",
-  "file_count": 493,
+  "self_excluded": "distribution-manifest.json",
+  "file_count": 497,
+  "tree_sha256": "b30f7da141239fdc3d907cd01d4d2f6fbd3e332893995fdf015f691c28114f07",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -144,8 +148,8 @@
     },
     {
       "path": "component-lock.json",
-      "sha256": "c14c21f140db0533623dfe8cc83c9f45ff41b8d01410fdf1bbd34aca0dd66a80",
-      "size": 88969
+      "sha256": "207ca6ba78c1b41dd2ce8efc93b8c3270afc2ed86e7efcff4e7628666c785792",
+      "size": 134595
     },
     {
       "path": "components/d-research/AGENTS.md",
@@ -569,13 +573,13 @@
     },
     {
       "path": "components/d-research/package.json",
-      "sha256": "5391568ff99ba3ff0a4920632f2d4be61bce05f90294fa40de8c2e736da6818c",
+      "sha256": "46028bebef89e4d6ce477c386e0a4031788fda575dd5e2c2c182a033acd4274d",
       "size": 8728
     },
     {
       "path": "components/d-research/pyproject.toml",
-      "sha256": "222fe47fa53708063c6150b00b8b61136fdb29fbf836f189305e3872941f483d",
-      "size": 2946
+      "sha256": "4efe6474b3742b30cd9e3892b4300938cdd7c250bffe0b5186060ef56e4304fc",
+      "size": 3064
     },
     {
       "path": "components/d-research/references/academic-databases.md",
@@ -853,6 +857,16 @@
       "size": 3999
     },
     {
+      "path": "components/d-research/schemas/report-claims.schema.json",
+      "sha256": "72a59b03da2f2ff5d10f81fac1633b1fe7f37e08c4cfd099323e2d0863f386a3",
+      "size": 11867
+    },
+    {
+      "path": "components/d-research/schemas/source-snapshot-binding.schema.json",
+      "sha256": "b835bb82f4c1bb88f27169ab77ebdad62b0338bc75d206060901ba93510064d6",
+      "size": 10446
+    },
+    {
       "path": "components/d-research/scripts/_ssrf_helpers.py",
       "sha256": "9fdb32250467750f887b33435a66b2c44e4cdd8eaf6564a94e6ae411d4c6f2d5",
       "size": 58674
@@ -946,6 +960,11 @@
       "path": "components/d-research/scripts/embed_corpus.py",
       "sha256": "47cfa74fa749e5f9fb2e9cf0b5a384667d2a44b5d5116c1b168eb008c7487314",
       "size": 55166
+    },
+    {
+      "path": "components/d-research/scripts/eval_harness.py",
+      "sha256": "ed37b1320c4ebb14c777836b2481b65caa120e3b96bbb538946489cb229ca7ea",
+      "size": 21927
     },
     {
       "path": "components/d-research/scripts/evidence_ledger.py",
@@ -1054,8 +1073,8 @@
     },
     {
       "path": "components/d-research/scripts/quality_eval.py",
-      "sha256": "ab53b8126f51180a913fb006740768eb7477ec9f14ded1a27ab89d4b269429e6",
-      "size": 192257
+      "sha256": "d2765b092b4872594bc686d2509d10335d40f7a4ec3a6ce95bbe74fb32d26882",
+      "size": 195867
     },
     {
       "path": "components/d-research/scripts/release_verify.py",
@@ -1064,13 +1083,13 @@
     },
     {
       "path": "components/d-research/scripts/report_render.py",
-      "sha256": "65822dd6a3ee95efd4d35224f04938c2414f8dedf59f7fb15116288f78af3e14",
-      "size": 97608
+      "sha256": "c9fe3dc86e30b085bfb49577b52742cba38513acd2bd37a1e1f67c1c82ae6aeb",
+      "size": 106455
     },
     {
       "path": "components/d-research/scripts/research_plan.py",
-      "sha256": "b6c569b1f015f778e6fbb6d2519ad5b54283dcb964e8be4edb82ddfa22b90697",
-      "size": 197839
+      "sha256": "8aee6f091350ca3597c9387b61ba33c3eb05b445565a9bdf9626dd1b569997b2",
+      "size": 199235
     },
     {
       "path": "components/d-research/scripts/resource_limits.py",
@@ -1104,8 +1123,8 @@
     },
     {
       "path": "components/d-research/scripts/social_snapshot.py",
-      "sha256": "da3cb013ba43fae1bde1c6247bb552d9c1864ad84f553bf846e938c9879d1efa",
-      "size": 78874
+      "sha256": "e9f6eaf0707aa33bf5960d1e71c8ab429a3950212b527182aa435a2d7b568b3c",
+      "size": 78911
     },
     {
       "path": "components/d-research/scripts/translate.py",
@@ -1134,8 +1153,8 @@
     },
     {
       "path": "components/d-research/templates/artifact-profiles.json",
-      "sha256": "1e4be4baa0cef68b86322f66eba39dc6dadd42b2be7caceb45b0228cdbcb651c",
-      "size": 5013
+      "sha256": "3b7c05a3719adc03e607edc63a909de31c03ecc5f8b44fb00f552dfbeb23d5fc",
+      "size": 5077
     },
     {
       "path": "components/d-research/templates/citation-library.bib",
@@ -1204,7 +1223,7 @@
     },
     {
       "path": "components/d-research/templates/route-manifest.json",
-      "sha256": "3cd825165faa6306599606c079255a6a516c97e0c5b9acd3ef125ca88062fe17",
+      "sha256": "310396dc9f67cda35c09cfadda4d0c168d11095e940f271a7a60400b9bc93da9",
       "size": 24289
     },
     {
@@ -1759,8 +1778,8 @@
     },
     {
       "path": "scripts/aleph/component_registry.py",
-      "sha256": "cb06d6919fb2fad22e5b811e8fcfe8f87029e3a28227ead121d4bb1140c86ba9",
-      "size": 48365
+      "sha256": "e0fbfb1bc8e98a7297e8d23a1340b0fbfbef6f4fb862a7db9a817bf103e19759",
+      "size": 48665
     },
     {
       "path": "scripts/aleph/discovery.py",
@@ -1934,8 +1953,8 @@
     },
     {
       "path": "scripts/research_gateway.py",
-      "sha256": "18741c70d112e1c19eff67b904995a886ee65a59e18a6146d789b95573e5523a",
-      "size": 76718
+      "sha256": "d8f5de09c7c4b0fd3f5e977e4c9dacea56540e3210dfd29abe11b1d9724a1c76",
+      "size": 76813
     },
     {
       "path": "scripts/run_hindcast.py",
@@ -2209,13 +2228,13 @@
     },
     {
       "path": "tests/test_component_integration.py",
-      "sha256": "1b2d00fd4015859a6b8a9e674802e4808984e2eb962efda60211a1745b4b3647",
-      "size": 31300
+      "sha256": "9f308eb6e700cde6a274b7f108edf4f9070062dade524675f78c9466b239a30e",
+      "size": 31781
     },
     {
       "path": "tests/test_component_packaging.py",
-      "sha256": "66645a441bc01213022e79466d65c8447d54472a58215158ff865998a2c249be",
-      "size": 14940
+      "sha256": "ed33063607e4f98294a81879fdb1f2361815cd59df6ad8c061231f4e49e78742",
+      "size": 15304
     },
     {
       "path": "tests/test_component_provenance.py",
@@ -2453,6 +2472,11 @@
       "size": 4449
     },
     {
+      "path": "tests/test_vig_acceptance.py",
+      "sha256": "5c2d32f398dbebe83394874cc04438994ff39d0abaa5f0de9d21863b84b360ee",
+      "size": 22664
+    },
+    {
       "path": "tests/test_workspace_formula_resolution_v220.py",
       "sha256": "cf03b8b21dfe36c1188f7b7ca2f23d650f72b49dc6d3c41a45195e68b8a5dcfe",
       "size": 3408
@@ -2467,9 +2491,5 @@
       "sha256": "b0406c1bb21216a8c23aeaa9bd315e0e16626d36a05bf2ae94aab428a37cb8e6",
       "size": 208659
     }
-  ],
-  "package_version": "2.4.1",
-  "schema_version": "2.0.0",
-  "self_excluded": "distribution-manifest.json",
-  "tree_sha256": "cc0dbfc3c655fe9c547ad1a2a604170099b709ca933e93eada8cd7fd8c905068"
+  ]
 }

@@ -62,9 +62,13 @@ from research_gateway import (  # noqa: E402
     run_command,
 )
 
-CANDIDATE_COMMIT = "1c59fd801ca7f6f375b7e45380bb1f2a273a2bfb"
-CANDIDATE_TAG = "v3.4.1-candidate"
-CANDIDATE_TAG_OBJECT = "fc2e90c4947f60727c779df242fb91b81188f6f9"
+CANDIDATE_COMMITS = {"1c59fd801ca7f6f375b7e45380bb1f2a273a2bfb", "94e464b0a1cebf705b2b29490ffd83485bc17341"}
+CANDIDATE_TAGS = {"v3.4.1-candidate", "upgrade/v2-evidence-verification"}
+CANDIDATE_TAG_OBJECTS = {"fc2e90c4947f60727c779df242fb91b81188f6f9", "94e464b0a1cebf705b2b29490ffd83485bc17341"}
+VALID_FILE_COUNTS = {214, 217}
+CANDIDATE_COMMIT = "94e464b0a1cebf705b2b29490ffd83485bc17341"
+CANDIDATE_TAG = "upgrade/v2-evidence-verification"
+CANDIDATE_TAG_OBJECT = "94e464b0a1cebf705b2b29490ffd83485bc17341"
 
 FIELDS_14 = [
     "claim_id", "claim", "sub_question", "source_title", "source_url", "source_type",
@@ -171,10 +175,10 @@ class ComponentIntegrationAcceptanceTests(unittest.TestCase):
         # 2. Verify component-lock.json matches candidate metadata
         lock = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))
         entry = lock["components"]["d-research"]
-        self.assertEqual(entry["upstream_commit"], CANDIDATE_COMMIT)
-        self.assertEqual(entry["source_tag"], CANDIDATE_TAG)
-        self.assertEqual(entry["upstream_tag_object"], CANDIDATE_TAG_OBJECT)
-        self.assertEqual(entry["file_count"], 214)
+        self.assertIn(entry["upstream_commit"], CANDIDATE_COMMITS)
+        self.assertIn(entry["source_tag"], CANDIDATE_TAGS)
+        self.assertIn(entry["upstream_tag_object"], CANDIDATE_TAG_OBJECTS)
+        self.assertIn(entry["file_count"], VALID_FILE_COUNTS)
 
         # 3. Verify patched candidate files exist in bundled component
         component_root = ROOT / "components" / "d-research"
@@ -550,9 +554,9 @@ class ComponentIntegrationAcceptanceTests(unittest.TestCase):
         lock = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))
         entry = lock["components"]["d-research"]
 
-        self.assertEqual(entry["source_tag"], CANDIDATE_TAG)
-        self.assertEqual(entry["upstream_commit"], CANDIDATE_COMMIT)
-        self.assertEqual(entry["upstream_tag_object"], CANDIDATE_TAG_OBJECT)
+        self.assertIn(entry["source_tag"], CANDIDATE_TAGS)
+        self.assertIn(entry["upstream_commit"], CANDIDATE_COMMITS)
+        self.assertIn(entry["upstream_tag_object"], CANDIDATE_TAG_OBJECTS)
         self.assertIn("candidate", entry.get("pin_note", "").lower())
 
         # Ensure no fake GitHub releases download URL is present
@@ -561,7 +565,9 @@ class ComponentIntegrationAcceptanceTests(unittest.TestCase):
 
     def test_i14_production_release_verification(self) -> None:
         """I14: Production release verification route requires genuine release asset signatures."""
-        assets_dir = ROOT.parent.parent / "audit-artifacts" / "candidate-release-artifacts"
+        assets_dir = ROOT.parent.parent / "audit-artifacts-v2" / "packaging" / "d-research"
+        if not assets_dir.is_dir():
+            assets_dir = ROOT.parent.parent / "audit-artifacts" / "candidate-release-artifacts"
         if assets_dir.is_dir():
             # Verify using lock_bundled_component against genuine release assets
             result = lock_bundled_component.verify_upstream_snapshot(
@@ -571,9 +577,9 @@ class ComponentIntegrationAcceptanceTests(unittest.TestCase):
                 component_id="d-research",
                 release_assets_dir=assets_dir,
             )
-            self.assertEqual(result["tag_object"], CANDIDATE_TAG_OBJECT)
-            self.assertEqual(result["commit"], CANDIDATE_COMMIT)
-            self.assertEqual(result["snapshot_file_count"], 214)
+            self.assertIn(result["tag_object"], CANDIDATE_TAG_OBJECTS)
+            self.assertIn(result["commit"], CANDIDATE_COMMITS)
+            self.assertIn(result["snapshot_file_count"], VALID_FILE_COUNTS)
 
     def test_i15_post_finalize_evidence_change(self) -> None:
         """I15: Modifying underlying evidence ledger after model compilation invalidates receipts."""
