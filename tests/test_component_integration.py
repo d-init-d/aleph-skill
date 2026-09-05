@@ -21,7 +21,6 @@ Tests genuine integration between Aleph Skill and bundled D Research component:
 
 from __future__ import annotations
 
-import copy
 import csv
 import hashlib
 import hmac
@@ -44,14 +43,17 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import lock_bundled_component  # noqa: E402
-from aleph.component_registry import COMPONENT_URI, resolve_component, verify_component_lock  # noqa: E402
+from aleph.component_registry import (  # noqa: E402
+    COMPONENT_URI,
+    resolve_component,
+    verify_component_lock,
+)
 from aleph.import_ledger import (  # noqa: E402
     canonicalise_d_research_csv,
     import_d_research_ledger,
-    render_evidence_csv,
 )
 from aleph.io import canonical_hash, write_json_atomic  # noqa: E402
-from aleph.validator import artifact_integrity_hash, validate_numerical_artifacts  # noqa: E402
+from aleph.validator import artifact_integrity_hash  # noqa: E402
 from research_gateway import (  # noqa: E402
     MODE_ROLEPLAY,
     assert_roleplay_isolation,

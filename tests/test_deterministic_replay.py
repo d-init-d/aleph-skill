@@ -16,13 +16,11 @@ if str(SCRIPTS) not in sys.path:
 
 from aleph.engine import (  # noqa: E402
     EngineConfig,
-    ModelEdge,
-    _edge_effect,
     compile_model,
     run_deterministic,
 )
 from aleph.io import canonical_hash, canonical_json_bytes, write_json_atomic  # noqa: E402
-from aleph.validator import validate_numerical_artifacts, validate_workspace  # noqa: E402
+from aleph.validator import validate_numerical_artifacts  # noqa: E402
 
 
 def _recalculate_trace_hashes(trace_data: dict) -> dict:

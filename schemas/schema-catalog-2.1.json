@@ -16,6 +16,8 @@
     "propagation_trace_row": "propagation-trace-row.schema.json",
     "numerical_propagation_trace_row": "numerical-propagation-trace-row.schema.json",
     "run_ledger": "run-ledger.schema.json",
-    "finalization_receipts": "finalization-receipts.schema.json"
+    "finalization_receipts": "finalization-receipts.schema.json",
+    "execution_trace": "execution-trace.schema.json",
+    "calibration_bundle": "calibration-bundle.schema.json"
   }
 }

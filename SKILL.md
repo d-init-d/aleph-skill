@@ -99,14 +99,18 @@ $env:ALEPH_SKILL_ROOT = (Resolve-Path "C:\absolute\path\to\aleph-skill").Path
 python "$env:ALEPH_SKILL_ROOT\scripts\preflight.py" --json
 ```
 
-## Deterministic command surface
+## Cold-start numerical workflow & execution surface
 
-Before a numerical run, replace the template `propagation-trace.jsonl` with
-an audited trace for the admitted edges and addressed run plan. The engine
-does not synthesize or accept a placeholder trace: missing, empty, mismatched,
-or unbound rows are hard failures. Sensitivity analysis likewise requires a
-workspace-relative `sensitivity-config.json` (or an explicit `--spec` path)
-with at least one valid parameter and output variable.
+Cold-start simulation generates authentic execution traces directly from mathematical model execution without requiring pre-authored trace numbers:
+
+1. **Specification**: Agent specifies model nodes, causal edges, and engine configuration in workspace artifacts (`nodes.json`, `edges.json`, `simulation-manifest.json`).
+2. **Engine execution**: `<ALEPH_SKILL_ROOT>/scripts/run_simulation.py` executes mathematical propagation (formula 2.1 or legacy 2.0), dynamically computing state transitions, edge delivery queues, and fixed-point cycle convergence, and automatically generates an authentic, schema-compliant `execution-trace.json` (with `generation_mode: engine_derived` and deterministic `replay_hash`).
+3. **Replay & validation**: `<ALEPH_SKILL_ROOT>/scripts/replay_simulation.py` independently verifies the generated trace against analytical transitions and checks trace contracts. `<ALEPH_SKILL_ROOT>/scripts/validate_simulation_artifacts.py` validates schema conformity and artifact integrity.
+4. **Finalization**: Atomic receipts bind the model and trace digests.
+
+*Legacy authored trace replay*: Historical or external pre-authored traces (`generation_mode: analyst_authored_legacy` under formula 2.0) remain supported for deterministic replay and verification via `replay_simulation.py`, but cold-start runs must use engine-derived trace generation.
+
+Sensitivity analysis requires a workspace-relative `sensitivity-config.json` (or an explicit `--spec` path) with at least one valid parameter and output variable.
 
 ```text
 python "<ALEPH_SKILL_ROOT>/scripts/preflight.py" --json

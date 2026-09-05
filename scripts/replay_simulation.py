@@ -361,7 +361,7 @@ def main() -> None:
                     )
                 )
             else:
-                for step_idx, (act_s, exp_s) in enumerate(zip(act_steps, exp_steps)):
+                for step_idx, (act_s, exp_s) in enumerate(zip(act_steps, exp_steps, strict=True)):
                     diverged = False
                     for check_key in ("node_id", "edge_id", "tick", "emission_tick", "delivery_tick", "drawn_strength", "source_state", "target_state_before", "target_state_after"):
                         if act_s.get(check_key) != exp_s.get(check_key):

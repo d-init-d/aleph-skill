@@ -13,11 +13,11 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import jsonschema  # noqa: E402
-from aleph.io import canonical_hash, write_json_atomic  # noqa: E402
+from aleph.io import write_json_atomic  # noqa: E402
 from aleph.trace_contract import validate_execution_trace_data  # noqa: E402
 
-CONTRACTS_DIR = ROOT.parents[1] / "audit-artifacts" / "contracts"
-EXECUTION_TRACE_SCHEMA_PATH = CONTRACTS_DIR / "execution-trace.schema.json"
+SCHEMAS_DIR = ROOT / "schemas"
+EXECUTION_TRACE_SCHEMA_PATH = SCHEMAS_DIR / "execution-trace.schema.json"
 
 
 class NumericalColdStartTests(unittest.TestCase):

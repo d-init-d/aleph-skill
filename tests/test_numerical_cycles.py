@@ -21,8 +21,8 @@ from aleph.engine import (  # noqa: E402
     run_deterministic,
 )
 
-CONTRACTS_DIR = ROOT.parents[1] / "audit-artifacts" / "contracts"
-EXECUTION_TRACE_SCHEMA_PATH = CONTRACTS_DIR / "execution-trace.schema.json"
+SCHEMAS_DIR = ROOT / "schemas"
+EXECUTION_TRACE_SCHEMA_PATH = SCHEMAS_DIR / "execution-trace.schema.json"
 
 
 class NumericalCyclesAcceptanceTests(unittest.TestCase):

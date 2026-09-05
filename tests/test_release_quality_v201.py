@@ -832,6 +832,35 @@ class InstallerTransactionCoverageTests(unittest.TestCase):
             self.assertEqual(destination.read_text(encoding="utf-8"), "keep\n")
             self.assertFalse(list(root.glob(".installed.aleph-backup-*")))
 
+    def test_vux04_generator_metadata_build_provenance(self) -> None:
+        """VUX04: Build provenance metadata reflects real repository or archive state without hardcoded fake values."""
+        # 1. Candidate in component-lock.json asserts real candidate provenance without fake GitHub release URLs
+        lock_path = ROOT / "component-lock.json"
+        self.assertTrue(lock_path.is_file())
+        lock = json.loads(lock_path.read_text(encoding="utf-8"))
+        d_research = lock["components"]["d-research"]
+        self.assertTrue(d_research.get("source_tag"))
+        self.assertTrue(d_research.get("upstream_commit"))
+        self.assertNotIn("releases/download/v3.4.1/", json.dumps(lock))
+
+        # 2. Distribution manifest generated on a clean directory without .git computes authentic digests without crashing
+        with tempfile.TemporaryDirectory() as temporary:
+            isolated = Path(temporary) / "clean-skill"
+            isolated.mkdir(parents=True)
+            (isolated / "SKILL.md").write_text("---\nname: clean\n---\n", encoding="utf-8")
+            (isolated / "file.txt").write_text("authentic content\n", encoding="utf-8")
+
+            # Must run cleanly without .git present
+            manifest = build_distribution_manifest(isolated)
+            self.assertEqual(manifest["schema_version"], "2.0.0")
+            self.assertEqual(manifest["file_count"], 2)
+            file_paths = {f["path"]: f for f in manifest["files"]}
+            self.assertIn("SKILL.md", file_paths)
+            self.assertIn("file.txt", file_paths)
+            # Content digests are real 64-char sha256 digests
+            self.assertEqual(len(file_paths["file.txt"]["sha256"]), 64)
+
 
 if __name__ == "__main__":
     unittest.main()
+

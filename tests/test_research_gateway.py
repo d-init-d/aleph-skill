@@ -15,8 +15,8 @@ from unittest import mock
 
 sys.dont_write_bytecode = True
 
-import preflight
-from research_gateway import (
+import preflight  # noqa: E402
+from research_gateway import (  # noqa: E402
     COMMAND_ROUTES,
     MODE_ROLEPLAY,
     NON_DISPATCHABLE_SCRIPTS,

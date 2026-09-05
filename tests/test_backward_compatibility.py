@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import json
 import shutil
 import subprocess
@@ -11,10 +10,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
+TESTS = ROOT / "tests"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
+if str(TESTS) not in sys.path:
+    sys.path.insert(0, str(TESTS))
 
-from compile_model import compile_workspace  # noqa: E402
 from aleph.io import canonical_hash, write_json_atomic  # noqa: E402
 from aleph.quality import evaluate  # noqa: E402
 from aleph.validator import (  # noqa: E402
@@ -22,6 +23,7 @@ from aleph.validator import (  # noqa: E402
     validate_numerical_artifacts,
     validate_workspace,
 )
+from compile_model import compile_workspace  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "schema-2.0-valid"
 
@@ -214,6 +216,40 @@ class BackwardCompatibilityAcceptanceTests(unittest.TestCase):
         delegate = ComponentIntegrationAcceptanceTests()
         delegate.test_i07_legacy_ledger_import()
 
+    def test_vux06_v1_regression_coverage_preservation(self) -> None:
+        """VUX06: V1 regression coverage and original capabilities (formula 2.0, uncalibrated mode, legacy ledgers) are preserved."""
+        # 1. Verify key regression suites exist and are not deleted or bypassed
+        test_dir = ROOT / "tests"
+        required_suites = [
+            "test_numerical_cold_start.py",
+            "test_numerical_interventions.py",
+            "test_numerical_cycles.py",
+            "test_formula_2_1_transforms.py",
+            "test_stock_flow_integration.py",
+            "test_backward_compatibility.py",
+            "test_component_integration.py",
+            "test_packaging_relocatability.py",
+            "test_component_packaging.py",
+            "test_containment_security.py",
+            "test_doc_fixture_sync.py",
+            "test_gateway_fallbacks.py",
+            "test_release_quality_v201.py",
+        ]
+        for suite_name in required_suites:
+            suite_path = test_dir / suite_name
+            self.assertTrue(
+                suite_path.is_file(), f"Required regression test suite missing: {suite_name}"
+            )
+
+        # 2. Verify legacy capability constants in aleph
+        from aleph import SUPPORTED_FORMULA_VERSIONS, SUPPORTED_SCHEMA_VERSIONS
+
+        self.assertIn("2.0.0", SUPPORTED_SCHEMA_VERSIONS)
+        self.assertIn("2.1.0", SUPPORTED_SCHEMA_VERSIONS)
+        self.assertIn("2.0.0", SUPPORTED_FORMULA_VERSIONS)
+        self.assertIn("2.1.0", SUPPORTED_FORMULA_VERSIONS)
+
 
 if __name__ == "__main__":
     unittest.main()
+

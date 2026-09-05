@@ -23,11 +23,10 @@ from aleph.engine import (  # noqa: E402
     sampled_edge_parameters,
     stream_numerical_execution_trace,
 )
-from aleph.io import canonical_hash  # noqa: E402
 from aleph.trace_contract import validate_execution_trace_data  # noqa: E402
 
-CONTRACTS_DIR = ROOT.parents[1] / "audit-artifacts" / "contracts"
-EXECUTION_TRACE_SCHEMA_PATH = CONTRACTS_DIR / "execution-trace.schema.json"
+SCHEMAS_DIR = ROOT / "schemas"
+EXECUTION_TRACE_SCHEMA_PATH = SCHEMAS_DIR / "execution-trace.schema.json"
 
 
 class NumericalEngineTracesTests(unittest.TestCase):
@@ -152,7 +151,7 @@ class NumericalEngineTracesTests(unittest.TestCase):
             self.assertEqual(p_trace["replay_hash"], trace_single["replay_hash"])
             self.assertEqual(p_trace["parameters_hash"], trace_single["parameters_hash"])
             self.assertEqual(len(p_trace["steps"]), len(trace_single["steps"]))
-            for s1, s2 in zip(p_trace["steps"], trace_single["steps"]):
+            for s1, s2 in zip(p_trace["steps"], trace_single["steps"], strict=True):
                 self.assertEqual(s1["hash_chain"], s2["hash_chain"])
                 self.assertAlmostEqual(s1["target_state_after"], s2["target_state_after"])
 
@@ -255,7 +254,7 @@ class NumericalEngineTracesTests(unittest.TestCase):
         trace = generate_numerical_execution_trace(model, config, ticks=10)
         self.assertEqual(trace["invalid_mass"], 1.0)
         # Check no NaN or Infinity in final states
-        for var_name, val in trace["final_state_vector"].items():
+        for _var_name, val in trace["final_state_vector"].items():
             self.assertTrue(math.isfinite(val), f"Non-finite state found: {val}")
 
     def test_t20_bounded_memory_streaming_trace(self) -> None:

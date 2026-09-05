@@ -1,0 +1,241 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aleph.local/contracts/v1/execution-trace.schema.json",
+  "title": "Numerical Engine-Derived Execution Trace Schema",
+  "description": "Authoritative contract for numerical simulation execution traces generated dynamically by the simulation engine during cold-start or execution runs. Captures per-step parameter draws, lagged edge deliveries, state transitions, stock-flow integrations, and deterministic replay hashes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "model_id",
+    "formula_version",
+    "generated_by",
+    "generation_mode",
+    "execution_timestamp",
+    "seed",
+    "parameters_hash",
+    "total_ticks",
+    "total_samples",
+    "invalid_mass",
+    "steps",
+    "replay_hash"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "SemVer of this execution trace schema (e.g. 2.0.0 or 2.1.0)."
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run:[0-9a-zA-Z_-]+$",
+      "description": "Unique identifier for this simulation run."
+    },
+    "model_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier of the compiled simulation model."
+    },
+    "formula_version": {
+      "type": "string",
+      "enum": ["2.0.0", "2.1.0"],
+      "description": "Mathematical engine propagation formula semantics applied."
+    },
+    "generated_by": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Component or engine generating this trace (e.g. 'aleph.engine.numerical')."
+    },
+    "generation_mode": {
+      "type": "string",
+      "enum": [
+        "engine_derived",
+        "analyst_authored_legacy",
+        "replay_verification"
+      ],
+      "description": "Provenance mode of the trace. Only 'engine_derived' satisfies cold-start automated execution requirements."
+    },
+    "execution_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of simulation start."
+    },
+    "seed": {
+      "type": "integer",
+      "description": "Pseudorandom generator seed used for drawing sampled strengths/parameters."
+    },
+    "parameters_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Digest of compiled model configuration, baseline parameters, and intervention vectors."
+    },
+    "total_ticks": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Total discrete simulation time horizons/ticks modeled."
+    },
+    "total_samples": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Total Monte Carlo trajectories or sample iterations executed."
+    },
+    "invalid_mass": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Proportion of trajectories that failed convergence or exceeded domain bounds. Must not be silently normalized away."
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ExecutionTraceStep"
+      },
+      "description": "Ordered sequence of discrete causal hops, signal emissions, arrivals, and node integrations."
+    },
+    "final_state_vector": {
+      "type": "object",
+      "additionalProperties": { "type": "number" },
+      "description": "Final integrated values for all observable nodes at termination tick."
+    },
+    "replay_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Final canonical hash of the chronological step chain, guaranteeing bit-exact deterministic replay."
+    }
+  },
+  "$defs": {
+    "ExecutionTraceStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step",
+        "sample_id",
+        "tick",
+        "emission_tick",
+        "delivery_tick",
+        "node_id",
+        "edge_id",
+        "drawn_strength",
+        "sampled_parameters",
+        "state_transitions",
+        "hash_chain"
+      ],
+      "properties": {
+        "step": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Monotonically increasing 1-based step counter across the run."
+        },
+        "sample_id": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "0-based Monte Carlo sample/trajectory index."
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Current simulation evaluation tick."
+        },
+        "emission_tick": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Tick at which the source node produced this causal impulse."
+        },
+        "delivery_tick": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Tick at which the causal impulse arrives at the target node (delivery_tick = emission_tick + lag)."
+        },
+        "source_node_id": {
+          "type": "string",
+          "description": "Source node identifier emitting the signal."
+        },
+        "node_id": {
+          "type": "string",
+          "description": "Target node identifier receiving the signal or undergoing state update."
+        },
+        "edge_id": {
+          "type": "string",
+          "pattern": "^(causal|edge):[0-9a-zA-Z_-]+$",
+          "description": "Causal edge identifier."
+        },
+        "drawn_strength": {
+          "type": "number",
+          "description": "Specific numerical strength sampled by RNG or resolved deterministically."
+        },
+        "sampled_parameters": {
+          "type": "object",
+          "additionalProperties": { "type": ["number", "string", "boolean"] },
+          "description": "Explicit values of all stochastic parameters drawn for this transition."
+        },
+        "source_state": {
+          "type": "number",
+          "description": "Numerical value of source node at emission_tick."
+        },
+        "target_state_before": {
+          "type": "number",
+          "description": "Numerical value of target node prior to applying this step effect."
+        },
+        "target_state_after": {
+          "type": "number",
+          "description": "Numerical value of target node after applying this step effect."
+        },
+        "state_transitions": {
+          "type": "object",
+          "required": ["delta", "previous_value", "new_value", "mechanism"],
+          "properties": {
+            "delta": { "type": "number" },
+            "previous_value": { "type": "number" },
+            "new_value": { "type": "number" },
+            "mechanism": { "type": "string" },
+            "intervention_type": {
+              "type": "string",
+              "enum": ["none", "do_set", "do_add", "do_multiply", "release"],
+              "default": "none",
+              "description": "Intervention semantics applied at this node/tick."
+            }
+          }
+        },
+        "stock_flow_integrations": {
+          "type": "object",
+          "required": [
+            "stock_variable",
+            "inflow_rate",
+            "outflow_rate",
+            "retention_factor",
+            "integrated_level"
+          ],
+          "properties": {
+            "stock_variable": { "type": "string" },
+            "inflow_rate": { "type": "number" },
+            "outflow_rate": { "type": "number" },
+            "retention_factor": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "decay_constant": { "type": "number" },
+            "dt": { "type": "number", "default": 1.0 },
+            "integrated_level": { "type": "number" }
+          },
+          "description": "Explicit numerical integration record for dynamic stock/flow variables."
+        },
+        "transform_applied": {
+          "type": "object",
+          "properties": {
+            "mode": { "type": "string", "enum": ["linear", "logistic", "hysteresis", "saturation"] },
+            "threshold_active_before": { "type": "boolean" },
+            "threshold_active_after": { "type": "boolean" }
+          }
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^evidence:[0-9a-zA-Z_-]+$" },
+          "description": "Cryptographic evidence anchors backing this edge transition."
+        },
+        "hash_chain": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "Running SHA-256 hash chaining previous step's hash_chain with current step canonical bytes."
+        }
+      }
+    }
+  }
+}

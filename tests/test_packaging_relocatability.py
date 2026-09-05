@@ -14,7 +14,7 @@ SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from aleph.io import canonical_hash, write_json_atomic  # noqa: E402
+from aleph.io import write_json_atomic  # noqa: E402
 
 
 class PackagingRelocatabilityAcceptanceTests(unittest.TestCase):
@@ -161,6 +161,162 @@ class PackagingRelocatabilityAcceptanceTests(unittest.TestCase):
                 )
                 # Should fail when schemas or critical files are missing
                 self.assertNotEqual(proc.returncode, 0)
+
+    def test_vpk01_clean_clone_no_external_audit_refs(self) -> None:
+        """VPK01: Clean clone contains only committed files and has no sibling audit references.
+
+        Verifies that no test file references parent or external audit-artifacts paths.
+        """
+        tests_dir = ROOT / "tests"
+        external_refs: list[str] = []
+        for py_file in tests_dir.rglob("*.py"):
+            if py_file.name == "test_packaging_relocatability.py":
+                continue
+            text = py_file.read_text(encoding="utf-8")
+            for idx, line in enumerate(text.splitlines(), start=1):
+                if "audit-artifacts" in line and "parents" in line:
+                    external_refs.append(f"{py_file.name}:{idx}: {line.strip()}")
+        self.assertEqual(
+            external_refs,
+            [],
+            "Found external audit-artifacts references violating self-containment:\n" + "\n".join(external_refs),
+        )
+
+    def test_vpk02_extracted_archive_cold_start_unittest(self) -> None:
+        """VPK02: Aleph full extracted archive runs cold-start unittest without FileNotFoundError.
+
+        Verifies CR07 resolution: tests in isolated directory execute cleanly without external schema paths.
+        """
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            isolated = Path(temporary_dir) / "isolated_aleph"
+            isolated.mkdir(parents=True, exist_ok=True)
+
+            # Copy self-contained repo files into isolated directory (guaranteed no parent audit-artifacts)
+            shutil.copytree(ROOT / "scripts", isolated / "scripts")
+            shutil.copytree(ROOT / "schemas", isolated / "schemas")
+            shutil.copytree(ROOT / "tests", isolated / "tests")
+            for f in ["SKILL.md", "pyproject.toml", "distribution-manifest.json"]:
+                if (ROOT / f).is_file():
+                    shutil.copy2(ROOT / f, isolated / f)
+
+            # Run cold start unittest inside isolated directory
+            env = dict(os.environ)
+            env["PYTHONPATH"] = str(isolated / "scripts")
+            proc = subprocess.run(
+                [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_numerical_cold_start.py"],
+                cwd=str(isolated),
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc.returncode, 0, f"Unittest in isolated directory failed:\nSTDOUT: {proc.stdout}\nSTDERR: {proc.stderr}")
+            self.assertNotIn("FileNotFoundError", proc.stderr)
+            self.assertIn("OK", proc.stderr)
+
+    def test_vpk03_declared_extras_dependencies(self) -> None:
+        """VPK03: Environment declares required dependencies/extras in pyproject.toml."""
+        pyproject_file = ROOT / "pyproject.toml"
+        self.assertTrue(pyproject_file.is_file())
+        text = pyproject_file.read_text(encoding="utf-8")
+        self.assertIn("jsonschema", text)
+        self.assertIn("[project.optional-dependencies]", text)
+
+    def test_vpk04_runtime_profile_minimal_closure(self) -> None:
+        """VPK04: Runtime profile has minimal closure without requiring dev dependencies."""
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            rt_dir = Path(temporary_dir) / "runtime"
+            rt_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(ROOT / "scripts", rt_dir / "scripts")
+            shutil.copytree(ROOT / "schemas", rt_dir / "schemas")
+
+            # Standard library import test of core runtime modules without dev dependencies
+            code = (
+                "import sys; sys.path.insert(0, 'scripts'); "
+                "import aleph; "
+                "import aleph.engine; "
+                "import aleph.validator; "
+                "import aleph.paths; "
+                "print('RUNTIME_CLOSURE_OK')"
+            )
+            proc = subprocess.run(
+                [sys.executable, "-c", code],
+                cwd=str(rt_dir),
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("RUNTIME_CLOSURE_OK", proc.stdout)
+
+    def test_vpk05_full_profile_comprehensive_suite(self) -> None:
+        """VPK05: Full profile contains comprehensive test suite, release tooling, and schemas."""
+        tests_dir = ROOT / "tests"
+        schemas_dir = ROOT / "schemas"
+        scripts_dir = ROOT / "scripts"
+        self.assertTrue(tests_dir.is_dir())
+        self.assertTrue(schemas_dir.is_dir())
+        self.assertTrue(scripts_dir.is_dir())
+
+        test_files = list(tests_dir.glob("test_*.py"))
+        self.assertGreaterEqual(len(test_files), 20, f"Expected full suite (>= 20 files), found {len(test_files)}")
+        self.assertTrue((scripts_dir / "build_release_assets.py").is_file())
+        self.assertTrue((scripts_dir / "validate_skill_package.py").is_file())
+
+    def test_vpk09_profile_schema_closure_verification(self) -> None:
+        """VPK09: Profile schema closure: all catalog-advertised schemas exist on disk."""
+        schemas_dir = ROOT / "schemas"
+        for catalog_name in ["schema-catalog.json", "schema-catalog-2.1.json"]:
+            cat_path = schemas_dir / catalog_name
+            self.assertTrue(cat_path.is_file(), f"Missing catalog {catalog_name}")
+            data = json.loads(cat_path.read_text(encoding="utf-8"))
+            for art_name, rel_schema in data.get("artifacts", {}).items():
+                target = schemas_dir / rel_schema
+                self.assertTrue(target.is_file(), f"Catalog {catalog_name} artifact '{art_name}' references missing {rel_schema}")
+
+    def test_vpk10_unicode_path_and_whitespace_execution(self) -> None:
+        """VPK10: Execution in workspace paths containing Unicode characters and whitespace."""
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            unicode_ws = Path(temporary_dir) / "Không Gian Thử Nghiệm 2026"
+            unicode_ws.mkdir(parents=True, exist_ok=True)
+
+            manifest = {
+                "schema_version": "2.0.0",
+                "manifest_version": "2.1.0",
+                "simulation_mode": "deterministic",
+                "formula_version": "2.1.0",
+                "temporal_frame": {
+                    "simulation_start": "2026-01-01T00:00:00Z",
+                    "timestep": "1d",
+                    "horizon_ticks": 2,
+                },
+                "artifact_paths": {
+                    "nodes": "nodes.json",
+                    "edges": "edges.json",
+                    "run_ledger": "simulation-run.json",
+                    "execution_trace": "execution-trace.json",
+                    "compiled_model": "simulation-model.json",
+                    "replay_report": "replay-report.json",
+                },
+                "seed": 42,
+            }
+            write_json_atomic(unicode_ws / "simulation-manifest.json", manifest)
+            nodes = [
+                {"id": "node:x", "name": "Biến X", "category": "driver", "scale": "level", "domain": [-10.0, 10.0], "initial_value": 5.0},
+                {"id": "node:y", "name": "Biến Y", "category": "state", "scale": "level", "domain": [-10.0, 10.0], "initial_value": 0.0},
+            ]
+            write_json_atomic(unicode_ws / "nodes.json", nodes)
+            edges = [
+                {"id": "causal:x_to_y", "source": "node:x", "target": "node:y", "sign": 1, "strength": 0.5, "lag_ticks": 0, "transform": "linear", "transform_parameters": {}},
+            ]
+            write_json_atomic(unicode_ws / "edges.json", edges)
+
+            run_script = ROOT / "scripts" / "run_simulation.py"
+            proc = subprocess.run(
+                [sys.executable, str(run_script), "--workspace", str(unicode_ws), "--ticks", "2"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc.returncode, 0, f"Run in Unicode path failed:\nSTDOUT: {proc.stdout}\nSTDERR: {proc.stderr}")
+            self.assertTrue((unicode_ws / "execution-trace.json").is_file())
 
 
 if __name__ == "__main__":

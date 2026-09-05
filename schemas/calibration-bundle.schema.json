@@ -1,0 +1,659 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aleph.local/contracts/v2/calibration-bundle.schema.json",
+  "title": "Causal Timeline Calibration Bundle Schema",
+  "description": "Authoritative contract for versioned calibration bundles (V2). Enforces precommitted locked policies, raw observation and dataset provenance, per-case model config hashes, independent metric recomputation (CR04), temporal leakage audits (CR06), and strict tier boundaries (internal_hmac vs uncalibrated).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "domain",
+    "target_variable",
+    "target_horizon",
+    "temporal_cutoff",
+    "policy_manifest",
+    "dataset_snapshots",
+    "per_case_predictions",
+    "realized_outcomes",
+    "recomputed_metrics",
+    "uncertainty_bounds",
+    "temporal_leakage_audit",
+    "hmac_provenance",
+    "assurance_status",
+    "attestation_tier"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "SemVer of this schema specification (e.g. 2.0.0)."
+    },
+    "bundle_id": {
+      "type": "string",
+      "pattern": "^bundle:[0-9a-zA-Z_-]+$",
+      "description": "Unique stable identifier for this calibration bundle."
+    },
+    "domain": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Evaluation domain (e.g. macroeconomics, epidemiology, public_policy)."
+    },
+    "target_variable": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Target metric or outcome variable being evaluated."
+    },
+    "target_horizon": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Forecast horizon (e.g. '1m', '3m', '12m')."
+    },
+    "temporal_cutoff": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Global ISO 8601 UTC timestamp cutoff for input data eligibility."
+    },
+    "policy_manifest": {
+      "$ref": "#/$defs/PolicyManifest"
+    },
+    "dataset_snapshots": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/DatasetSnapshot"
+      },
+      "description": "Registry of raw data files utilized in calibration."
+    },
+    "per_case_predictions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/CasePrediction"
+      },
+      "description": "Individual test case predictions generated before observing realized outcomes."
+    },
+    "realized_outcomes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/RealizedOutcome"
+      },
+      "description": "Verifiable ground-truth realized observations matching each case."
+    },
+    "recomputed_metrics": {
+      "$ref": "#/$defs/RecomputedMetrics"
+    },
+    "uncertainty_bounds": {
+      "$ref": "#/$defs/UncertaintyBounds"
+    },
+    "temporal_leakage_audit": {
+      "$ref": "#/$defs/TemporalLeakageAudit"
+    },
+    "hmac_provenance": {
+      "$ref": "#/$defs/HmacProvenance"
+    },
+    "assurance_status": {
+      "type": "string",
+      "enum": [
+        "calibrated",
+        "uncalibrated",
+        "verified",
+        "experimental",
+        "insufficient_cases",
+        "failed_verification"
+      ],
+      "description": "Overall empirical assurance tier."
+    },
+    "attestation_tier": {
+      "type": "string",
+      "enum": [
+        "external_audit",
+        "internal_hmac",
+        "recomputed_local",
+        "uncalibrated",
+        "untrusted_candidate"
+      ],
+      "description": "Cryptographic and trust provenance level of calibration attestation."
+    }
+  },
+  "$defs": {
+    "PolicyManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_id",
+        "policy_hash",
+        "policy_locked",
+        "commitment_timestamp",
+        "evaluation_type",
+        "model_class",
+        "baseline_model",
+        "metrics_to_evaluate",
+        "thresholds",
+        "min_cases",
+        "allow_synthetic"
+      ],
+      "properties": {
+        "policy_id": {
+          "type": "string"
+        },
+        "policy_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "policy_locked": {
+          "type": "boolean",
+          "description": "True only if policy was locked prior to executing evaluation runs."
+        },
+        "commitment_timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "evaluation_type": {
+          "type": "string",
+          "enum": [
+            "retrospective",
+            "held_out",
+            "prospective"
+          ]
+        },
+        "model_class": {
+          "type": "string"
+        },
+        "baseline_model": {
+          "type": "string",
+          "description": "Registered reference baseline (e.g. 'persistence', 'seasonal_naive')."
+        },
+        "metrics_to_evaluate": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "thresholds": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "min_cases": {
+          "type": "integer",
+          "minimum": 30
+        },
+        "allow_synthetic": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "DatasetSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id",
+        "source_title",
+        "source_url",
+        "vintage_date",
+        "access_date",
+        "file_path",
+        "sha256_digest",
+        "is_synthetic"
+      ],
+      "properties": {
+        "dataset_id": {
+          "type": "string"
+        },
+        "source_title": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "vintage_date": {
+          "type": "string"
+        },
+        "access_date": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "file_path": {
+          "type": "string"
+        },
+        "sha256_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "license": {
+          "type": "string"
+        },
+        "is_synthetic": {
+          "type": "boolean"
+        }
+      }
+    },
+    "CasePrediction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "forecast_origin",
+        "target_period",
+        "model_version",
+        "model_config_hash",
+        "formula_version",
+        "input_snapshot_digests",
+        "input_cutoff_time",
+        "point_prediction"
+      ],
+      "properties": {
+        "case_id": {
+          "type": "string",
+          "pattern": "^case:[0-9a-zA-Z_-]+$"
+        },
+        "forecast_origin": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "target_period": {
+          "type": "string"
+        },
+        "model_version": {
+          "type": "string"
+        },
+        "model_config_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "formula_version": {
+          "type": "string",
+          "enum": [
+            "2.0.0",
+            "2.1.0"
+          ]
+        },
+        "input_snapshot_digests": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "input_cutoff_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "point_prediction": {
+          "type": "number"
+        },
+        "predicted_probabilities": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          }
+        },
+        "seed": {
+          "type": "integer"
+        }
+      }
+    },
+    "RealizedOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "target_period",
+        "actual_value",
+        "official_release_date",
+        "source_authority",
+        "source_url",
+        "dataset_snapshot_digest",
+        "vintage_date",
+        "publication_lag_days"
+      ],
+      "properties": {
+        "case_id": {
+          "type": "string",
+          "pattern": "^case:[0-9a-zA-Z_-]+$"
+        },
+        "target_period": {
+          "type": "string"
+        },
+        "actual_value": {
+          "type": "number"
+        },
+        "event_occurred": {
+          "type": "boolean"
+        },
+        "official_release_date": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source_authority": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "dataset_snapshot_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "vintage_date": {
+          "type": "string"
+        },
+        "publication_lag_days": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "RecomputedMetrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_count",
+        "unique_case_count",
+        "effective_sample_size",
+        "candidate_metrics",
+        "baseline_metrics",
+        "paired_difference",
+        "beats_baseline"
+      ],
+      "properties": {
+        "case_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "unique_case_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "effective_sample_size": {
+          "type": "number",
+          "minimum": 1.0
+        },
+        "candidate_metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mae",
+            "rmse"
+          ],
+          "properties": {
+            "mae": {
+              "type": "number",
+              "minimum": 0.0
+            },
+            "rmse": {
+              "type": "number",
+              "minimum": 0.0
+            },
+            "brier_score": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0
+            },
+            "log_score": {
+              "type": "number"
+            },
+            "crps": {
+              "type": "number",
+              "minimum": 0.0
+            }
+          }
+        },
+        "baseline_metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mae",
+            "rmse"
+          ],
+          "properties": {
+            "mae": {
+              "type": "number",
+              "minimum": 0.0
+            },
+            "rmse": {
+              "type": "number",
+              "minimum": 0.0
+            },
+            "brier_score": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0
+            },
+            "log_score": {
+              "type": "number"
+            },
+            "crps": {
+              "type": "number",
+              "minimum": 0.0
+            }
+          }
+        },
+        "paired_difference": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "delta_mae",
+            "delta_rmse"
+          ],
+          "properties": {
+            "delta_mae": {
+              "type": "number"
+            },
+            "delta_rmse": {
+              "type": "number"
+            },
+            "t_statistic": {
+              "type": "number"
+            },
+            "p_value": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0
+            }
+          }
+        },
+        "beats_baseline": {
+          "type": "boolean"
+        }
+      }
+    },
+    "UncertaintyBounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "confidence_level",
+        "metric_confidence_intervals"
+      ],
+      "properties": {
+        "confidence_level": {
+          "type": "number",
+          "minimum": 0.8,
+          "maximum": 0.999
+        },
+        "metric_confidence_intervals": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "TemporalLeakageAudit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checked",
+        "leakage_violations_count",
+        "duplicate_observations_count",
+        "violations"
+      ],
+      "properties": {
+        "checked": {
+          "type": "boolean"
+        },
+        "leakage_violations_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "duplicate_observations_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "violations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "case_id",
+              "violation_type",
+              "details"
+            ],
+            "properties": {
+              "case_id": {
+                "type": "string"
+              },
+              "violation_type": {
+                "type": "string",
+                "enum": [
+                  "VINTAGE_AFTER_CUTOFF",
+                  "ACCESS_AFTER_CUTOFF",
+                  "OUTCOME_BEFORE_ORIGIN",
+                  "DUPLICATE_SAMPLE_ID",
+                  "ARTIFICIAL_SAMPLE_INFLATION",
+                  "FUTURE_FEATURE_AGGREGATE"
+                ]
+              },
+              "details": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "HmacProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key_identity",
+        "algorithm",
+        "signature",
+        "key_scope",
+        "verified_by_recipient"
+      ],
+      "properties": {
+        "key_identity": {
+          "type": "string"
+        },
+        "algorithm": {
+          "type": "string",
+          "enum": [
+            "HMAC-SHA256",
+            "none"
+          ]
+        },
+        "signature": {
+          "type": "string"
+        },
+        "key_scope": {
+          "type": "string",
+          "enum": [
+            "production",
+            "test_only",
+            "unauthenticated"
+          ]
+        },
+        "verified_by_recipient": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "assurance_status": {
+            "const": "calibrated"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "policy_manifest": {
+            "properties": {
+              "policy_locked": {
+                "const": true
+              },
+              "allow_synthetic": {
+                "const": false
+              }
+            }
+          },
+          "recomputed_metrics": {
+            "properties": {
+              "case_count": {
+                "minimum": 30
+              },
+              "beats_baseline": {
+                "const": true
+              }
+            }
+          },
+          "temporal_leakage_audit": {
+            "properties": {
+              "checked": {
+                "const": true
+              },
+              "leakage_violations_count": {
+                "const": 0
+              },
+              "duplicate_observations_count": {
+                "const": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "attestation_tier": {
+            "const": "internal_hmac"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "hmac_provenance": {
+            "properties": {
+              "key_scope": {
+                "const": "production"
+              },
+              "verified_by_recipient": {
+                "const": true
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

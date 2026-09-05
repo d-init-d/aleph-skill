@@ -213,6 +213,31 @@ class ContainmentSecurityAcceptanceTests(unittest.TestCase):
         delegate = ComponentIntegrationAcceptanceTests()
         delegate.test_i10_path_relocatability()
 
+    def test_vpk08_archive_traversal_and_leak_prevention(self) -> None:
+        """VPK08: Traversal, external symlinks, absolute paths, and secrets are prevented in packaging/extraction."""
+        from aleph.installer import scan_secret_like_files
+        from aleph.paths import validate_relative_artifact_path
+
+        # 1. Prohibited traversal and absolute path patterns are rejected
+        self.assertTrue(bool(validate_relative_artifact_path("../outside.py")))
+        self.assertTrue(bool(validate_relative_artifact_path("/etc/passwd")))
+        self.assertTrue(bool(validate_relative_artifact_path("C:\\Windows\\system32\\cmd.exe")))
+        self.assertTrue(bool(validate_relative_artifact_path("..\\traversal.txt")))
+
+        # 2. Secret-like filenames and keys are caught by scanner
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td)
+            (p / "secrets.json").write_text('{"api_key": "123"}', encoding="utf-8")
+            (p / "server.key").write_text("dummy key", encoding="utf-8")
+            findings = scan_secret_like_files(p)
+            self.assertGreaterEqual(len(findings), 2)
+            self.assertTrue(any("secrets.json" in f.get("path", "") for f in findings))
+
+        # 3. Test that real repo contains zero secret leaks
+        real_findings = scan_secret_like_files(ROOT)
+        real_secrets = [f for f in real_findings if f.get("reason") in {"secret-like filename", "secret-like content"}]
+        self.assertEqual(real_secrets, [], f"Found secret leaks in repository: {real_secrets}")
+
 
 if __name__ == "__main__":
     unittest.main()

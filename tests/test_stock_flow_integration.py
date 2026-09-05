@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 import sys
 import unittest
 from pathlib import Path
@@ -20,8 +19,8 @@ from aleph.engine import (  # noqa: E402
     generate_numerical_execution_trace,
 )
 
-CONTRACTS_DIR = ROOT.parents[1] / "audit-artifacts" / "contracts"
-EXECUTION_TRACE_SCHEMA_PATH = CONTRACTS_DIR / "execution-trace.schema.json"
+SCHEMAS_DIR = ROOT / "schemas"
+EXECUTION_TRACE_SCHEMA_PATH = SCHEMAS_DIR / "execution-trace.schema.json"
 
 
 class StockFlowIntegrationAcceptanceTests(unittest.TestCase):
@@ -61,7 +60,6 @@ class StockFlowIntegrationAcceptanceTests(unittest.TestCase):
         stock_steps = [s for s in steps if s.get("node_id") == "node:stock"]
         self.assertEqual(len(stock_steps), ticks)
 
-        current_analytical_stock = 10.0
         for i, s in enumerate(stock_steps):
             self.assertIn("stock_flow_integrations", s)
             sfi = s["stock_flow_integrations"]
@@ -75,8 +73,6 @@ class StockFlowIntegrationAcceptanceTests(unittest.TestCase):
             expected_integrated = expected_levels[i]
             self.assertAlmostEqual(sfi["integrated_level"], expected_integrated, places=6)
             self.assertAlmostEqual(s["target_state_after"], expected_integrated, places=6)
-
-            current_analytical_stock = expected_integrated
 
 
 if __name__ == "__main__":

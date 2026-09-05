@@ -124,9 +124,7 @@ def build_trace_execution_binding(
                 actual=version,
             )
         ]
-    trace_meta = None
     if isinstance(rows, dict):
-        trace_meta = rows
         rows = rows.get("steps", [])
     if not isinstance(rows, list):
         return None, [issue("TRACE_EXECUTION_BINDING", message="trace rows must be a list")]

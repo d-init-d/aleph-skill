@@ -25,7 +25,12 @@ dependencies = []
 dev = [
   "coverage[toml]>=7.6",
   "mypy>=1.11",
-  "ruff>=0.15"
+  "ruff>=0.15",
+  "jsonschema>=4.20"
+]
+test = [
+  "jsonschema>=4.20",
+  "pytest>=7.0"
 ]
 scientific = [
   "numpy>=1.24",

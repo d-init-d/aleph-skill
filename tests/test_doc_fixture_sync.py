@@ -175,6 +175,62 @@ class DocSyncTests(unittest.TestCase):
                 checked += 1
         self.assertGreaterEqual(checked, 40)
 
+    def test_vux01_aleph_skill_docs_cold_start_instruction(self) -> None:
+        """VUX01: Agent reading Aleph docs uses engine-derived cold-start flow, not manually authored trace."""
+        skill_doc = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        prop_doc = (ROOT / "references" / "propagation-engine.md").read_text(encoding="utf-8")
+
+        # 1. Cold start workflow must be engine-derived
+        self.assertIn("engine_derived", skill_doc)
+        self.assertIn("Cold-start numerical workflow", skill_doc)
+        self.assertIn("engine_derived", prop_doc)
+
+        # 2. Must not contain obsolete instructions to manually author trace numbers before running simulation
+        self.assertNotIn("Manually author numbers", skill_doc)
+        self.assertNotIn("replace propagation-trace.jsonl with an audited trace before simulation", skill_doc.lower())
+        self.assertNotIn("author trace numbers first", skill_doc.lower())
+
+        # 3. Legacy trace replay path is distinct (analyst_authored_legacy)
+        self.assertIn("analyst_authored_legacy", skill_doc)
+        self.assertIn("analyst_authored_legacy", prop_doc)
+
+    def test_vux05_cli_flags_and_schema_links_validation(self) -> None:
+        """VUX05: CLI docs, script entry points, and schema links in documentation are valid and resolved."""
+        skill_doc = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+
+        # 1. Check all schema catalog files and referenced schema artifacts
+        for cat_name in ("schema-catalog.json", "schema-catalog-2.1.json"):
+            cat_path = ROOT / "schemas" / cat_name
+            self.assertTrue(cat_path.is_file(), f"Catalog {cat_name} must exist")
+            cat_data = json.loads(cat_path.read_text(encoding="utf-8"))
+            for art_name, rel_file in cat_data.get("artifacts", {}).items():
+                target = ROOT / "schemas" / rel_file
+                self.assertTrue(
+                    target.is_file(),
+                    f"Catalog {cat_name} references {art_name} -> {rel_file} which does not exist",
+                )
+
+        # 2. Check scripts referenced in SKILL.md exist
+        script_refs = set(re.findall(r"scripts/([a-zA-Z0-9_\-]+\.py)", skill_doc))
+        self.assertTrue(script_refs, "SKILL.md should reference scripts")
+        for script_ref in script_refs:
+            script_path = ROOT / "scripts" / script_ref
+            self.assertTrue(
+                script_path.is_file(),
+                f"Script {script_ref} referenced in SKILL.md does not exist at {script_path}",
+            )
+
+        # 3. Check reference docs linked in SKILL.md exist
+        ref_docs = set(re.findall(r"references/([a-zA-Z0-9_\-]+\.md)", skill_doc))
+        self.assertTrue(ref_docs, "SKILL.md should reference reference docs")
+        for ref_doc in ref_docs:
+            ref_path = ROOT / "references" / ref_doc
+            self.assertTrue(
+                ref_path.is_file(),
+                f"Reference doc {ref_doc} referenced in SKILL.md does not exist at {ref_path}",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
+

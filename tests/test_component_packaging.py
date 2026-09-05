@@ -6,19 +6,23 @@ import hashlib
 import io
 import json
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import lock_bundled_component
-from aleph.component_registry import build_component_lock, locked_component_paths
-from aleph.installer import collect_distribution_files, scan_secret_like_files
-from aleph.paths import is_distribution_path
-from lock_bundled_component import normalize_snapshot
-
 ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = ROOT / "scripts"
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+
+import lock_bundled_component  # noqa: E402
+from aleph.component_registry import build_component_lock, locked_component_paths  # noqa: E402
+from aleph.installer import collect_distribution_files, scan_secret_like_files  # noqa: E402
+from aleph.paths import is_distribution_path  # noqa: E402
+from lock_bundled_component import normalize_snapshot  # noqa: E402
 
 
 class ComponentPackagingTests(unittest.TestCase):
@@ -279,6 +283,30 @@ class ComponentPackagingTests(unittest.TestCase):
         # Adapter registry must not list d-research as install target
         registry = json.loads((ROOT / "adapters" / "registry.json").read_text(encoding="utf-8"))
         self.assertNotIn("d-research", registry.get("adapters", {}))
+
+    def test_vpk06_double_build_deterministic_hashes(self) -> None:
+        """VPK06: Two distinct release asset builds from identical frozen source produce deterministic hashes."""
+        import build_release_assets
+        with tempfile.TemporaryDirectory() as td:
+            out1 = Path(td) / "build1"
+            out2 = Path(td) / "build2"
+            res1 = build_release_assets.build_release_assets(ROOT, out1)
+            res2 = build_release_assets.build_release_assets(ROOT, out2)
+
+            self.assertEqual(res1["status"], "pass")
+            self.assertEqual(res2["status"], "pass")
+            self.assertEqual(res1["archive_sha256"], res2["archive_sha256"])
+            self.assertEqual(res1["runtime_archive_sha256"], res2["runtime_archive_sha256"])
+            self.assertEqual(res1["manifest_sha256"], res2["manifest_sha256"])
+            self.assertEqual(res1["tree_sha256"], res2["tree_sha256"])
+
+    def test_vpk07_bytecode_cache_exclusion(self) -> None:
+        """VPK07: Bytecode and cache directories are strictly excluded from distribution artifacts."""
+        files = collect_distribution_files(ROOT)
+        for path in files:
+            rel = path.relative_to(ROOT).as_posix()
+            self.assertFalse("__pycache__" in rel, f"Bytecode cache found in distribution: {rel}")
+            self.assertFalse(rel.endswith(".pyc") or rel.endswith(".pyo") or rel.endswith(".pyd"), f"Compiled python file found: {rel}")
 
 
 if __name__ == "__main__":

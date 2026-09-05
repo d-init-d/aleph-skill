@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import hashlib
 import math
-from datetime import datetime, timezone
 from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime, timezone
 from typing import Any, cast
 
 from . import FORMULA_VERSION, LEGACY_FORMULA_VERSION, SUPPORTED_FORMULA_VERSIONS

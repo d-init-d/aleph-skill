@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import copy
 import json
-import math
 import shutil
 import sys
 import tempfile
@@ -14,13 +12,11 @@ SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from aleph.io import canonical_hash, sha256_file, write_json_atomic  # noqa: E402
+from aleph.io import canonical_hash, write_json_atomic  # noqa: E402
 from aleph.validator import (  # noqa: E402
     artifact_integrity_hash,
     validate_branches,
-    validate_calibration_artifacts,
     validate_numerical_artifacts,
-    validate_workspace,
 )
 
 FIXTURE = ROOT / "tests" / "fixtures" / "schema-2.0-valid"
