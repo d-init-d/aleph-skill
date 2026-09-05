@@ -5,12 +5,15 @@ from __future__ import annotations
 import argparse
 import io
 import os
+import shutil
 import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
+
+sys.dont_write_bytecode = True
 
 import preflight
 from research_gateway import (
@@ -34,6 +37,20 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ResearchGatewayTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._prev_dont_write_bytecode = sys.dont_write_bytecode
+        sys.dont_write_bytecode = True
+        self._clean_component_bytecode()
+
+    def tearDown(self) -> None:
+        self._clean_component_bytecode()
+        sys.dont_write_bytecode = self._prev_dont_write_bytecode
+
+    def _clean_component_bytecode(self) -> None:
+        comp_cache = ROOT / "components" / "d-research" / "scripts" / "__pycache__"
+        if comp_cache.is_dir():
+            shutil.rmtree(comp_cache, ignore_errors=True)
+
     def test_external_path_requires_separate_allow_flag(self) -> None:
         external = str(ROOT / "components" / "d-research")
         expected = {"status": "ok", "exit_code": 0}
@@ -459,6 +476,36 @@ class ResearchGatewayTests(unittest.TestCase):
         self.assertEqual(result["status"], "delegated")
         self.assertEqual(result["error_code"], "CAPABILITY_NETWORK_UNASSERTED")
         self.assertEqual(result["exit_code"], 0)
+
+    def test_i04_gateway_blocks_unverified_evidence(self) -> None:
+        """I04: Flawed evidence (contradicted/refuted) cannot pass into Aleph factual basis."""
+        from test_component_integration import ComponentIntegrationAcceptanceTests
+        delegate = ComponentIntegrationAcceptanceTests()
+        delegate.test_i04_gateway_blocks_unverified_evidence()
+
+    def test_i05_37_column_policy_import(self) -> None:
+        """I05: 37-column policy ledger preserves record-type semantics and segregates leads."""
+        from test_component_integration import ComponentIntegrationAcceptanceTests
+        delegate = ComponentIntegrationAcceptanceTests()
+        delegate.test_i05_37_column_policy_import()
+
+    def test_i06_gateway_hmac_tamper_detection(self) -> None:
+        """I06: HMAC signature verification fails closed on tampered sidecar or wrong key."""
+        from test_component_integration import ComponentIntegrationAcceptanceTests
+        delegate = ComponentIntegrationAcceptanceTests()
+        delegate.test_i06_gateway_hmac_tamper_detection()
+
+    def test_i15_post_finalize_evidence_change(self) -> None:
+        """I15: Modifying underlying evidence ledger after model compilation invalidates receipts."""
+        from test_component_integration import ComponentIntegrationAcceptanceTests
+        delegate = ComponentIntegrationAcceptanceTests()
+        delegate.test_i15_post_finalize_evidence_change()
+
+    def test_i16_confidence_vs_effect_size_separation(self) -> None:
+        """I16: Evidence confidence score is separate from numeric causal effect strength."""
+        from test_component_integration import ComponentIntegrationAcceptanceTests
+        delegate = ComponentIntegrationAcceptanceTests()
+        delegate.test_i16_confidence_vs_effect_size_separation()
 
 
 if __name__ == "__main__":

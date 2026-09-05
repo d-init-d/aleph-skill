@@ -208,6 +208,12 @@ class BackwardCompatibilityAcceptanceTests(unittest.TestCase):
                 compile_workspace(workspace_mixed)
             self.assertIn("workspace formula contracts disagree", str(ctx.exception))
 
+    def test_i07_legacy_ledger_import(self) -> None:
+        """I07: Legacy 14/19/22/23 column ledgers imported into Aleph."""
+        from test_component_integration import ComponentIntegrationAcceptanceTests
+        delegate = ComponentIntegrationAcceptanceTests()
+        delegate.test_i07_legacy_ledger_import()
+
 
 if __name__ == "__main__":
     unittest.main()

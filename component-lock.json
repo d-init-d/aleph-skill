@@ -7,36 +7,36 @@
       "package_name": "d-research-skill-tools",
       "version": "3.4.1",
       "source_repository": "https://github.com/d-init-d/d-research-skill",
-      "source_tag": "v3.4.1",
-      "upstream_tag_object": "c70b5dde6d15994d9ada54226cfd7eaab217ba88",
-      "upstream_commit": "e159653797308cfb1cd10ec63f51dcc7d69d6066",
-      "upstream_tree": "f6b32e1c99e575d815e72ace7df704388e82a10b",
+      "source_tag": "v3.4.1-candidate",
+      "upstream_tag_object": "fc2e90c4947f60727c779df242fb91b81188f6f9",
+      "upstream_commit": "1c59fd801ca7f6f375b7e45380bb1f2a273a2bfb",
+      "upstream_tree": "3238c23f35955a812dbc523829948835927427e3",
       "source_archive_format": "git-archive-tar",
-      "source_archive_sha256": "sha256:e0a215c3734457244b337a881444afe072353ce01b42c88c7b6fd0248ef710b8",
+      "source_archive_sha256": "sha256:807ea332ca5fe51e38048054606367f455f1797e1bf462576f46a62fc2251e2b",
       "source_artifacts": {
         "workflow_source": {
           "name": "d-research-skill-v3.4.1.tar.gz",
-          "sha256": "sha256:56e1e93abcf2063f33f28ee3c38390bbba8a75d2fdbff3a8a94dbd6162b9b3cd"
+          "sha256": "sha256:abcd9129d08a678fe40fc6d02e8c9b7f10aa9a8515156f0f9a8668720d971785"
         },
         "full_profile": {
           "name": "d-research-3.4.1-full.tar.gz",
-          "sha256": "sha256:94c5942a9be680f7d850887e8d25a1c4bd0a48921a2e2abd2ae2f30a3b8c31ea",
+          "sha256": "sha256:b2248b65bdfcc678c396b9595156ed04ac54ea361d435cedb85931933dfd7f90",
           "manifest_name": "d-research-3.4.1-full.manifest.json",
-          "manifest_sha256": "sha256:e33294dd86a44acb1594527487ea3aad3b81e1d6b63de45ca57a31640ede66e8",
-          "file_count": 760
+          "manifest_sha256": "sha256:83f761a699147ead51c9522a32a8f92522149a83c1694d7855ca45c173fa1170",
+          "file_count": 761
         },
         "runtime_profile": {
           "name": "d-research-3.4.1-runtime.tar.gz",
-          "sha256": "sha256:fb7e570bc8b6771fffd67259f69948177ab853ee039c6bea79eac464f456e8be",
+          "sha256": "sha256:9cfaec1da5affeae625850b1713efde1bb8621f471f61d4aae17750ded3e2785",
           "manifest_name": "d-research-3.4.1-runtime.manifest.json",
-          "manifest_sha256": "sha256:52316beac3d9df8f9cb6a98b7312f676f7224b53a3c248fcdbb62f3503fae937",
-          "file_count": 213,
-          "tree_sha256": "sha256:3b9ce9ed0c98c0cf5c582c0c4e0ffcbe3b09e4262c84f81f812147c414806419",
-          "ordered_paths_sha256": "sha256:cc18f9f23ecc108e83d5c860f3ac84a216572980a0e73c79a6be032e03599d3e"
+          "manifest_sha256": "sha256:00ae966c38b04edc70387ee10f530034caf78cc0dbbc962fb7ebffbd4de62bf0",
+          "file_count": 214,
+          "tree_sha256": "sha256:8a604f217f8a3c04c21c9fc20f34e7b18bd40a32f717d3e60295e24cff7c3a5c",
+          "ordered_paths_sha256": "sha256:bf2b05bb48d788c7af460cc4ba3b74393b76bbdc8d49972c375373e0c5143a62"
         },
         "interop_contract": {
           "path": "templates/interop-contract.json",
-          "source_sha256": "sha256:73f4fcb9b35bda2cdf14d175009c7e2fb6dcf271932ec78f34dcaa4ce030f590",
+          "source_sha256": "sha256:e6be95c31627e4a87441939ecd33fbb73d841b0826be372b41fe9d93f98e6660",
           "normalized_sha256": "sha256:e6be95c31627e4a87441939ecd33fbb73d841b0826be372b41fe9d93f98e6660"
         }
       },
@@ -591,7 +591,18 @@
           "release-evidence/v3.4.0/local-verification.json",
           "release-evidence/v3.4.0/maintainer-override.json",
           "release-evidence/v3.4.1/local-verification.json",
-          "release-evidence/v3.4.1/maintainer-override.json"
+          "release-evidence/v3.4.1/maintainer-override.json",
+          "schemas/report-claims.schema.json",
+          "tests/test_claim_integrity.py",
+          "tests/test_evidence_ledger_rules.py",
+          "tests/test_normalization_guards.py",
+          "tests/test_release_gates_integration.py",
+          "tests/test_report_bidirectional.py",
+          "tests/test_semantic_review_router.py",
+          "tests/test_snapshot_binding.py",
+          "tests/test_social_offline_dns.py",
+          "tests/test_ssrf_production_guards.py",
+          "tests/test_trust_boundary.py"
         ],
         "text_eol": "lf",
         "forbidden_paths": [
@@ -620,13 +631,13 @@
           {
             "path": "package.json",
             "transform": "runtime-package-v1",
-            "source_sha256": "sha256:07e92a61fb7dd21d8d1cba51a141eaf4f592b1f7a6f3a787cdffb33a09b4121e",
+            "source_sha256": "sha256:1f211fa74345abdef009de0a85860c0ca6ef33fc69b89ea06bba110fec70e6d3",
             "output_sha256": "sha256:5391568ff99ba3ff0a4920632f2d4be61bce05f90294fa40de8c2e736da6818c"
           }
         ]
       },
-      "tree_sha256": "sha256:0555d49ddb6b11929f70387838c51917a3236a219a2f8853beba1a61bd9b9ee1",
-      "file_count": 213,
+      "tree_sha256": "sha256:10bbad0168d2ac2b160943954209a95da46a0da119d2ec385a623174ab52abdb",
+      "file_count": 214,
       "entrypoints": [
         "scripts/evidence_ledger.py",
         "scripts/investigation_policy.py",
@@ -1541,8 +1552,8 @@
         },
         {
           "path": "scripts/quality_eval.py",
-          "size": 184149,
-          "sha256": "sha256:8df38865479f3c2832a950dc508597a4614b99015fda1b54f1c238d792c819e9"
+          "size": 192257,
+          "sha256": "sha256:ab53b8126f51180a913fb006740768eb7477ec9f14ded1a27ab89d4b269429e6"
         },
         {
           "path": "scripts/release_verify.py",
@@ -1551,8 +1562,8 @@
         },
         {
           "path": "scripts/report_render.py",
-          "size": 63316,
-          "sha256": "sha256:7958fdb740eb09ad3f560f4f151676b7e0e9297e741f3b91571153f80520fece"
+          "size": 97608,
+          "sha256": "sha256:65822dd6a3ee95efd4d35224f04938c2414f8dedf59f7fb15116288f78af3e14"
         },
         {
           "path": "scripts/research_plan.py",
@@ -1591,8 +1602,8 @@
         },
         {
           "path": "scripts/social_snapshot.py",
-          "size": 77085,
-          "sha256": "sha256:dd47e8f161d8939de52b5d8b8193a291d2d61a6599922eedce916d255531b915"
+          "size": 78874,
+          "sha256": "sha256:da3cb013ba43fae1bde1c6247bb552d9c1864ad84f553bf846e938c9879d1efa"
         },
         {
           "path": "scripts/translate.py",
@@ -1675,6 +1686,11 @@
           "sha256": "sha256:b47a6e9733cbc9a527963a5a6c17b22136f0465499b482f8240eb0a2dbe6a66b"
         },
         {
+          "path": "templates/report-claims.schema.json",
+          "size": 11867,
+          "sha256": "sha256:72a59b03da2f2ff5d10f81fac1633b1fe7f37e08c4cfd099323e2d0863f386a3"
+        },
+        {
           "path": "templates/report-template.md",
           "size": 272,
           "sha256": "sha256:fb2167b595c47b2dfc5908e98a57bbb57220a01ecfdc86a63cc2a7a3e5573660"
@@ -1700,7 +1716,7 @@
           "sha256": "sha256:743b8c25836a152470d13c117d01212cfa5c95f76c39c65b342792e523e1ad39"
         }
       ],
-      "pin_note": "Embeddable snapshot derived from upstream v3.4.1 commit e1596537: exact repository-only release/CI/dogfood-evidence paths are excluded, text bytes are LF-normalized, and the upstream npm path manifest is preserved. Tag, Git tree, reproducible git-archive, recipe, per-file, and component-tree digests are independently verifiable."
+      "pin_note": "v3.4.1 candidate commit 1c59fd8 (Gate G3 integration)"
     }
   }
 }

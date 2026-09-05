@@ -3,8 +3,8 @@
   "package_version": "2.4.1",
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
-  "file_count": 484,
-  "tree_sha256": "c717d52ef09fe66146119662da462718f6d7f345bffd4bf60cf7ce0fbd640fba",
+  "file_count": 490,
+  "tree_sha256": "43863695f92c881244250831d1e30a3d310f06a36f254cc4824520269b3a0964",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -58,8 +58,8 @@
     },
     {
       "path": ".github/workflows/verify.yml",
-      "sha256": "786cfaf4a1b4e9840169afbf0bafcadbefe538c50e0b53d9ac898511b2eee851",
-      "size": 9695
+      "sha256": "c05b265b47618049268862c4cf12a89a56e092c1fe742706f61d69cd00a7f5e7",
+      "size": 9705
     },
     {
       "path": "AGENTS.md",
@@ -148,8 +148,8 @@
     },
     {
       "path": "component-lock.json",
-      "sha256": "3f06f491d0c9635467b3bc2aee7706da86a3aefe0f84639e05ecdc30f93830e0",
-      "size": 88519
+      "sha256": "c14c21f140db0533623dfe8cc83c9f45ff41b8d01410fdf1bbd34aca0dd66a80",
+      "size": 88969
     },
     {
       "path": "components/d-research/AGENTS.md",
@@ -1058,8 +1058,8 @@
     },
     {
       "path": "components/d-research/scripts/quality_eval.py",
-      "sha256": "8df38865479f3c2832a950dc508597a4614b99015fda1b54f1c238d792c819e9",
-      "size": 184149
+      "sha256": "ab53b8126f51180a913fb006740768eb7477ec9f14ded1a27ab89d4b269429e6",
+      "size": 192257
     },
     {
       "path": "components/d-research/scripts/release_verify.py",
@@ -1068,8 +1068,8 @@
     },
     {
       "path": "components/d-research/scripts/report_render.py",
-      "sha256": "7958fdb740eb09ad3f560f4f151676b7e0e9297e741f3b91571153f80520fece",
-      "size": 63316
+      "sha256": "65822dd6a3ee95efd4d35224f04938c2414f8dedf59f7fb15116288f78af3e14",
+      "size": 97608
     },
     {
       "path": "components/d-research/scripts/research_plan.py",
@@ -1108,8 +1108,8 @@
     },
     {
       "path": "components/d-research/scripts/social_snapshot.py",
-      "sha256": "dd47e8f161d8939de52b5d8b8193a291d2d61a6599922eedce916d255531b915",
-      "size": 77085
+      "sha256": "da3cb013ba43fae1bde1c6247bb552d9c1864ad84f553bf846e938c9879d1efa",
+      "size": 78874
     },
     {
       "path": "components/d-research/scripts/translate.py",
@@ -1190,6 +1190,11 @@
       "path": "components/d-research/templates/register-vocab-log.csv",
       "sha256": "b47a6e9733cbc9a527963a5a6c17b22136f0465499b482f8240eb0a2dbe6a66b",
       "size": 815
+    },
+    {
+      "path": "components/d-research/templates/report-claims.schema.json",
+      "sha256": "72a59b03da2f2ff5d10f81fac1633b1fe7f37e08c4cfd099323e2d0863f386a3",
+      "size": 11867
     },
     {
       "path": "components/d-research/templates/report-template.md",
@@ -1893,8 +1898,8 @@
     },
     {
       "path": "scripts/lock_bundled_component.py",
-      "sha256": "d8a88d91844e5186bc1409cec5eacbff902230f01254ab8a2a5aee5a4f690763",
-      "size": 16439
+      "sha256": "9722d8ee80a1b5d60b96fd2205a144dc1f35bf73a16e0893424224281de06114",
+      "size": 16620
     },
     {
       "path": "scripts/migrate_workspace.py",
@@ -1923,8 +1928,8 @@
     },
     {
       "path": "scripts/research_gateway.py",
-      "sha256": "f1763dbd9427b7664422f0ec12b632c8b785c2b98bf107dafdb0e7c467da0f58",
-      "size": 76548
+      "sha256": "18741c70d112e1c19eff67b904995a886ee65a59e18a6146d789b95573e5523a",
+      "size": 76718
     },
     {
       "path": "scripts/run_hindcast.py",
@@ -2162,6 +2167,11 @@
       "size": 31461
     },
     {
+      "path": "tests/test_actor_isolation.py",
+      "sha256": "9bf84e366d10779c1316bf5921b1977f8c39df841610f9247fbb9b3650f45424",
+      "size": 688
+    },
+    {
       "path": "tests/test_adapters_v201.py",
       "sha256": "da96c036133bfc08ef169db439c676e1c76d780ca33fa83b38d8e314ffe97344",
       "size": 9241
@@ -2173,8 +2183,13 @@
     },
     {
       "path": "tests/test_backward_compatibility.py",
-      "sha256": "adce5740e06305d551692b93a4f690bb5c0b1042bed234d499d526617e384433",
-      "size": 10195
+      "sha256": "ac586069d7b37741a19491b6218c10a93c85355a9a35be171184cd435c065d04",
+      "size": 10512
+    },
+    {
+      "path": "tests/test_bundled_component_parity.py",
+      "sha256": "0bc0c4ddcc82c92a7285f0f995c4d4aefe092329a5ba126c9d06b9f834025b1a",
+      "size": 956
     },
     {
       "path": "tests/test_calibration_validator.py",
@@ -2187,9 +2202,19 @@
       "size": 11057
     },
     {
+      "path": "tests/test_component_integration.py",
+      "sha256": "81c4cf576956a3a47cd620fc9e0d388d0995033708f7408698db9b915dd010ad",
+      "size": 31350
+    },
+    {
       "path": "tests/test_component_packaging.py",
-      "sha256": "65475d5ad2b86d628863d387bf9af7b1cf881c3a7689558365644a8906b37c34",
-      "size": 13245
+      "sha256": "5367ca10b75e19d6d80de81335a3a0e25f3721c34749a0e8549c61c3638d8ced",
+      "size": 13315
+    },
+    {
+      "path": "tests/test_component_provenance.py",
+      "sha256": "09e6d914db450a678a0a32bec2eff42eed843fa60285c69f069a3139ee29b95f",
+      "size": 829
     },
     {
       "path": "tests/test_component_registry.py",
@@ -2198,8 +2223,8 @@
     },
     {
       "path": "tests/test_containment_security.py",
-      "sha256": "5b7df7ef7a0bd37544eb9b59837841b4337da8e1a635a88e439ca52f4c00cae0",
-      "size": 10311
+      "sha256": "7b6175baab350c79694e1df03b93faccacc73d390e2399c37813145e45283a47",
+      "size": 10653
     },
     {
       "path": "tests/test_deterministic_replay.py",
@@ -2270,6 +2295,11 @@
       "path": "tests/test_gate_pipeline_integration.py",
       "sha256": "2b71f62f2e66cf7371a4d4e4d13bf87873169728f076874d4a5bc6e423aad094",
       "size": 5852
+    },
+    {
+      "path": "tests/test_gateway_fallbacks.py",
+      "sha256": "32a0a3e999e379e7d89b77cecc2df0786a5b89738746df77013d5a451a1e0d05",
+      "size": 696
     },
     {
       "path": "tests/test_import_audit_stream.py",
@@ -2353,8 +2383,8 @@
     },
     {
       "path": "tests/test_research_gateway.py",
-      "sha256": "42676fc5764548318680f3e86688254d149c116b3e19d8b3bf8f25971e8118da",
-      "size": 19506
+      "sha256": "24fde93c107be9f44ed7f17168c6994cd87f431881c81a9c36c0537b758e60e6",
+      "size": 21890
     },
     {
       "path": "tests/test_research_receipt_binding.py",

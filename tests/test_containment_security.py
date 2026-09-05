@@ -207,6 +207,12 @@ class ContainmentSecurityAcceptanceTests(unittest.TestCase):
             self.assertTrue(len(alias_issues) > 0)
             self.assertEqual(alias_issues[0].code, "PATH_ALIAS")
 
+    def test_i10_path_relocatability(self) -> None:
+        """I10: Workspaces relocated across directories or paths containing non-ASCII characters."""
+        from test_component_integration import ComponentIntegrationAcceptanceTests
+        delegate = ComponentIntegrationAcceptanceTests()
+        delegate.test_i10_path_relocatability()
+
 
 if __name__ == "__main__":
     unittest.main()
