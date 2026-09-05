@@ -8,30 +8,30 @@
       "version": "3.4.1",
       "source_repository": "https://github.com/d-init-d/d-research-skill",
       "source_tag": "upgrade/v2-evidence-verification",
-      "upstream_tag_object": "94e464b0a1cebf705b2b29490ffd83485bc17341",
-      "upstream_commit": "94e464b0a1cebf705b2b29490ffd83485bc17341",
-      "upstream_tree": "2e57caa61344452a7d1ba7c1f625400830f1e332",
+      "upstream_tag_object": "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c",
+      "upstream_commit": "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c",
+      "upstream_tree": "a656db578f8742436d696931c6ee3703be1a5ac7",
       "source_archive_format": "git-archive-tar",
-      "source_archive_sha256": "sha256:7925b0a3722d4f876af7b819f138d8461bb3309d557d2f4af8e3c6fb180fc79c",
+      "source_archive_sha256": "sha256:3dfd5a2fe5cbaa127282bd98ea75fd7df9ed2812e8e14db515a248a1a526eeab",
       "source_artifacts": {
         "workflow_source": {
           "name": "d-research-skill-v3.4.1.tar.gz",
-          "sha256": "sha256:7925b0a3722d4f876af7b819f138d8461bb3309d557d2f4af8e3c6fb180fc79c"
+          "sha256": "sha256:3dfd5a2fe5cbaa127282bd98ea75fd7df9ed2812e8e14db515a248a1a526eeab"
         },
         "full_profile": {
           "name": "d-research-3.4.1-full.tar.gz",
-          "sha256": "sha256:5b40faea18c6f2c3106d90e0bfb73eafacd019ddf20ebeb4dc4e527057f2b422",
+          "sha256": "sha256:d202ce627cc4e9ffb625c45da92c93b79c96140ce0f52539b8e72ae638db28ca",
           "manifest_name": "d-research-3.4.1-full.manifest.json",
-          "manifest_sha256": "sha256:a2eed5412817c196fa2d568326ed9b50d15ed03ac0bce4039622df7dd0e023e6",
-          "file_count": 776
+          "manifest_sha256": "sha256:4fff1bbac385abcefac1f3d2b6a20979603283de52fda051e27a73f21b982607",
+          "file_count": 777
         },
         "runtime_profile": {
           "name": "d-research-3.4.1-runtime.tar.gz",
-          "sha256": "sha256:e6c3a264bff76427aa6b63eb293b2b50d4d4a65b66390a836fbb06e8028c5cea",
+          "sha256": "sha256:45c69ab017a71a8c2a0848c2e759e6595b8be1ec6a6c7984cb8c491db0a4a5c6",
           "manifest_name": "d-research-3.4.1-runtime.manifest.json",
-          "manifest_sha256": "sha256:6e1c77fdbca82fc9cc42b73f8d541c646f0606c00e07b4820f7cd787e69199f8",
+          "manifest_sha256": "sha256:fc806f93b65f4ff743231efca6d4c687456d26df610fcfba35be3d2f401288a5",
           "file_count": 217,
-          "tree_sha256": "sha256:d7498d7bf8dec3cec7bc82ed36790db39a34fd6c52643736a1117b045d94bb0d",
+          "tree_sha256": "sha256:97ad3a6dc4381a4659092d80a9b9a34a656b23bd6f17e7a459495771909a23fd",
           "ordered_paths_sha256": "sha256:892e22a7a0890e5bc2fd77c9c4987d96ea4f3775dab8f3212dbc73b4ba002b6c"
         },
         "interop_contract": {
@@ -603,7 +603,8 @@
           "tests/test_snapshot_binding.py",
           "tests/test_social_offline_dns.py",
           "tests/test_ssrf_production_guards.py",
-          "tests/test_trust_boundary.py"
+          "tests/test_trust_boundary.py",
+          "tests/test_vev_acceptance.py"
         ],
         "text_eol": "lf",
         "forbidden_paths": [
@@ -637,7 +638,7 @@
           }
         ]
       },
-      "tree_sha256": "sha256:f473e26ed8a171b8bda81def10d71e5d8f1743e53c2ef9d1b561939cbca0e934",
+      "tree_sha256": "sha256:2e64972d4b806559c7415f6b441872447e16e87cdf702bfdcc0e24d3cf84169f",
       "file_count": 217,
       "entrypoints": [
         "scripts/evidence_ledger.py",
@@ -1458,8 +1459,8 @@
         },
         {
           "path": "scripts/eval_harness.py",
-          "size": 21927,
-          "sha256": "sha256:ed37b1320c4ebb14c777836b2481b65caa120e3b96bbb538946489cb229ca7ea"
+          "size": 34586,
+          "sha256": "sha256:aed038e276c8884d4081cbf43a46820a6813da60b67d5c6b01d8600310720791"
         },
         {
           "path": "scripts/evidence_ledger.py",
@@ -1732,7 +1733,7 @@
           "sha256": "sha256:743b8c25836a152470d13c117d01212cfa5c95f76c39c65b342792e523e1ad39"
         }
       ],
-      "tree_hash": "sha256:f473e26ed8a171b8bda81def10d71e5d8f1743e53c2ef9d1b561939cbca0e934",
+      "tree_hash": "sha256:2e64972d4b806559c7415f6b441872447e16e87cdf702bfdcc0e24d3cf84169f",
       "file_manifest": [
         {
           "path": "AGENTS.md",
@@ -2546,8 +2547,8 @@
         },
         {
           "path": "scripts/eval_harness.py",
-          "size": 21927,
-          "sha256": "sha256:ed37b1320c4ebb14c777836b2481b65caa120e3b96bbb538946489cb229ca7ea"
+          "size": 34586,
+          "sha256": "sha256:aed038e276c8884d4081cbf43a46820a6813da60b67d5c6b01d8600310720791"
         },
         {
           "path": "scripts/evidence_ledger.py",
@@ -2820,13 +2821,13 @@
           "sha256": "sha256:743b8c25836a152470d13c117d01212cfa5c95f76c39c65b342792e523e1ad39"
         }
       ],
-      "pin_note": "v3.4.1 candidate commit 94e464b (Gate G4 bundled component sync)",
+      "pin_note": "v3.4.1 candidate commit c6e9e93 (Gate G5 evaluation & benchmark sync)",
       "upstream_repo": "repos/d-research-skill",
       "synced_at": "2026-09-05T10:15:00Z"
     }
   },
   "upstream_repo": "repos/d-research-skill",
-  "upstream_commit": "94e464b0a1cebf705b2b29490ffd83485bc17341",
+  "upstream_commit": "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c",
   "synced_at": "2026-09-05T10:15:00Z",
   "version": "3.4.1"
 }

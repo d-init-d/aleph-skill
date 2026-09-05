@@ -75,19 +75,19 @@ class ComponentPackagingTests(unittest.TestCase):
         self.assertEqual(len(entry["upstream_tree"]), 40)
         self.assertIn(
             entry["upstream_commit"],
-            ("1c59fd801ca7f6f375b7e45380bb1f2a273a2bfb", "94e464b0a1cebf705b2b29490ffd83485bc17341"),
+            ("1c59fd801ca7f6f375b7e45380bb1f2a273a2bfb", "94e464b0a1cebf705b2b29490ffd83485bc17341", "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c"),
         )
         self.assertIn(
             entry["upstream_tag_object"],
-            ("fc2e90c4947f60727c779df242fb91b81188f6f9", "94e464b0a1cebf705b2b29490ffd83485bc17341"),
+            ("fc2e90c4947f60727c779df242fb91b81188f6f9", "94e464b0a1cebf705b2b29490ffd83485bc17341", "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c"),
         )
         self.assertIn(
             entry["upstream_tree"],
-            ("3238c23f35955a812dbc523829948835927427e3", "2e57caa61344452a7d1ba7c1f625400830f1e332"),
+            ("3238c23f35955a812dbc523829948835927427e3", "2e57caa61344452a7d1ba7c1f625400830f1e332", "a656db578f8742436d696931c6ee3703be1a5ac7"),
         )
         recipe = entry["snapshot_recipe"]
         self.assertEqual(recipe["text_eol"], "lf")
-        self.assertIn(len(recipe["excluded_paths"]), (558, 559))
+        self.assertIn(len(recipe["excluded_paths"]), (558, 559, 560))
         self.assertIn(".github/workflows/release-attest.yml", recipe["excluded_paths"])
         self.assertIn("release-evidence/v3.2.1/promotion.json", recipe["excluded_paths"])
         self.assertIn(
@@ -118,7 +118,7 @@ class ComponentPackagingTests(unittest.TestCase):
         self.assertIn(source_artifacts["runtime_profile"]["file_count"], (214, 217))
         self.assertTrue(source_artifacts["workflow_source"]["sha256"].startswith("sha256:"))
         self.assertTrue(entry["source_archive_sha256"].startswith("sha256:"))
-        self.assertTrue(any(c in entry["pin_note"] for c in ("1c59fd8", "94e464b")))
+        self.assertTrue(any(c in entry["pin_note"] for c in ("1c59fd8", "94e464b", "c6e9e93")))
 
     def test_component_lock_is_reproducible_and_fully_distributed(self) -> None:
         existing = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))
