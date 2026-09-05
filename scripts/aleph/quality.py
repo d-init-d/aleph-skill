@@ -464,24 +464,25 @@ def evaluate(
         and isinstance(sensitivity.get("analysis"), dict)
     )
     calibration = _load_optional_json(workspace, paths.get("calibration_report"))
+    if calibration is None:
+        calibration = _load_optional_json(workspace, paths.get("calibration_bundle"))
+    hash_key = "bundle_hash" if isinstance(calibration, dict) and "bundle_hash" in calibration else "report_hash"
     calibration_body = (
-        {key: value for key, value in calibration.items() if key != "report_hash"}
+        {key: value for key, value in calibration.items() if key not in ("report_hash", "bundle_hash")}
         if isinstance(calibration, dict)
         else {}
     )
+    cal_hash_ok = bool(
+        calibration
+        and hash_key in calibration
+        and calibration.get(hash_key) == canonical_hash(calibration_body)
+    )
     calibrated = bool(
         manifest.get("likelihood_mode") == "calibrated_probability"
-        and calibration
-        and calibration.get("status") == "pass"
-        and calibration.get("policy_locked") is True
-        and calibration.get("beats_baseline") is True
-        and calibration.get("formula_version")
-        == manifest.get("formula_version", LEGACY_FORMULA_VERSION)
-        and calibration.get("case_count") == calibration.get("unique_case_count")
-        and isinstance(calibration.get("case_count"), int)
-        and calibration.get("case_count", 0) >= 30
-        and calibration.get("report_hash") == canonical_hash(calibration_body)
-        and numerical_metrics.get("calibration_present") is True
+        and numerical_metrics.get("calibration_verified") is True
+        and not numerical_metrics.get("is_synthetic", False)
+        and numerical_metrics.get("beats_baseline") is True
+        and cal_hash_ok
     )
     high_severity_warning = bool(
         near_duplicates
@@ -509,11 +510,28 @@ def evaluate(
         tier: str | None = None
         assurance = "failed"
     elif all(verified_requirements.values()):
-        tier = "calibrated" if calibrated else "verified"
-        assurance = tier
+        if calibrated:
+            tier = "calibrated"
+            assurance = "calibrated"
+        elif numerical_metrics.get("is_synthetic"):
+            tier = "experimental"
+            assurance = "synthetic_experimental"
+        elif numerical_metrics.get("calibration_present") and not numerical_metrics.get("beats_baseline"):
+            tier = "uncalibrated"
+            assurance = "uncalibrated"
+        else:
+            tier = "verified"
+            assurance = tier
     elif validation.get("status") == "pass":
-        tier = "limited"
-        assurance = "limited"
+        if numerical_metrics.get("is_synthetic"):
+            tier = "limited"
+            assurance = "synthetic_experimental"
+        elif numerical_metrics.get("calibration_present") and not numerical_metrics.get("beats_baseline"):
+            tier = "limited"
+            assurance = "uncalibrated"
+        else:
+            tier = "limited"
+            assurance = "limited"
     else:
         tier = "experimental"
         assurance = "experimental"

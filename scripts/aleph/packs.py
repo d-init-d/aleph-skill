@@ -239,23 +239,48 @@ def evaluate_hindcast_case(case: dict[str, Any], *, policy: dict[str, Any] | Non
         problems.append(issue("TYPE", pointer="/evidence", message="evidence must be an array"))
     else:
         for index, evidence in enumerate(raw_evidence):
-            if not isinstance(evidence, dict) or not evidence.get("available_at"):
-                problems.append(issue("SCHEMA", pointer=f"/evidence/{index}", message="available_at required"))
+            if not isinstance(evidence, dict) or not (evidence.get("available_at") or evidence.get("vintage_date") or evidence.get("publication_date")):
+                problems.append(issue("SCHEMA", pointer=f"/evidence/{index}", message="available_at or vintage_date required"))
                 continue
             evidence_rows.append(evidence)
+            v_val = evidence.get("vintage_date") or evidence.get("publication_date") or evidence.get("available_at")
             try:
-                available = _utc_datetime(evidence["available_at"])
+                available = _utc_datetime(v_val)
                 if cutoff_dt and available > cutoff_dt:
                     problems.append(
                         issue(
                             "PACKET_CUTOFF",
                             pointer=f"/evidence/{index}",
                             actual=evidence.get("id"),
-                            message="post-cutoff leakage",
+                            message="VINTAGE_AFTER_CUTOFF: post-cutoff leakage",
                         )
                     )
             except (TypeError, ValueError):
                 problems.append(issue("SCHEMA", pointer=f"/evidence/{index}/available_at", message="ISO-8601 required"))
+            if evidence.get("access_date") and not evidence.get("vintage_date") and evidence.get("is_revised"):
+                problems.append(
+                    issue(
+                        "VINTAGE_LIMITATION",
+                        pointer=f"/evidence/{index}",
+                        message="revised dataset lacks point-in-time vintage: access date cannot substitute for vintage date",
+                        severity="warning",
+                    )
+                )
+    outcome_date = case.get("official_release_date") or case.get("observed_at")
+    if outcome_date and cutoff_dt:
+        try:
+            out_dt = _utc_datetime(outcome_date)
+            if out_dt < cutoff_dt:
+                problems.append(
+                    issue(
+                        "PACKET_CUTOFF",
+                        pointer="/outcome",
+                        actual=str(outcome_date),
+                        message="OUTCOME_BEFORE_ORIGIN: realized outcome released before cutoff",
+                    )
+                )
+        except (TypeError, ValueError):
+            pass
     declared_snapshot = case.get("evidence_snapshot_hash")
     actual_snapshot = evidence_snapshot_hash(evidence_rows)
     if not isinstance(declared_snapshot, str) or not HEX64.fullmatch(declared_snapshot):
@@ -319,6 +344,13 @@ def evaluate_hindcast_case(case: dict[str, Any], *, policy: dict[str, Any] | Non
     baselines = case.get("baselines")
     if not model.variables or not isinstance(observations, dict) or not observations or not isinstance(baselines, dict):
         problems.append(issue("SCHEMA", message="inline model, observations, and baselines are required"))
+    else:
+        for k, v in observations.items():
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)):
+                problems.append(issue("TYPE", pointer=f"/observations/{k}", message="observation must be a finite number, not boolean, NaN, or Infinity"))
+        for k, v in baselines.items():
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)):
+                problems.append(issue("TYPE", pointer=f"/baselines/{k}", message="baseline must be a finite number, not boolean, NaN, or Infinity"))
     raw_config_data = case.get("config")
     config_data: dict[str, Any] = raw_config_data if isinstance(raw_config_data, dict) else {}
     allowed = set(EngineConfig.__dataclass_fields__)
@@ -330,6 +362,16 @@ def evaluate_hindcast_case(case: dict[str, Any], *, policy: dict[str, Any] | Non
         problems.append(issue("SCHEMA", pointer="/config", message=str(exc)))
         return {"ok": False, "issues": [value.to_dict() for value in problems]}
     model_digest = model_hash(model)
+    if "model_hash" in case and case.get("model_hash") != model_digest:
+        problems.append(
+            issue(
+                "TRACK_MISMATCH",
+                pointer="/model_hash",
+                expected=model_digest,
+                actual=case.get("model_hash"),
+                message="case prediction references mismatched model_hash",
+            )
+        )
     config_digest = canonical_hash(config_payload(config))
     commitment_payload = hindcast_commitment_payload(
         case,

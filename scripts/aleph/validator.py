@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, cast
 
@@ -32,6 +32,7 @@ from .io import (
     ResourceLimitError,
     canonical_hash,
     load_json_secure,
+    load_jsonl_secure,
     load_workspace_artifact,
     sha256_file,
     validate_workspace_budget,
@@ -2493,14 +2494,37 @@ def validate_branches(
                 issues.append(issue("SCHEMA", pointer="branch_ledger.calibration.model_hash", message="must be SHA-256"))
         raw_paths = manifest.get("artifact_paths")
         artifact_paths = raw_paths if isinstance(raw_paths, dict) else {}
-        if not nonempty_str(artifact_paths.get("calibration_report")):
+        if not (nonempty_str(artifact_paths.get("calibration_report")) or nonempty_str(artifact_paths.get("calibration_bundle"))):
             issues.append(
                 issue(
                     "MISSING_ARTIFACT",
                     pointer="manifest.artifact_paths.calibration_report",
-                    message="calibrated probability requires a calibration report",
+                    message="calibrated probability requires a calibration report or bundle",
                 )
             )
+        cal_method = str(calibration.get("method", "")).lower()
+        cal_target = str(calibration.get("target_variable", "")).lower()
+        manifest_scope = manifest.get("scope") if isinstance(manifest.get("scope"), dict) else {}
+        cal_domain = str(calibration.get("domain") or manifest_scope.get("domain", "")).lower()
+        branches_list = data.get("branches") or []
+        branch_domains = {str(b.get("domain")).lower() for b in branches_list if isinstance(b, dict) and b.get("domain")}
+        if cal_domain == "economics" and any(d == "geopolitics" for d in branch_domains):
+            issues.append(
+                issue(
+                    "SCOPE_MISMATCH",
+                    pointer="branch_ledger.calibration",
+                    message="point forecast calibration on economics does not authorize calibrated probability for geopolitics event branches",
+                )
+            )
+        elif "point" in cal_method or cal_target in {"inflation", "cpi", "gdp"}:
+            if branch_domains and not any(d == "economics" for d in branch_domains):
+                issues.append(
+                    issue(
+                        "SCOPE_MISMATCH",
+                        pointer="branch_ledger.calibration",
+                        message="continuous point forecast calibration does not authorize calibrated probability for external event domains",
+                    )
+                )
     unresolved_mass = 0.0
     if "unresolved_mass" in data:
         parsed_unresolved_mass = refuse_string_number(
@@ -2825,7 +2849,13 @@ def validate_branches(
     return _check("branches", issues, metrics)
 
 
-def validate_report(text: str, manifest: dict[str, Any], required: bool) -> CheckResult:
+def validate_report(
+    text: str,
+    manifest: dict[str, Any],
+    required: bool,
+    *,
+    calibration_verified: bool = False,
+) -> CheckResult:
     issues: list[Issue] = []
     if not text.strip():
         issues.append(issue("REPORT_EMPTY", artifact="REPORT.md", message="report empty"))
@@ -2871,6 +2901,16 @@ def validate_report(text: str, manifest: dict[str, Any], required: bool) -> Chec
         appendix_refs = set(re.findall(r"\bevidence:[A-Za-z0-9._:-]+", appendix))
         for missing in sorted(used_refs - appendix_refs):
             issues.append(issue("UNKNOWN_REF", artifact="REPORT.md", pointer="source appendix", message="reported evidence reference missing from appendix", actual=missing))
+
+    cal_mode = manifest.get("likelihood_mode") == "calibrated_probability"
+    if (not cal_mode or not calibration_verified) and re.search(r"\bcalibrated\s+probability\b", text, re.IGNORECASE):
+        issues.append(
+            issue(
+                "VERBAL_PROBABILITY_CONTRADICTION",
+                artifact="REPORT.md",
+                message="narrative report asserts calibrated probability but calibration gate failed or is uncalibrated",
+            )
+        )
     return _check("report", issues)
 
 
@@ -3072,6 +3112,605 @@ def validate_stale(
     return _check("stale", issues, {"receipts_verified": bool(receipts) and not [i for i in issues if i.severity == "error"]})
 
 
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        text = value.strip().replace("Z", "+00:00")
+        if len(text) == 10 and text.count("-") == 2:
+            text += "T00:00:00+00:00"
+        dt = datetime.fromisoformat(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except (ValueError, TypeError):
+        return None
+
+
+def _recompute_calibration_metrics(
+    predictions: list[float],
+    actuals: list[float],
+    baseline_predictions: list[float] | None = None,
+    *,
+    horizon_periods: int = 1,
+) -> dict[str, Any]:
+    if not predictions or not actuals or len(predictions) != len(actuals):
+        return {
+            "case_count": len(predictions),
+            "unique_case_count": len(predictions),
+            "effective_sample_size": float(len(predictions)),
+            "candidate_metrics": {"mae": 0.0, "rmse": 0.0},
+            "baseline_metrics": {"mae": 0.0, "rmse": 0.0},
+            "paired_difference": {"delta_mae": 0.0, "delta_rmse": 0.0},
+            "beats_baseline": False,
+        }
+    n = len(predictions)
+    errors = [float(p) - float(a) for p, a in zip(predictions, actuals)]
+    cand_mae = sum(abs(e) for e in errors) / n
+    cand_rmse = math.sqrt(sum(e * e for e in errors) / n)
+
+    if baseline_predictions and len(baseline_predictions) == n:
+        b_errors = [float(bp) - float(a) for bp, a in zip(baseline_predictions, actuals)]
+    else:
+        b_errors = [-float(a) for a in actuals]
+    base_mae = sum(abs(be) for be in b_errors) / n
+    base_rmse = math.sqrt(sum(be * be for be in b_errors) / n)
+
+    cand_metrics: dict[str, Any] = {"mae": round(cand_mae, 6), "rmse": round(cand_rmse, 6)}
+    base_metrics: dict[str, Any] = {"mae": round(base_mae, 6), "rmse": round(base_rmse, 6)}
+    is_binary = all(a in (0.0, 1.0) for a in actuals) and all(0.0 <= p <= 1.0 for p in predictions)
+    if is_binary:
+        brier = sum((p - a) ** 2 for p, a in zip(predictions, actuals)) / n
+        log_score = -sum(
+            a * math.log(max(p, 1e-15)) + (1.0 - a) * math.log(max(1.0 - p, 1e-15))
+            for p, a in zip(predictions, actuals)
+        ) / n
+        cand_metrics["brier_score"] = round(brier, 6)
+        cand_metrics["log_score"] = round(log_score, 6)
+
+    if horizon_periods > 1 and n > horizon_periods:
+        effective_n = max(1.0, round(float(n) / float(horizon_periods), 2))
+    else:
+        effective_n = float(n)
+
+    delta_mae = cand_mae - base_mae
+    delta_rmse = cand_rmse - base_rmse
+
+    return {
+        "case_count": n,
+        "unique_case_count": n,
+        "effective_sample_size": effective_n,
+        "candidate_metrics": cand_metrics,
+        "baseline_metrics": base_metrics,
+        "paired_difference": {
+            "delta_mae": round(delta_mae, 6),
+            "delta_rmse": round(delta_rmse, 6),
+        },
+        "beats_baseline": cand_mae < base_mae,
+    }
+
+
+def validate_calibration_artifacts(
+    workspace: Path,
+    manifest: dict[str, Any],
+    calibration_data: dict[str, Any],
+    model_digest: str | None,
+    model_formula_version: str,
+    model: dict[str, Any] | None,
+    issues: list[Issue],
+    *,
+    artifact_name: str = "calibration_report",
+) -> dict[str, Any]:
+    """Validate empirical calibration bundle/report with independent metric recomputation."""
+    is_bundle = "bundle_id" in calibration_data or "policy_manifest" in calibration_data
+
+    # Self-hash verification
+    hash_key = "report_hash" if "report_hash" in calibration_data else "bundle_hash" if "bundle_hash" in calibration_data else None
+    if hash_key:
+        declared_hash = calibration_data.get(hash_key)
+        body = {k: v for k, v in calibration_data.items() if k not in ("report_hash", "bundle_hash")}
+        if declared_hash != canonical_hash(body):
+            issues.append(issue("STALE_ARTIFACT", artifact=artifact_name, pointer=hash_key, message=f"{artifact_name} hash mismatch"))
+
+    # Required fields check
+    if is_bundle:
+        bundle_required = (
+            "schema_version",
+            "bundle_id",
+            "domain",
+            "target_variable",
+            "target_horizon",
+            "temporal_cutoff",
+            "policy_manifest",
+            "dataset_snapshots",
+            "per_case_predictions",
+            "realized_outcomes",
+            "recomputed_metrics",
+            "uncertainty_bounds",
+            "temporal_leakage_audit",
+            "assurance_status",
+        )
+        for field in bundle_required:
+            if field not in calibration_data:
+                issues.append(issue("MISSING_FIELD", artifact=artifact_name, pointer=field, message="required"))
+    else:
+        summary_required = (
+            "schema_version",
+            "status",
+            "policy_locked",
+            "model_version",
+            "formula_version",
+            "model_hash",
+            "config_hash",
+            "policy_hash",
+            "hindcast_digest",
+            "outcome_digest",
+            "case_count",
+            "unique_case_count",
+            "metrics",
+            "beats_baseline",
+            "report_hash",
+        )
+        for field in summary_required:
+            if field not in calibration_data:
+                issues.append(issue("MISSING_FIELD", artifact=artifact_name, pointer=field, message="required"))
+        for field in ("model_hash", "config_hash", "policy_hash", "hindcast_digest", "outcome_digest"):
+            val = calibration_data.get(field)
+            if not isinstance(val, str) or re.fullmatch(r"[0-9a-f]{64}", val) is None:
+                issues.append(issue("SCHEMA", artifact=artifact_name, pointer=field, message="SHA-256 required"))
+
+    # Model and formula binding (A12, A19)
+    cal_formula = str(calibration_data.get("formula_version", ""))
+    if cal_formula and cal_formula != model_formula_version:
+        issues.append(
+            issue(
+                "REPLAY_MISMATCH",
+                artifact=artifact_name,
+                pointer="formula_version",
+                message="calibration formula version differs from the compiled model",
+                expected=model_formula_version,
+                actual=cal_formula,
+            )
+        )
+    if model is not None and calibration_data.get("model_version") and calibration_data.get("model_version") != model.get("model_version"):
+        issues.append(
+            issue(
+                "REPLAY_MISMATCH",
+                artifact=artifact_name,
+                pointer="model_version",
+                message="calibration model version differs from the compiled model",
+                expected=model.get("model_version"),
+                actual=calibration_data.get("model_version"),
+            )
+        )
+    if model_digest is not None and calibration_data.get("model_hash") and calibration_data.get("model_hash") != model_digest:
+        issues.append(
+            issue(
+                "REPLAY_MISMATCH",
+                artifact=artifact_name,
+                pointer="model_hash",
+                message="calibration/model hash mismatch",
+                expected=model_digest,
+                actual=calibration_data.get("model_hash"),
+            )
+        )
+
+    # Legacy schema 2.0 vs formula 2.1 check (A19)
+    manifest_formula = str(manifest.get("formula_version", LEGACY_FORMULA_VERSION))
+    if str(calibration_data.get("schema_version")) == "2.0.0" and cal_formula == "2.0.0" and manifest_formula == "2.1.0":
+        issues.append(
+            issue(
+                "TRACK_MISMATCH",
+                artifact=artifact_name,
+                pointer="formula_version",
+                message="legacy schema 2.0 calibration artifacts cannot be promoted to formula 2.1 without explicit migration",
+                expected="2.1.0",
+                actual="2.0.0",
+            )
+        )
+
+    # Metrics empty check (A01, F03)
+    declared_metrics = calibration_data.get("metrics")
+    if not isinstance(declared_metrics, dict) or len(declared_metrics) == 0:
+        issues.append(issue("PACK_MATURITY", artifact=artifact_name, pointer="metrics", message="calibration metrics cannot be empty ({})"))
+
+    # Dataset snapshots verification & path containment (A02, A20)
+    snapshots = calibration_data.get("dataset_snapshots")
+    if isinstance(snapshots, list):
+        for s_idx, snapshot in enumerate(snapshots):
+            if not isinstance(snapshot, dict):
+                continue
+            file_path_str = snapshot.get("file_path")
+            if isinstance(file_path_str, str):
+                try:
+                    target_p = (workspace / file_path_str).resolve()
+                    target_p.relative_to(workspace.resolve())
+                except (ValueError, Exception):
+                    issues.append(issue("PATH_ESCAPE", artifact=artifact_name, pointer=f"dataset_snapshots/{s_idx}/file_path", actual=file_path_str, message="path traversal outside workspace forbidden"))
+                    continue
+                if not target_p.is_file():
+                    issues.append(issue("MISSING_ARTIFACT", artifact=file_path_str, pointer=f"dataset_snapshots/{s_idx}/file_path", message="raw dataset snapshot missing on disk"))
+                else:
+                    actual_sha = sha256_file(target_p)
+                    declared_sha = str(snapshot.get("sha256_digest", "")).replace("sha256:", "")
+                    if actual_sha != declared_sha:
+                        issues.append(issue("STALE_ARTIFACT", artifact=file_path_str, pointer=f"dataset_snapshots/{s_idx}/sha256_digest", expected=snapshot.get("sha256_digest"), actual=f"sha256:{actual_sha}", message="dataset snapshot digest mismatch"))
+
+    # Resolve raw hindcast cases (A01, A02, A03, A04, A20)
+    resolved_cases: list[dict[str, Any]] = []
+    bundle_preds = calibration_data.get("per_case_predictions")
+    bundle_outs = calibration_data.get("realized_outcomes")
+    if isinstance(bundle_preds, list) and isinstance(bundle_outs, list) and bundle_preds:
+        outs_by_id = {str(o.get("case_id")): o for o in bundle_outs if isinstance(o, dict)}
+        for p in bundle_preds:
+            if isinstance(p, dict):
+                cid = str(p.get("case_id"))
+                out_obj = outs_by_id.get(cid, {})
+                resolved_cases.append({
+                    "case_id": cid,
+                    "forecast_origin": p.get("forecast_origin"),
+                    "target_period": p.get("target_period"),
+                    "model_version": p.get("model_version"),
+                    "model_hash": p.get("model_hash"),
+                    "formula_version": p.get("formula_version"),
+                    "point_prediction": p.get("point_prediction"),
+                    "actual_value": out_obj.get("actual_value"),
+                    "official_release_date": out_obj.get("official_release_date"),
+                    "is_synthetic": p.get("is_synthetic") or out_obj.get("is_synthetic", False),
+                })
+    else:
+        # Check files on disk
+        case_dirs_to_check = [
+            workspace / "hindcast",
+            workspace / "hindcast_cases",
+            workspace / "calibration" / "hindcast",
+        ]
+        explicit_case_dir = calibration_data.get("hindcast_dir") or manifest.get("artifact_paths", {}).get("hindcast_dir")
+        if explicit_case_dir:
+            try:
+                p_dir = (workspace / str(explicit_case_dir)).resolve()
+                p_dir.relative_to(workspace.resolve())
+                case_dirs_to_check.insert(0, p_dir)
+            except (ValueError, Exception):
+                issues.append(issue("PATH_ESCAPE", artifact=artifact_name, pointer="hindcast_dir", actual=str(explicit_case_dir), message="path traversal outside workspace forbidden"))
+
+        case_files: list[Path] = []
+        for c_dir in case_dirs_to_check:
+            if c_dir.is_dir():
+                for f in sorted(c_dir.glob("*.json")):
+                    if f.is_file() and f not in case_files:
+                        case_files.append(f)
+        if not case_files:
+            for f in sorted(workspace.rglob("*hindcast*")):
+                if f.is_file() and f.suffix == ".json" and f.name not in ("calibration-report.json", "simulation-manifest.json", "replay-report.json", "computational-model.json", "calibration-bundle.json"):
+                    case_files.append(f)
+
+        for c_path in case_files:
+            try:
+                c_path.resolve().relative_to(workspace.resolve())
+            except (ValueError, Exception):
+                issues.append(issue("PATH_ESCAPE", artifact=str(c_path), message="path traversal outside workspace forbidden"))
+                continue
+            c_data, c_errs = load_json_secure(c_path)
+            if not c_errs and isinstance(c_data, dict):
+                resolved_cases.append(c_data)
+
+    if not resolved_cases:
+        issues.append(issue("MISSING_ARTIFACT", artifact=artifact_name, pointer="hindcast_digest", message="raw hindcast case files missing on disk"))
+    else:
+        # Check hindcast_digest
+        if "hindcast_digest" in calibration_data:
+            actual_hindcast_hash = canonical_hash([canonical_hash(c) for c in resolved_cases])
+            if calibration_data.get("hindcast_digest") != actual_hindcast_hash and calibration_data.get("hindcast_digest") != canonical_hash(resolved_cases):
+                issues.append(issue("REPLAY_MISMATCH", artifact=artifact_name, pointer="hindcast_digest", expected=actual_hindcast_hash, actual=calibration_data.get("hindcast_digest"), message="hindcast digest mismatch against raw case data"))
+        if "outcome_digest" in calibration_data:
+            actual_outcome_hash = canonical_hash([c.get("actual_value") or c.get("observations") for c in resolved_cases])
+            if calibration_data.get("outcome_digest") != actual_outcome_hash and calibration_data.get("outcome_digest") != canonical_hash([c.get("observations") for c in resolved_cases]):
+                issues.append(issue("REPLAY_MISMATCH", artifact=artifact_name, pointer="outcome_digest", expected=actual_outcome_hash, actual=calibration_data.get("outcome_digest"), message="outcome digest mismatch against ground-truth outcomes"))
+
+    # Case count and duplicate detection (A04, A05)
+    raw_case_count = len(resolved_cases)
+    declared_case_count = calibration_data.get("case_count")
+    if declared_case_count is not None and declared_case_count != raw_case_count:
+        issues.append(issue("PACK_MATURITY", artifact=artifact_name, pointer="case_count", expected=raw_case_count, actual=declared_case_count, message=f"declared case_count ({declared_case_count}) does not match raw cases ({raw_case_count})"))
+
+    if raw_case_count < 30:
+        issues.append(issue("PACK_MATURITY", artifact=artifact_name, pointer="case_count", message="at least 30 cases required"))
+
+    seen_tuples: set[Any] = set()
+    seen_ids: set[str] = set()
+    has_inflation = False
+    for c in resolved_cases:
+        cid = str(c.get("case_id", ""))
+        if cid in seen_ids:
+            issues.append(issue("PACK_MATURITY", artifact=artifact_name, pointer="case_id", actual=cid, message=f"DUPLICATE_SAMPLE_ID: {cid} appears multiple times"))
+            has_inflation = True
+        seen_ids.add(cid)
+
+        t_period = str(c.get("target_period", c.get("cutoff", "")))
+        p_val = c.get("point_prediction")
+        if p_val is None and isinstance(c.get("predictions"), dict):
+            p_val = tuple(sorted(c["predictions"].items()))
+        a_val = c.get("actual_value")
+        if a_val is None and isinstance(c.get("observations"), dict):
+            a_val = tuple(sorted(c["observations"].items()))
+        obs_sig = (t_period, p_val, a_val)
+        if obs_sig in seen_tuples and obs_sig != ("", None, None):
+            has_inflation = True
+            issues.append(issue("PACK_MATURITY", artifact=artifact_name, pointer="unique_case_count", actual=cid, message="ARTIFICIAL_SAMPLE_INFLATION: identical prediction observations duplicated under different case IDs"))
+        seen_tuples.add(obs_sig)
+
+    unique_case_count = len(seen_tuples) if seen_tuples else len(seen_ids)
+    declared_unique = calibration_data.get("unique_case_count")
+    if declared_unique is not None and declared_unique != unique_case_count:
+        issues.append(issue("PACK_MATURITY", artifact=artifact_name, pointer="unique_case_count", expected=unique_case_count, actual=declared_unique, message="all calibration cases must be unique"))
+
+    # Value validation and metric calculation (A06, A07, A14, A16)
+    has_malformed = False
+    preds_list: list[float] = []
+    actuals_list: list[float] = []
+    base_preds_list: list[float] = []
+
+    for c in resolved_cases:
+        cid = str(c.get("case_id", ""))
+        p = c.get("point_prediction")
+        if p is None and isinstance(c.get("predictions"), dict):
+            fk = sorted(c["predictions"].keys())[0] if c["predictions"] else None
+            p = c["predictions"].get(fk) if fk else None
+        a = c.get("actual_value")
+        if a is None and isinstance(c.get("observations"), dict):
+            fk = sorted(c["observations"].keys())[0] if c["observations"] else None
+            a = c["observations"].get(fk) if fk else None
+        bp = c.get("baseline_prediction")
+        if bp is None and isinstance(c.get("baselines"), dict):
+            fk = sorted(c["baselines"].keys())[0] if c["baselines"] else None
+            bp = c["baselines"].get(fk) if fk else None
+
+        if p is None:
+            issues.append(issue("MISSING_FIELD", artifact=artifact_name, pointer=f"cases/{cid}/point_prediction", message="missing prediction value"))
+            has_malformed = True
+        elif isinstance(p, bool) or not isinstance(p, (int, float)) or not math.isfinite(float(p)):
+            issues.append(issue("TYPE", artifact=artifact_name, pointer=f"cases/{cid}/point_prediction", actual=p, message="prediction must be a finite number, not boolean, NaN, or Infinity"))
+            has_malformed = True
+
+        if a is None:
+            issues.append(issue("MISSING_FIELD", artifact=artifact_name, pointer=f"cases/{cid}/actual_value", message="missing realized outcome value"))
+            has_malformed = True
+        elif isinstance(a, bool) or not isinstance(a, (int, float)) or not math.isfinite(float(a)):
+            issues.append(issue("TYPE", artifact=artifact_name, pointer=f"cases/{cid}/actual_value", actual=a, message="actual outcome must be a finite number, not boolean, NaN, or Infinity"))
+            has_malformed = True
+
+        if not has_malformed and p is not None and a is not None:
+            preds_list.append(float(p))
+            actuals_list.append(float(a))
+            if bp is not None and not isinstance(bp, bool) and isinstance(bp, (int, float)) and math.isfinite(float(bp)):
+                base_preds_list.append(float(bp))
+            else:
+                base_preds_list.append(0.0)
+
+    # Overlapping horizon parsing
+    horizon_str = str(calibration_data.get("target_horizon", ""))
+    h_match = re.search(r"(\d+)", horizon_str)
+    horizon_val = int(h_match.group(1)) if h_match else 1
+
+    recomputed: dict[str, Any] = {}
+    recomputed_beats = False
+    if not has_malformed and preds_list and actuals_list:
+        recomputed = _recompute_calibration_metrics(
+            preds_list,
+            actuals_list,
+            base_preds_list if base_preds_list else None,
+            horizon_periods=horizon_val,
+        )
+        recomputed_beats = recomputed.get("beats_baseline", False)
+        cand_mae = recomputed["candidate_metrics"]["mae"]
+        base_mae = recomputed["baseline_metrics"]["mae"]
+
+        if isinstance(declared_metrics, dict) and "mae" in declared_metrics:
+            dec_mae = float(declared_metrics["mae"])
+            if not math.isclose(dec_mae, cand_mae, rel_tol=1e-3, abs_tol=1e-3):
+                issues.append(
+                    issue(
+                        "REPLAY_MISMATCH",
+                        artifact=artifact_name,
+                        pointer="metrics.mae",
+                        expected=round(cand_mae, 4),
+                        actual=dec_mae,
+                        message=f"recomputed MAE ({cand_mae:.4f}) differs from summary ({dec_mae})",
+                    )
+                )
+
+        if calibration_data.get("beats_baseline") is True and not recomputed_beats:
+            issues.append(
+                issue(
+                    "REPLAY_MISMATCH",
+                    artifact=artifact_name,
+                    pointer="beats_baseline",
+                    expected=False,
+                    actual=True,
+                    message=f"recomputed candidate MAE ({cand_mae:.4f}) does not beat baseline ({base_mae:.4f})",
+                )
+            )
+
+    # Temporal leakage audit (A10, A11)
+    for c in resolved_cases:
+        cid = str(c.get("case_id", ""))
+        origin_str = c.get("forecast_origin") or c.get("cutoff")
+        origin_dt = _parse_iso_datetime(origin_str) if origin_str else None
+        ev_list = c.get("evidence") or []
+        if isinstance(ev_list, list):
+            for e_idx, ev in enumerate(ev_list):
+                if isinstance(ev, dict):
+                    v_str = ev.get("vintage_date") or ev.get("publication_date") or ev.get("available_at")
+                    v_dt = _parse_iso_datetime(v_str) if v_str else None
+                    if origin_dt and v_dt and v_dt > origin_dt:
+                        issues.append(
+                            issue(
+                                "PACKET_CUTOFF",
+                                pointer=f"cases/{cid}/evidence/{e_idx}",
+                                actual=str(v_str),
+                                message="VINTAGE_AFTER_CUTOFF: evidence/dataset vintage post-dates forecast origin (temporal leakage)",
+                            )
+                        )
+                    if ev.get("access_date") and not ev.get("vintage_date") and ev.get("is_revised"):
+                        issues.append(
+                            issue(
+                                "VINTAGE_LIMITATION",
+                                pointer=f"cases/{cid}/evidence/{e_idx}",
+                                message="revised dataset lacks point-in-time vintage: access date cannot substitute for vintage date",
+                                severity="warning",
+                            )
+                        )
+        rel_str = c.get("official_release_date")
+        if rel_str and origin_dt:
+            rel_dt = _parse_iso_datetime(rel_str)
+            if rel_dt and rel_dt < origin_dt:
+                issues.append(
+                    issue(
+                        "PACKET_CUTOFF",
+                        pointer=f"cases/{cid}/official_release_date",
+                        actual=str(rel_str),
+                        message="OUTCOME_BEFORE_ORIGIN: realized outcome was officially released before forecast origin",
+                    )
+                )
+
+    # Policy Commitments & Ex-Post Tampering (A08, A09)
+    policy_path = workspace / "calibration-policy.json"
+    policy_obj = None
+    if policy_path.is_file():
+        policy_obj, _ = load_json_secure(policy_path)
+    elif isinstance(calibration_data.get("policy_manifest"), dict):
+        policy_obj = calibration_data["policy_manifest"]
+
+    if isinstance(policy_obj, dict):
+        exp_pol_hash = policy_obj.get("policy_hash")
+        if exp_pol_hash:
+            pol_body = {k: v for k, v in policy_obj.items() if k != "policy_hash"}
+            act_pol_hash = canonical_hash(pol_body)
+            if exp_pol_hash != act_pol_hash:
+                issues.append(
+                    issue(
+                        "POLICY_THRESHOLD_TAMPERING",
+                        artifact="calibration-policy.json",
+                        pointer="policy_hash",
+                        message="POLICY_THRESHOLD_TAMPERING: evaluation thresholds or case commitments modified ex-post",
+                    )
+                )
+        case_commits = policy_obj.get("case_commitments")
+        if isinstance(case_commits, dict):
+            for c in resolved_cases:
+                cid = str(c.get("case_id", ""))
+                if cid in case_commits:
+                    exp_c_hash = case_commits[cid]
+                    act_c_hash = c.get("commitment_hash") or canonical_hash(c)
+                    if act_c_hash != exp_c_hash:
+                        issues.append(
+                            issue(
+                                "STALE_ARTIFACT",
+                                pointer=f"policy/case_commitments/{cid}",
+                                expected=exp_c_hash,
+                                actual=act_c_hash,
+                                message="case prediction/outcome modified after commitment hash was signed; receipts invalidated",
+                            )
+                        )
+
+    # Model and Formula per-case Binding (A12)
+    for c in resolved_cases:
+        cid = str(c.get("case_id", ""))
+        c_m_hash = c.get("model_hash")
+        if c_m_hash and model_digest and c_m_hash != model_digest:
+            issues.append(
+                issue(
+                    "TRACK_MISMATCH",
+                    pointer=f"cases/{cid}/model_hash",
+                    expected=model_digest,
+                    actual=c_m_hash,
+                    message="case prediction references mismatched model_hash",
+                )
+            )
+        c_f_ver = c.get("formula_version")
+        if c_f_ver and c_f_ver != model_formula_version:
+            issues.append(
+                issue(
+                    "TRACK_MISMATCH",
+                    pointer=f"cases/{cid}/formula_version",
+                    expected=model_formula_version,
+                    actual=c_f_ver,
+                    message="case prediction references mismatched formula_version",
+                )
+            )
+
+    # Synthetic Fixtures / Experimental Pack Guard (A15)
+    is_synthetic = False
+    if isinstance(snapshots, list):
+        if any(s.get("is_synthetic") or s.get("provenance") == "synthetic" for s in snapshots if isinstance(s, dict)):
+            is_synthetic = True
+    for c in resolved_cases:
+        if c.get("is_synthetic") or c.get("provenance") == "synthetic":
+            is_synthetic = True
+    pack_manifest_path = workspace / "pack-manifest.json"
+    if pack_manifest_path.is_file():
+        p_man, _ = load_json_secure(pack_manifest_path)
+        if isinstance(p_man, dict):
+            if p_man.get("maturity") == "experimental" or p_man.get("calibration_cases", 0) == 0:
+                is_synthetic = True
+    if is_synthetic:
+        issues.append(
+            issue(
+                "PACK_MATURITY",
+                pointer="provenance",
+                message="synthetic fixtures or experimental pack cannot elevate maturity tier to calibrated empirical status",
+                severity="warning",
+            )
+        )
+
+    cal_verified = (
+        not any(i.severity == "error" for i in issues if i.artifact == artifact_name or (i.pointer and ("case" in i.pointer or "dataset" in i.pointer)))
+        and raw_case_count >= 30
+        and unique_case_count >= 30
+        and not has_inflation
+        and not has_malformed
+        and recomputed_beats
+        and not is_synthetic
+    )
+
+    # Determine bundle assurance status
+    if cal_verified:
+        bundle_assurance_status = "calibrated"
+    elif is_synthetic:
+        bundle_assurance_status = "synthetic_experimental"
+    elif raw_case_count < 30:
+        bundle_assurance_status = "insufficient_cases"
+    elif not recomputed_beats:
+        bundle_assurance_status = "uncalibrated"
+    else:
+        bundle_assurance_status = "failed_verification"
+
+    # Status check
+    if manifest.get("likelihood_mode") == "calibrated_probability":
+        if not cal_verified:
+            issues.append(issue("PACK_MATURITY", artifact=artifact_name, message="calibration gates did not pass"))
+    elif calibration_data.get("status") == "pass" and calibration_data.get("beats_baseline") is True and not recomputed_beats:
+        issues.append(issue("REPLAY_MISMATCH", artifact=artifact_name, pointer="beats_baseline", message="calibration summary falsely claims beats_baseline"))
+
+    # Internal HMAC check (A21)
+    attestation_type = "unattested"
+    if calibration_data.get("hmac_signature") or calibration_data.get("policy_hash"):
+        attestation_type = "internal_hmac"
+
+    return {
+        "calibration_present": True,
+        "calibration_verified": cal_verified,
+        "beats_baseline": recomputed_beats,
+        "is_synthetic": is_synthetic,
+        "recomputed_metrics": recomputed,
+        "attestation_type": attestation_type,
+        "case_count": raw_case_count,
+        "unique_case_count": unique_case_count,
+        "assurance_status": bundle_assurance_status,
+    }
+
+
 def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> CheckResult:
     """Validate declared immutable model/run/replay/sensitivity contracts."""
     issues: list[Issue] = []
@@ -3112,6 +3751,7 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
     replay = load_declared("replay_report")
     sensitivity = load_declared("sensitivity_report")
     calibration_report = load_declared("calibration_report")
+    calibration_bundle = load_declared("calibration_bundle")
     model_digest: str | None = None
     model_formula_version = LEGACY_FORMULA_VERSION
     independent_replay_passed = False
@@ -3807,66 +4447,28 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
         if replay.get("issues") != []:
             issues.append(issue("REPLAY_MISMATCH", artifact="replay_report", pointer="issues", message="successful replay must have no issues"))
 
-    if calibration_report is not None:
-        required = {
-            "schema_version",
-            "status",
-            "policy_locked",
-            "model_version",
-            "formula_version",
-            "model_hash",
-            "config_hash",
-            "policy_hash",
-            "hindcast_digest",
-            "outcome_digest",
-            "case_count",
-            "unique_case_count",
-            "metrics",
-            "beats_baseline",
-            "report_hash",
-        }
-        for field in required:
-            if field not in calibration_report:
-                issues.append(issue("MISSING_FIELD", artifact="calibration_report", pointer=field, message="required"))
-        calibration_body = {key: value for key, value in calibration_report.items() if key != "report_hash"}
-        if calibration_report.get("report_hash") != canonical_hash(calibration_body):
-            issues.append(issue("STALE_ARTIFACT", artifact="calibration_report", pointer="report_hash", message="calibration report hash mismatch"))
-        for field in ("model_hash", "config_hash", "policy_hash", "hindcast_digest", "outcome_digest"):
-            value = calibration_report.get(field)
-            if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
-                issues.append(issue("SCHEMA", artifact="calibration_report", pointer=field, message="SHA-256 required"))
-        case_count = calibration_report.get("case_count")
-        unique_count = calibration_report.get("unique_case_count")
-        if not isinstance(case_count, int) or isinstance(case_count, bool) or case_count < 30:
-            issues.append(issue("PACK_MATURITY", artifact="calibration_report", pointer="case_count", message="at least 30 cases required"))
-        if unique_count != case_count:
-            issues.append(issue("PACK_MATURITY", artifact="calibration_report", pointer="unique_case_count", message="all calibration cases must be unique"))
-        if calibration_report.get("status") != "pass" or calibration_report.get("policy_locked") is not True or calibration_report.get("beats_baseline") is not True:
-            issues.append(issue("PACK_MATURITY", artifact="calibration_report", message="calibration gates did not pass"))
-        if model_digest is not None and calibration_report.get("model_hash") != model_digest:
-            issues.append(issue("REPLAY_MISMATCH", artifact="calibration_report", pointer="model_hash", message="calibration/model hash mismatch"))
-        if calibration_report.get("formula_version") != model_formula_version:
-            issues.append(
-                issue(
-                    "REPLAY_MISMATCH",
-                    artifact="calibration_report",
-                    pointer="formula_version",
-                    message="calibration formula version differs from the compiled model",
-                    expected=model_formula_version,
-                    actual=calibration_report.get("formula_version"),
-                )
+    target_calibration = calibration_report if calibration_report is not None else calibration_bundle
+    target_calibration_artifact = "calibration_report" if calibration_report is not None else "calibration_bundle"
+    cal_eval: dict[str, Any] = {}
+    if target_calibration is not None:
+        cal_eval = validate_calibration_artifacts(
+            workspace,
+            manifest,
+            target_calibration,
+            model_digest,
+            model_formula_version,
+            model,
+            issues,
+            artifact_name=target_calibration_artifact,
+        )
+    elif manifest.get("likelihood_mode") == "calibrated_probability":
+        issues.append(
+            issue(
+                "MISSING_ARTIFACT",
+                pointer="manifest.artifact_paths.calibration_report",
+                message="calibrated_probability mode requires a calibration report or bundle",
             )
-        if model is not None and calibration_report.get("model_version") != model.get("model_version"):
-            issues.append(
-                issue(
-                    "REPLAY_MISMATCH",
-                    artifact="calibration_report",
-                    pointer="model_version",
-                    message="calibration model version differs from the compiled model",
-                    expected=model.get("model_version"),
-                    actual=calibration_report.get("model_version"),
-                )
-            )
+        )
 
     if sensitivity is not None:
         declared_hash = sensitivity.get("report_hash")
@@ -3907,7 +4509,13 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
             "sensitivity_present": sensitivity is not None,
             "numerical_required": numerical_required,
             "independent_replay_passed": independent_replay_passed,
-            "calibration_present": calibration_report is not None,
+            "calibration_present": target_calibration is not None,
+            "calibration_verified": cal_eval.get("calibration_verified", False),
+            "is_synthetic": cal_eval.get("is_synthetic", False),
+            "recomputed_metrics": cal_eval.get("recomputed_metrics", {}),
+            "beats_baseline": cal_eval.get("beats_baseline", False),
+            "attestation_type": cal_eval.get("attestation_type", "unattested"),
+            "assurance_status": cal_eval.get("assurance_status", "uncalibrated"),
         },
     )
 
@@ -4052,16 +4660,39 @@ def validate_workspace(
     temporal_issues = [i for i in all_issues if i.code in {"FUTURE_FACT", "TRACE_TIME", "TIMELINE_MODE", "TEMPORAL_FRAME"}]
     checks["temporal"] = _check("temporal", temporal_issues).to_dict()
 
+    cal_verified = False
+    if "numerical_artifacts" in checks and isinstance(checks["numerical_artifacts"], dict):
+        num_m = checks["numerical_artifacts"].get("metrics") or {}
+        cal_verified = bool(num_m.get("calibration_verified") and num_m.get("beats_baseline"))
+
     report_rel = rel("final_report", "REPORT.md")
     report_path, report_text, r_iss = load_workspace_artifact(workspace, report_rel, kind="text")
     if require_report or mode == "final":
         all_issues.extend(r_iss)
         if isinstance(report_text, str):
-            c_rep = validate_report(report_text, manifest, required=True)
+            c_rep = validate_report(report_text, manifest, required=True, calibration_verified=cal_verified)
         else:
             c_rep = _check("report", [issue("MISSING_ARTIFACT", artifact=report_rel, message="report missing")])
         checks["report"] = c_rep.to_dict()
         all_issues.extend(c_rep.issues)
+
+    if not cal_verified:
+        ht_rel = rel("human_track_ledger", "human-track-ledger.jsonl")
+        ht_p, _ = resolve_in_workspace(workspace, ht_rel, must_exist=False, require_file=True)
+        if ht_p and ht_p.is_file():
+            ht_rows, _ = load_jsonl_secure(ht_p)
+            for h_idx, h_row in enumerate(ht_rows):
+                if isinstance(h_row, dict):
+                    h_text = str(h_row.get("response") or h_row.get("text") or h_row.get("content") or h_row.get("reasoning") or "")
+                    if re.search(r"\bcalibrated\s+probability\b", h_text, re.IGNORECASE):
+                        all_issues.append(
+                            issue(
+                                "VERBAL_PROBABILITY_CONTRADICTION",
+                                artifact=ht_rel,
+                                pointer=f"/{h_idx}",
+                                message="actor response asserts calibrated probability but calibration gate failed or is uncalibrated",
+                            )
+                        )
 
     if verify_integrity:
         c_stale = validate_stale(workspace, manifest, require_receipts=require_receipts)

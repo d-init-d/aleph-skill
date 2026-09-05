@@ -3,8 +3,8 @@
   "package_version": "2.4.1",
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
-  "file_count": 470,
-  "tree_sha256": "8783ef6101a7dd8f10c85722e828fc6978bd40221bafbf21a081f2d138408b74",
+  "file_count": 475,
+  "tree_sha256": "cdfc0136442e3304b6b8540a8eeea6cea332c4d8433a13644eedf67365329478",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -1808,8 +1808,8 @@
     },
     {
       "path": "scripts/aleph/packs.py",
-      "sha256": "ad29160db26220c1603b8c83e04e9769d46a3b07289bafbc1af02033edad2d16",
-      "size": 30434
+      "sha256": "18f8b070ce40723fc4aca0beb987e0e866202ef718612a1d5801ad4b94048d70",
+      "size": 32699
     },
     {
       "path": "scripts/aleph/paths.py",
@@ -1823,8 +1823,8 @@
     },
     {
       "path": "scripts/aleph/quality.py",
-      "sha256": "73ec6954cd496919a541541f337b59a117879433da41df30b2bc1f3569615dde",
-      "size": 22705
+      "sha256": "6e7fe5a9afa8e1d5050a4c853814cceba7c6c2ef8581cbc1f9b54ffc0eb191ea",
+      "size": 23418
     },
     {
       "path": "scripts/aleph/rng.py",
@@ -1848,8 +1848,8 @@
     },
     {
       "path": "scripts/aleph/validator.py",
-      "sha256": "1a05d4afbff03f13c914a209af4195aea98cae6c6b686f136b55080a91eafd50",
-      "size": 216717
+      "sha256": "9a4dd95d29738d9b32c14ec7e23db2b27780a329766b7d8beb2cd5520e48fb8a",
+      "size": 247007
     },
     {
       "path": "scripts/build_release_assets.py",
@@ -2167,6 +2167,16 @@
       "size": 9241
     },
     {
+      "path": "tests/test_backward_compatibility.py",
+      "sha256": "7ab249f881fca756a786ebc02f357c14f928517d47d28ef8f33635250e7c99a4",
+      "size": 5546
+    },
+    {
+      "path": "tests/test_calibration_validator.py",
+      "sha256": "366ed763e96c701aeeff56433de52f24e138abe8121b5a3ce41837788b1f361a",
+      "size": 38310
+    },
+    {
       "path": "tests/test_capability_baseline.py",
       "sha256": "e4e55c45e0c8696cd153da430e78eb1d4c15173ec433e835fac3bb75f793d43f",
       "size": 11057
@@ -2180,6 +2190,11 @@
       "path": "tests/test_component_registry.py",
       "sha256": "ad0a2640de9a2c67aeed6dcd3d2acae14c7ccbaa92d7e3e8634c0b87d4b5c29f",
       "size": 7890
+    },
+    {
+      "path": "tests/test_containment_security.py",
+      "sha256": "5f700847372fab9ee326ebfd87111620ce83790cb527c5723bdd4a67e1a34151",
+      "size": 4647
     },
     {
       "path": "tests/test_discovery_interop_contract.py",
@@ -2235,6 +2250,11 @@
       "path": "tests/test_foundation_depth_v2.py",
       "sha256": "3222fe6ded25b66f418f5eca3f97abcd3251a78ae57675a551e8067959232a93",
       "size": 22479
+    },
+    {
+      "path": "tests/test_gate_pipeline_integration.py",
+      "sha256": "2b71f62f2e66cf7371a4d4e4d13bf87873169728f076874d4a5bc6e423aad094",
+      "size": 5852
     },
     {
       "path": "tests/test_import_audit_stream.py",
@@ -2325,6 +2345,11 @@
       "path": "tests/test_security_parser_v201.py",
       "sha256": "86e6f48e325164c9d5a88e18326825b83de47d0e5bf84d54c4f91847e86fd1b7",
       "size": 10629
+    },
+    {
+      "path": "tests/test_temporal_leakage.py",
+      "sha256": "b30bd0233b03ba9ce61b4d7985b7f00c0b0dcc0aaa3a4bd11b441a9c43d56b13",
+      "size": 10096
     },
     {
       "path": "tests/test_validation.py",
