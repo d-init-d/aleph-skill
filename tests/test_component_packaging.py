@@ -75,15 +75,15 @@ class ComponentPackagingTests(unittest.TestCase):
         self.assertEqual(len(entry["upstream_tree"]), 40)
         self.assertIn(
             entry["upstream_commit"],
-            ("1c59fd801ca7f6f375b7e45380bb1f2a273a2bfb", "94e464b0a1cebf705b2b29490ffd83485bc17341", "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c"),
+            ("1c59fd801ca7f6f375b7e45380bb1f2a273a2bfb", "94e464b0a1cebf705b2b29490ffd83485bc17341", "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c", "c3eb12dbc1efda8e9d5a7bfa69f6b311c9bfb291"),
         )
         self.assertIn(
             entry["upstream_tag_object"],
-            ("fc2e90c4947f60727c779df242fb91b81188f6f9", "94e464b0a1cebf705b2b29490ffd83485bc17341", "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c"),
+            ("fc2e90c4947f60727c779df242fb91b81188f6f9", "94e464b0a1cebf705b2b29490ffd83485bc17341", "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c", "c3eb12dbc1efda8e9d5a7bfa69f6b311c9bfb291"),
         )
         self.assertIn(
             entry["upstream_tree"],
-            ("3238c23f35955a812dbc523829948835927427e3", "2e57caa61344452a7d1ba7c1f625400830f1e332", "a656db578f8742436d696931c6ee3703be1a5ac7"),
+            ("3238c23f35955a812dbc523829948835927427e3", "2e57caa61344452a7d1ba7c1f625400830f1e332", "a656db578f8742436d696931c6ee3703be1a5ac7", "c37dfae29e5bcb67cdf7827b98fd250aa66b64ec"),
         )
         recipe = entry["snapshot_recipe"]
         self.assertEqual(recipe["text_eol"], "lf")

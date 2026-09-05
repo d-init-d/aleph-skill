@@ -16,22 +16,22 @@
       "source_artifacts": {
         "workflow_source": {
           "name": "d-research-skill-v3.4.1.tar.gz",
-          "sha256": "sha256:3dfd5a2fe5cbaa127282bd98ea75fd7df9ed2812e8e14db515a248a1a526eeab"
+          "sha256": "sha256:edc5c089f4f549db4e93494d035ec96e0f58c50276faed2c03bf00d6a7cbfd36"
         },
         "full_profile": {
           "name": "d-research-3.4.1-full.tar.gz",
-          "sha256": "sha256:d202ce627cc4e9ffb625c45da92c93b79c96140ce0f52539b8e72ae638db28ca",
+          "sha256": "sha256:029328c36c7c47dc562d83976cf105fc158c0059184180c70d1341f645605bcb",
           "manifest_name": "d-research-3.4.1-full.manifest.json",
-          "manifest_sha256": "sha256:4fff1bbac385abcefac1f3d2b6a20979603283de52fda051e27a73f21b982607",
+          "manifest_sha256": "sha256:27d1c0027483d096c9d09957dedc3e0162a7309e9070d0a55c33f681c2b4e444",
           "file_count": 777
         },
         "runtime_profile": {
           "name": "d-research-3.4.1-runtime.tar.gz",
-          "sha256": "sha256:45c69ab017a71a8c2a0848c2e759e6595b8be1ec6a6c7984cb8c491db0a4a5c6",
+          "sha256": "sha256:549514a8e0e4b3ecb1cbaf7451caa337ffb780e3a6845f3ce263a8e286854c2d",
           "manifest_name": "d-research-3.4.1-runtime.manifest.json",
-          "manifest_sha256": "sha256:fc806f93b65f4ff743231efca6d4c687456d26df610fcfba35be3d2f401288a5",
+          "manifest_sha256": "sha256:201489ae1ff517508fb2f47ba778cf4adfa729ba4387a52dbf34c55d724ab7dc",
           "file_count": 217,
-          "tree_sha256": "sha256:97ad3a6dc4381a4659092d80a9b9a34a656b23bd6f17e7a459495771909a23fd",
+          "tree_sha256": "sha256:cb69a6da14b07aa7eefff756c7722fca122d272fff1f4d7aeb75657bc07c488c",
           "ordered_paths_sha256": "sha256:892e22a7a0890e5bc2fd77c9c4987d96ea4f3775dab8f3212dbc73b4ba002b6c"
         },
         "interop_contract": {

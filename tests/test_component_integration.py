@@ -66,17 +66,19 @@ CANDIDATE_COMMITS = {
     "1c59fd801ca7f6f375b7e45380bb1f2a273a2bfb",
     "94e464b0a1cebf705b2b29490ffd83485bc17341",
     "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c",
+    "c3eb12dbc1efda8e9d5a7bfa69f6b311c9bfb291",
 }
 CANDIDATE_TAGS = {"v3.4.1-candidate", "upgrade/v2-evidence-verification"}
 CANDIDATE_TAG_OBJECTS = {
     "fc2e90c4947f60727c779df242fb91b81188f6f9",
     "94e464b0a1cebf705b2b29490ffd83485bc17341",
     "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c",
+    "c3eb12dbc1efda8e9d5a7bfa69f6b311c9bfb291",
 }
 VALID_FILE_COUNTS = {214, 217}
-CANDIDATE_COMMIT = "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c"
+CANDIDATE_COMMIT = "c3eb12dbc1efda8e9d5a7bfa69f6b311c9bfb291"
 CANDIDATE_TAG = "upgrade/v2-evidence-verification"
-CANDIDATE_TAG_OBJECT = "94e464b0a1cebf705b2b29490ffd83485bc17341"
+CANDIDATE_TAG_OBJECT = "c3eb12dbc1efda8e9d5a7bfa69f6b311c9bfb291"
 
 FIELDS_14 = [
     "claim_id", "claim", "sub_question", "source_title", "source_url", "source_type",
