@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 499,
-  "tree_sha256": "5d2ca931c665cb3c61b93a15cd9140c399783e3ebff9953775d72ee252d4d457",
+  "tree_sha256": "1f1df3a2ca424f2078affc447aa7b7bc593c7a2304a2f153186a800fe2bdc2d4",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -148,8 +148,8 @@
     },
     {
       "path": "component-lock.json",
-      "sha256": "d1ab7e2492c9479b2e35a9b16640927c73adfad3eb5f931ecbc5787b88bee4f5",
-      "size": 131810
+      "sha256": "ff02b7231867b4f273c4fb2473b91474b6c688c815f6faa17f5eeb1b13099bb8",
+      "size": 131804
     },
     {
       "path": "components/d-research/AGENTS.md",
@@ -858,8 +858,8 @@
     },
     {
       "path": "components/d-research/schemas/report-claims.schema.json",
-      "sha256": "72a59b03da2f2ff5d10f81fac1633b1fe7f37e08c4cfd099323e2d0863f386a3",
-      "size": 11867
+      "sha256": "4de4b1e565b2c646f0030d4608df1e2a4dea3de8fdf09e0821c5f4ab9d96ba88",
+      "size": 11921
     },
     {
       "path": "components/d-research/schemas/source-snapshot-binding.schema.json",
@@ -1073,8 +1073,8 @@
     },
     {
       "path": "components/d-research/scripts/quality_eval.py",
-      "sha256": "29f60a8111ec871eb45e229b85bbc394ad2213d7db9b6b79c2cd7ec9c6cd3f19",
-      "size": 195892
+      "sha256": "e0e1ca20197ca0c65d6a7f9dc005102835496f1fada31981876620b60170e661",
+      "size": 196150
     },
     {
       "path": "components/d-research/scripts/release_verify.py",
@@ -1083,8 +1083,8 @@
     },
     {
       "path": "components/d-research/scripts/report_render.py",
-      "sha256": "a9198667c4fbc1d4c663e6061d641c18270836f4da6338af9b9a98c5229f40e3",
-      "size": 106622
+      "sha256": "3cbdd96accc68cb59498776f5de4f121791ee1380a2690ef4f2a22393402e6d7",
+      "size": 112373
     },
     {
       "path": "components/d-research/scripts/research_plan.py",
@@ -1208,8 +1208,8 @@
     },
     {
       "path": "components/d-research/templates/report-claims.schema.json",
-      "sha256": "72a59b03da2f2ff5d10f81fac1633b1fe7f37e08c4cfd099323e2d0863f386a3",
-      "size": 11867
+      "sha256": "4de4b1e565b2c646f0030d4608df1e2a4dea3de8fdf09e0821c5f4ab9d96ba88",
+      "size": 11921
     },
     {
       "path": "components/d-research/templates/report-template.md",
@@ -1883,8 +1883,8 @@
     },
     {
       "path": "scripts/aleph/validator.py",
-      "sha256": "2be49868b885f8076580ae089aee43fdcd492133f6f08d74ec868ebffc438718",
-      "size": 271507
+      "sha256": "389c41edc7d39eea84d43690582a9df85213860804fad5dcf11f211ddb1280c5",
+      "size": 275008
     },
     {
       "path": "scripts/build_release_assets.py",
@@ -2233,13 +2233,13 @@
     },
     {
       "path": "tests/test_component_integration.py",
-      "sha256": "fc4a3baf945641b1c0401fe381f154a1c25f4bd9587f73df54aaa3d2f01f5503",
-      "size": 31995
+      "sha256": "79d5bf521eb90c3fe69903aa8cc2dcce10b23398fa9b23afa54bfca13d9ca23a",
+      "size": 32247
     },
     {
       "path": "tests/test_component_packaging.py",
-      "sha256": "a2001ec1942caefc234de9032e42498ad4e7c366b9ed915de6872cad49e4a8e0",
-      "size": 15584
+      "sha256": "65cca245745889d2f0a365ea68450b822ac5c2cac53d206505ab1b2764c53a68",
+      "size": 15746
     },
     {
       "path": "tests/test_component_provenance.py",
@@ -2478,8 +2478,8 @@
     },
     {
       "path": "tests/test_vig_acceptance.py",
-      "sha256": "ba3fc460010450685e19b53cd038e8edfdca1defe0b8b83daa36e1847036a4a1",
-      "size": 22760
+      "sha256": "391df6155d5634d85dd6d36635c9d615e702ffcd93f78d2a89836e17392cf162",
+      "size": 22808
     },
     {
       "path": "tests/test_vpi_acceptance.py",
