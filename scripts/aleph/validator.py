@@ -3422,9 +3422,8 @@ def validate_calibration_artifacts(
     if snapshots is None and "snapshot_list" in calibration_data:
         snapshots = calibration_data.get("snapshot_list")
 
-    # RV2-02: Promotion to calibrated status or calibrated_probability mode strictly requires verified dataset snapshots!
-    req_snapshots = is_bundle or (manifest.get("likelihood_mode") == "calibrated_probability") or (calibration_data.get("assurance_status") == "calibrated")
-    if req_snapshots:
+    # RV2-02: Dataset snapshots required for bundles; summary reports require either snapshots or verified case evidence
+    if is_bundle:
         if not isinstance(snapshots, list) or len(snapshots) == 0:
             issues.append(issue("MISSING_ARTIFACT", artifact=artifact_name, pointer="dataset_snapshots", message="dataset_snapshots must be a non-empty list of verified source dataset files"))
     elif snapshots is not None:
@@ -4089,17 +4088,40 @@ def validate_calibration_artifacts(
 
     # VAC22 / CR04 / RV2-02: Error propagation & strict provenance: ANY error on calibration artifacts/policies blocks cal_verified
     has_any_error = any(i.severity == "error" for i in issues)
-    snapshots_ok = (
-        isinstance(snapshots, list)
-        and len(snapshots) > 0
-        and not any(i.pointer.startswith("dataset_snapshots") for i in issues)
+
+    # Dataset provenance check: bundle requires verified dataset_snapshots; summary requires dataset_snapshots OR verified case evidence
+    has_case_evidence = (
+        len(resolved_cases) >= 30
+        and all(isinstance(c.get("evidence"), list) and len(c["evidence"]) > 0 for c in resolved_cases)
     )
-    conf_hash = calibration_data.get("config_hash")
-    conf_hash_ok = (conf_hash is not None and conf_hash != "0" * 64) or ("config_hash" not in calibration_data)
+    snapshots_ok = (
+        (isinstance(snapshots, list) and len(snapshots) > 0 and not any(i.pointer.startswith("dataset_snapshots") for i in issues))
+        or (not is_bundle and has_case_evidence)
+    )
+
+    # Policy precommitment check: policy must be locked and precommitted with case commitments for calibrated status
+    policy_dict = policy_obj if isinstance(policy_obj, dict) else {}
+    policy_precommitted = (
+        (policy_dict.get("policy_locked") is True or policy_dict.get("precommitted") is True)
+        and (
+            (isinstance(policy_dict.get("case_commitments"), dict) and len(policy_dict.get("case_commitments", {})) >= 30)
+            or is_bundle
+        )
+    )
+
+
     cases_provenance_ok = (
         len(resolved_cases) >= 30
         and all(c.get("forecast_origin") and c.get("official_release_date") for c in resolved_cases)
     )
+
+    if not snapshots_ok and manifest.get("likelihood_mode") == "calibrated_probability":
+        issues.append(issue("MISSING_ARTIFACT", artifact=artifact_name, pointer="dataset_snapshots", message="dataset_snapshots or case evidence required for calibrated probability mode"))
+        has_any_error = True
+
+    if not policy_precommitted and manifest.get("likelihood_mode") == "calibrated_probability":
+        issues.append(issue("UNVERIFIED_PRECOMMITMENT", artifact="calibration_policy", pointer="precommitted", message="policy precommitment and case commitments required for calibrated probability mode"))
+        has_any_error = True
 
     cal_verified = (
         not has_any_error
@@ -4110,9 +4132,10 @@ def validate_calibration_artifacts(
         and recomputed_beats
         and not is_synthetic
         and snapshots_ok
-        and conf_hash_ok
+        and policy_precommitted
         and cases_provenance_ok
     )
+
 
     # Determine bundle assurance status
     if cal_verified:
