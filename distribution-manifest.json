@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 499,
-  "tree_sha256": "5fc3ebaa7eba3aa8277f7d46d854ddd47ab6efe6931a8f4f1d86f0d73b1a5fd3",
+  "tree_sha256": "d9ffb67ec9da6e41e7592d5cf0aa166825ec029bfdf3cc09971a97f55ad9b11e",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -1688,8 +1688,8 @@
     },
     {
       "path": "schemas/calibration-bundle.schema.json",
-      "sha256": "3dd01a3b6cf0a5d4d22b08837e02c46dd6f26d53dbef4638f25385e684dc69fd",
-      "size": 16575
+      "sha256": "0562b91c1af313e25c0b29dffb7dfbf3735df48474907b889f917137a30e1d0d",
+      "size": 16856
     },
     {
       "path": "schemas/causal-edge.schema.json",

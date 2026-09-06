@@ -185,6 +185,18 @@
         "allow_synthetic": {
           "type": "boolean",
           "default": false
+        },
+        "precommitted": {
+          "type": "boolean"
+        },
+        "commitment_version": {
+          "type": "string"
+        },
+        "case_commitments": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
