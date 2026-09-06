@@ -65,7 +65,7 @@ class ComponentPackagingTests(unittest.TestCase):
         entry = lock["components"]["d-research"]
         self.assertEqual(entry["uri"], "aleph-component://d-research")
         self.assertEqual(entry["version"], "3.4.1")
-        self.assertIn(entry["source_tag"], ("v3.4.1-candidate", "upgrade/v2-evidence-verification", "repair/v3-source-grounding"))
+        self.assertIn(entry["source_tag"], ("v3.4.1-candidate", "upgrade/v2-evidence-verification", "repair/v3-source-grounding", "repair/v4-source-context"))
         self.assertIn(entry["file_count"], (214, 217))
         self.assertEqual(entry["file_count"], len(entry["files"]))
         self.assertIn("scripts/evidence_ledger.py", entry["entrypoints"])
@@ -75,15 +75,15 @@ class ComponentPackagingTests(unittest.TestCase):
         self.assertEqual(len(entry["upstream_tree"]), 40)
         self.assertIn(
             entry["upstream_commit"],
-            ("1c59fd801ca7f6f375b7e45380bb1f2a273a2bfb", "94e464b0a1cebf705b2b29490ffd83485bc17341", "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c", "c3eb12dbc1efda8e9d5a7bfa69f6b311c9bfb291", "caa600dbb74fe05ceaf3937bb9355db1dea73018"),
+            ("1c59fd801ca7f6f375b7e45380bb1f2a273a2bfb", "94e464b0a1cebf705b2b29490ffd83485bc17341", "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c", "c3eb12dbc1efda8e9d5a7bfa69f6b311c9bfb291", "caa600dbb74fe05ceaf3937bb9355db1dea73018", "beafd47cef77ed18d9861f5c809776373b3b1740", "06a1999bb070bb7bcc1a658b806d69771b54e028"),
         )
         self.assertIn(
             entry["upstream_tag_object"],
-            ("fc2e90c4947f60727c779df242fb91b81188f6f9", "94e464b0a1cebf705b2b29490ffd83485bc17341", "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c", "c3eb12dbc1efda8e9d5a7bfa69f6b311c9bfb291", "caa600dbb74fe05ceaf3937bb9355db1dea73018"),
+            ("fc2e90c4947f60727c779df242fb91b81188f6f9", "94e464b0a1cebf705b2b29490ffd83485bc17341", "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c", "c3eb12dbc1efda8e9d5a7bfa69f6b311c9bfb291", "caa600dbb74fe05ceaf3937bb9355db1dea73018", "beafd47cef77ed18d9861f5c809776373b3b1740", "06a1999bb070bb7bcc1a658b806d69771b54e028"),
         )
         self.assertIn(
             entry["upstream_tree"],
-            ("3238c23f35955a812dbc523829948835927427e3", "2e57caa61344452a7d1ba7c1f625400830f1e332", "a656db578f8742436d696931c6ee3703be1a5ac7", "c37dfae29e5bcb67cdf7827b98fd250aa66b64ec", "7bd4459f2b3c7e365d6117d6fae7b705dda22d3c"),
+            ("3238c23f35955a812dbc523829948835927427e3", "2e57caa61344452a7d1ba7c1f625400830f1e332", "a656db578f8742436d696931c6ee3703be1a5ac7", "c37dfae29e5bcb67cdf7827b98fd250aa66b64ec", "7bd4459f2b3c7e365d6117d6fae7b705dda22d3c", "ccf288a739b81ef18699790298f0af503686999d", "7a0e886632e460a6e78570672d450fab41daaf26"),
         )
         recipe = entry["snapshot_recipe"]
         self.assertEqual(recipe["text_eol"], "lf")

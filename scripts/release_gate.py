@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import io
 import json
 import os
 import re
@@ -253,6 +254,10 @@ def _static_contract(root: Path) -> dict[str, Any]:
 
 
 def main() -> None:
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if isinstance(sys.stderr, io.TextIOWrapper):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description="Run non-mutating Aleph release gates.")
     parser.add_argument("--json", action="store_true", help="Emit the complete machine-readable report.")
     parser.add_argument(

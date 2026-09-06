@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import io
 import json
 import platform
 import sys
@@ -107,6 +108,10 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> None:
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if isinstance(sys.stderr, io.TextIOWrapper):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(
         description=f"Preflight checks for Aleph Skill {PACKAGE_VERSION}."
     )

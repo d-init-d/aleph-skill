@@ -3472,7 +3472,8 @@ def validate_calibration_artifacts(
                     "forecast_origin": p.get("forecast_origin"),
                     "target_period": p.get("target_period"),
                     "model_version": p.get("model_version"),
-                    "model_hash": p.get("model_hash") or p.get("model_config_hash"),
+                    "model_hash": p.get("model_hash"),
+                    "model_config_hash": p.get("model_config_hash"),
                     "formula_version": p.get("formula_version"),
                     "point_prediction": p.get("point_prediction"),
                     "baseline_prediction": bp_val,
@@ -4004,8 +4005,32 @@ def validate_calibration_artifacts(
                     )
                     recomputed_beats = False
 
-        # VAC09: Case bytes tamper rehash detection
+        # VAC09: Case bytes tamper rehash detection & Case Commitment ID Coverage (RV3-02)
         case_commits = policy_obj.get("case_commitments")
+        if isinstance(case_commits, dict) and resolved_cases:
+            resolved_cids = {str(c.get("case_id", "")) for c in resolved_cases}
+            commit_cids = set(case_commits.keys())
+            missing_from_policy = resolved_cids - commit_cids
+            unrelated_in_policy = commit_cids - resolved_cids
+            if missing_from_policy:
+                for mcid in sorted(missing_from_policy):
+                    issues.append(
+                        issue(
+                            "COMMITMENT_MISMATCH",
+                            pointer=f"policy/case_commitments/{mcid}",
+                            message=f"case {mcid} missing from policy case_commitments",
+                        )
+                    )
+            if unrelated_in_policy:
+                for ucid in sorted(unrelated_in_policy):
+                    issues.append(
+                        issue(
+                            "COMMITMENT_MISMATCH",
+                            pointer=f"policy/case_commitments/{ucid}",
+                            message=f"policy commitment {ucid} does not match any hindcast case",
+                        )
+                    )
+
         for c in resolved_cases:
             cid = str(c.get("case_id", ""))
             c_clean = {k: v for k, v in c.items() if k not in ("commitment_hash", "_file_path")}
@@ -4034,20 +4059,69 @@ def validate_calibration_artifacts(
                         )
                     )
 
-    # Model and Formula per-case Binding (A12)
+    # RV3-02: Evidence validation: each case must have non-empty genuine evidence
+    for c in resolved_cases:
+        cid = str(c.get("case_id", ""))
+        c_ev = c.get("evidence")
+        if not isinstance(c_ev, list) or len(c_ev) == 0:
+            issues.append(
+                issue(
+                    "MISSING_ARTIFACT",
+                    pointer=f"cases/{cid}/evidence",
+                    message=f"case {cid} missing evidence records",
+                )
+            )
+        else:
+            for e_idx, ev_item in enumerate(c_ev):
+                if not isinstance(ev_item, dict) or not ev_item:
+                    issues.append(
+                        issue(
+                            "EMPTY_EVIDENCE",
+                            pointer=f"cases/{cid}/evidence/{e_idx}",
+                            message=f"case {cid} contains empty evidence dictionary",
+                        )
+                    )
+                else:
+                    has_substance = bool(
+                        ev_item.get("id")
+                        or ev_item.get("url")
+                        or ev_item.get("source_url")
+                        or ev_item.get("source")
+                        or ev_item.get("file_path")
+                        or ev_item.get("digest")
+                        or ev_item.get("sha256")
+                        or (ev_item.get("value") is not None and ev_item.get("publication_date"))
+                    )
+                    if not has_substance:
+                        issues.append(
+                            issue(
+                                "EMPTY_EVIDENCE",
+                                pointer=f"cases/{cid}/evidence/{e_idx}",
+                                message=f"case {cid} evidence item lacks identifying provenance fields",
+                            )
+                        )
+
+    # Model and Formula per-case Binding (A12, RV3-03)
+    is_rolling_model = (
+        calibration_data.get("model_mode") == "rolling"
+        or calibration_data.get("rolling_model") is True
+        or manifest.get("model_mode") == "rolling"
+        or any(c.get("is_rolling") is True for c in resolved_cases)
+    )
     for c in resolved_cases:
         cid = str(c.get("case_id", ""))
         c_m_hash = c.get("model_hash")
         if c_m_hash and model_digest and c_m_hash != model_digest:
-            issues.append(
-                issue(
-                    "TRACK_MISMATCH",
-                    pointer=f"cases/{cid}/model_hash",
-                    expected=model_digest,
-                    actual=c_m_hash,
-                    message="case prediction references mismatched model_hash",
+            if not is_rolling_model:
+                issues.append(
+                    issue(
+                        "TRACK_MISMATCH",
+                        pointer=f"cases/{cid}/model_hash",
+                        expected=model_digest,
+                        actual=c_m_hash,
+                        message="case prediction references mismatched model_hash",
+                    )
                 )
-            )
         c_f_ver = c.get("formula_version")
         if c_f_ver and c_f_ver != model_formula_version:
             issues.append(
@@ -4086,27 +4160,30 @@ def validate_calibration_artifacts(
             )
         )
 
-    # VAC22 / CR04 / RV2-02: Error propagation & strict provenance: ANY error on calibration artifacts/policies blocks cal_verified
+    # VAC22 / CR04 / RV2-02 / RV3-02: Error propagation & strict provenance: ANY error on calibration artifacts/policies blocks cal_verified
     has_any_error = any(i.severity == "error" for i in issues)
 
     # Dataset provenance check: bundle requires verified dataset_snapshots; summary requires dataset_snapshots OR verified case evidence
     has_case_evidence = (
         len(resolved_cases) >= 30
-        and all(isinstance(c.get("evidence"), list) and len(c["evidence"]) > 0 for c in resolved_cases)
+        and not any(i.code in ("EMPTY_EVIDENCE", "MISSING_ARTIFACT") and "evidence" in i.pointer for i in issues)
     )
     snapshots_ok = (
         (isinstance(snapshots, list) and len(snapshots) > 0 and not any(i.pointer.startswith("dataset_snapshots") for i in issues))
         or (not is_bundle and has_case_evidence)
     )
 
-    # Policy precommitment check: policy must be locked and precommitted with case commitments for calibrated status
+    # Policy precommitment check: policy must be locked and precommitted with case commitments covering all cases
     policy_dict = policy_obj if isinstance(policy_obj, dict) else {}
+    case_commitments_dict = policy_dict.get("case_commitments")
+    case_commitments_ok = (
+        isinstance(case_commitments_dict, dict)
+        and len(case_commitments_dict) >= 30
+        and not any(i.code == "COMMITMENT_MISMATCH" for i in issues)
+    )
     policy_precommitted = (
         (policy_dict.get("policy_locked") is True or policy_dict.get("precommitted") is True)
-        and (
-            (isinstance(policy_dict.get("case_commitments"), dict) and len(policy_dict.get("case_commitments", {})) >= 30)
-            or is_bundle
-        )
+        and (case_commitments_ok or (is_bundle and not any(i.code == "COMMITMENT_MISMATCH" for i in issues)))
     )
 
 

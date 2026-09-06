@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 499,
-  "tree_sha256": "d9ffb67ec9da6e41e7592d5cf0aa166825ec029bfdf3cc09971a97f55ad9b11e",
+  "tree_sha256": "7ac006f03c0877fcd6a9cb97bf28e6810a1f644fbf28af06a37d0b7e4f7ed47a",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -148,8 +148,8 @@
     },
     {
       "path": "component-lock.json",
-      "sha256": "ff02b7231867b4f273c4fb2473b91474b6c688c815f6faa17f5eeb1b13099bb8",
-      "size": 131804
+      "sha256": "b993ef262f8c491fc5944bc960987124ef6446295484387bac76238d6d2f3e09",
+      "size": 131802
     },
     {
       "path": "components/d-research/AGENTS.md",
@@ -918,8 +918,8 @@
     },
     {
       "path": "components/d-research/scripts/check_node_syntax.py",
-      "sha256": "b3015e1cac43033dd6b3a7f378ff909a409e6c92aa8c8060ba992b5a1691bf12",
-      "size": 1466
+      "sha256": "e556e9a7b6b1ab7e652c6595ddbb8bbc75d8305411fd46c381dc6c2f20a8b3e9",
+      "size": 1731
     },
     {
       "path": "components/d-research/scripts/citation_export.py",
@@ -1073,8 +1073,8 @@
     },
     {
       "path": "components/d-research/scripts/quality_eval.py",
-      "sha256": "e0e1ca20197ca0c65d6a7f9dc005102835496f1fada31981876620b60170e661",
-      "size": 196150
+      "sha256": "c3338ef4d340e54f0605ebed6072a5431218bcad5e3e4d3cdc7c86a944990a4d",
+      "size": 200318
     },
     {
       "path": "components/d-research/scripts/release_verify.py",
@@ -1083,8 +1083,8 @@
     },
     {
       "path": "components/d-research/scripts/report_render.py",
-      "sha256": "3cbdd96accc68cb59498776f5de4f121791ee1380a2690ef4f2a22393402e6d7",
-      "size": 112373
+      "sha256": "a47ef1c58f3ab4b854a94e94f2a181462df8efd2337663a2d0fdc5ffae37efc2",
+      "size": 116820
     },
     {
       "path": "components/d-research/scripts/research_plan.py",
@@ -1108,8 +1108,8 @@
     },
     {
       "path": "components/d-research/scripts/run_python.mjs",
-      "sha256": "1949b94277bc3877542fa70808126720306b854c7047f4508829e6cd68d594a9",
-      "size": 1879
+      "sha256": "0970c0810a0a39fe41e457cbdb953a7308de7b92b5a00ddad2f2b6455e06a09d",
+      "size": 1966
     },
     {
       "path": "components/d-research/scripts/runtime_self_test.mjs",
@@ -1883,8 +1883,8 @@
     },
     {
       "path": "scripts/aleph/validator.py",
-      "sha256": "389c41edc7d39eea84d43690582a9df85213860804fad5dcf11f211ddb1280c5",
-      "size": 275008
+      "sha256": "0b078777346412ee77bf13522e7106fb43c85d415b1d10602b7faf1b8b18be79",
+      "size": 278661
     },
     {
       "path": "scripts/build_release_assets.py",
@@ -1938,13 +1938,13 @@
     },
     {
       "path": "scripts/preflight.py",
-      "sha256": "e994dbbbbabe3387d6e9bdc5695def4cfcaed9ca421584e7e0a42e1c867853b2",
-      "size": 5801
+      "sha256": "455ba4c6ab27b7d65a13ea09389c4d1f5d898a0db6bad4531be8d70f61ad86a0",
+      "size": 6043
     },
     {
       "path": "scripts/release_gate.py",
-      "sha256": "351d592ce29343a1553d51f4f38161e72e050dfdeb4ac8f19ac23ada9d895fcf",
-      "size": 14954
+      "sha256": "7eb078201c1efbd4023cf7acab82a925070ba49c788052c0aa5b4ed5f130807d",
+      "size": 15196
     },
     {
       "path": "scripts/render_simulation_report.py",
@@ -2233,13 +2233,13 @@
     },
     {
       "path": "tests/test_component_integration.py",
-      "sha256": "79d5bf521eb90c3fe69903aa8cc2dcce10b23398fa9b23afa54bfca13d9ca23a",
-      "size": 32247
+      "sha256": "2d6f5cb2a8ab3f83daaf4111adb0d7010340aa26198fb9e1d7b39e4abac757b5",
+      "size": 32597
     },
     {
       "path": "tests/test_component_packaging.py",
-      "sha256": "65cca245745889d2f0a365ea68450b822ac5c2cac53d206505ab1b2764c53a68",
-      "size": 15746
+      "sha256": "6bee44d11360cea31f2a60dff87eba38b08e3fb8ac1e18833c8c587aabd90925",
+      "size": 16038
     },
     {
       "path": "tests/test_component_provenance.py",
@@ -2478,8 +2478,8 @@
     },
     {
       "path": "tests/test_vig_acceptance.py",
-      "sha256": "391df6155d5634d85dd6d36635c9d615e702ffcd93f78d2a89836e17392cf162",
-      "size": 22808
+      "sha256": "e25a342b6eb00c3f9ed9bc6b6d618b50c9e8413c3c4fa43774113291bb1e421d",
+      "size": 22904
     },
     {
       "path": "tests/test_vpi_acceptance.py",
