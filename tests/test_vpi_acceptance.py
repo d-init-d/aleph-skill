@@ -231,11 +231,11 @@ class TestVpiAcceptance(unittest.TestCase):
         t_stat = stats["paired_difference"]["t_statistic"]
         p_val = stats["paired_difference"]["p_value"]
         # Error difference is constant (0.3 - 0.2 = 0.1), variance is 0, t_stat is 0.0 or well-defined
-        self.assertNotEqual(t_stat, 1.42)
-        self.assertNotEqual(p_val, 0.16)
+        self.assertIsNone(t_stat)
+        self.assertIsNone(p_val)
 
         # 3. 95% interval must not be naive [mae * 0.85, mae * 1.15]
-        ci = stats["uncertainty_bounds"]["metric_confidence_intervals"]["mae"]
+        ci = stats["uncertainty_bounds"]["metric_confidence_intervals"]["delta_mae"]
         naive_lower = round(0.3 * 0.85, 4)
         naive_upper = round(0.3 * 1.15, 4)
         self.assertNotEqual(ci, [naive_lower, naive_upper])

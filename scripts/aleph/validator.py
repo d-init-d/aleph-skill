@@ -17,6 +17,7 @@ from . import (
     SUPPORTED_SCHEMA_VERSIONS,
     VALIDATOR_VERSION,
 )
+from .calibration_lineage import verify_lineage
 from .engine import (
     ComputationalModel,
     EngineConfig,
@@ -3417,6 +3418,13 @@ def validate_calibration_artifacts(
     if not isinstance(declared_metrics, dict) or len(declared_metrics) == 0:
         issues.append(issue("PACK_MATURITY", artifact=artifact_name, pointer="metrics", message="calibration metrics cannot be empty ({})"))
 
+    if isinstance(declared_metrics, dict):
+        for metric, value in declared_metrics.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                issues.append(issue("TYPE", artifact=artifact_name, pointer=f"metrics/{metric}", message="metrics require finite numbers"))
+                declared_metrics = {}
+                break
+
     # Dataset snapshots verification & path containment (A02, A20, VAC03)
     snapshots = calibration_data.get("dataset_snapshots")
     if snapshots is None and "snapshot_list" in calibration_data:
@@ -3468,6 +3476,7 @@ def validate_calibration_artifacts(
                 if bp_val is None:
                     bp_val = out_obj.get("baseline_prediction")
                 resolved_cases.append({
+                    **p,
                     "case_id": cid,
                     "forecast_origin": p.get("forecast_origin"),
                     "target_period": p.get("target_period"),
@@ -3529,7 +3538,7 @@ def validate_calibration_artifacts(
             if calibration_data.get("hindcast_digest") != actual_hindcast_hash and calibration_data.get("hindcast_digest") != canonical_hash(resolved_cases):
                 issues.append(issue("REPLAY_MISMATCH", artifact=artifact_name, pointer="hindcast_digest", expected=actual_hindcast_hash, actual=calibration_data.get("hindcast_digest"), message="hindcast digest mismatch against raw case data"))
         if "outcome_digest" in calibration_data:
-            actual_outcome_hash = canonical_hash([c.get("actual_value") or c.get("observations") for c in resolved_cases])
+            actual_outcome_hash = canonical_hash([c.get("actual_value") if c.get("actual_value") is not None else c.get("observations") for c in resolved_cases])
             if calibration_data.get("outcome_digest") != actual_outcome_hash and calibration_data.get("outcome_digest") != canonical_hash([c.get("observations") for c in resolved_cases]):
                 issues.append(issue("REPLAY_MISMATCH", artifact=artifact_name, pointer="outcome_digest", expected=actual_outcome_hash, actual=calibration_data.get("outcome_digest"), message="outcome digest mismatch against ground-truth outcomes"))
 
@@ -4101,18 +4110,19 @@ def validate_calibration_artifacts(
                             )
                         )
 
+    lineage = verify_lineage(workspace, resolved_cases, policy_obj or {}, calibration_data, issues)
+
     # Model and Formula per-case Binding (A12, RV3-03)
     is_rolling_model = (
         calibration_data.get("model_mode") == "rolling"
         or calibration_data.get("rolling_model") is True
         or manifest.get("model_mode") == "rolling"
-        or any(c.get("is_rolling") is True for c in resolved_cases)
     )
     for c in resolved_cases:
         cid = str(c.get("case_id", ""))
         c_m_hash = c.get("model_hash")
         if c_m_hash and model_digest and c_m_hash != model_digest:
-            if not is_rolling_model:
+            if not is_rolling_model or not lineage["execution_verified"]:
                 issues.append(
                     issue(
                         "TRACK_MISMATCH",
@@ -4200,8 +4210,41 @@ def validate_calibration_artifacts(
         issues.append(issue("UNVERIFIED_PRECOMMITMENT", artifact="calibration_policy", pointer="precommitted", message="policy precommitment and case commitments required for calibrated probability mode"))
         has_any_error = True
 
+    probability_scope = calibration_data.get("calibration_scope")
+    probability_cases = bool(resolved_cases) and all(
+        isinstance(c.get("point_prediction"), (int, float))
+        and not isinstance(c.get("point_prediction"), bool)
+        and 0 <= c["point_prediction"] <= 1
+        and c.get("actual_value") in (0, 1)
+        and not isinstance(c.get("actual_value"), bool)
+        for c in resolved_cases
+    )
+    probability_verified = False
+    calibration_error = None
+    if probability_cases and isinstance(probability_scope, str) and probability_scope and probability_scope == policy_dict.get("calibration_scope"):
+        # Fixed ten-bin reliability diagnostic, with thresholds committed in policy.
+        bins: list[list[dict[str, Any]]] = [[] for _ in range(10)]
+        for c in resolved_cases:
+            bins[min(9, int(c["point_prediction"] * 10))].append(c)
+        calibration_error = sum(
+            abs(sum(c["point_prediction"] - c["actual_value"] for c in bucket))
+            for bucket in bins
+        ) / len(resolved_cases)
+        max_ece = policy_dict.get("thresholds", {}).get("max_expected_calibration_error")
+        probability_verified = (
+            isinstance(max_ece, (int, float)) and not isinstance(max_ece, bool)
+            and math.isfinite(max_ece) and 0 < max_ece <= 0.1
+            and calibration_error <= max_ece
+            and lineage["execution_verified"] and lineage["historical_provenance_verified"]
+        )
+    if not probability_verified and manifest.get("likelihood_mode") == "calibrated_probability":
+        issues.append(issue("UNVERIFIED_PROBABILITY_CALIBRATION", artifact=artifact_name,
+                            message="probability mode requires replayed binary forecasts, scoped reliability diagnostics and external holdout/vintage receipts"))
+        has_any_error = True
+
     cal_verified = (
-        not has_any_error
+        probability_verified
+        and not has_any_error
         and raw_case_count >= 30
         and unique_case_count >= 30
         and not has_inflation
@@ -4221,7 +4264,7 @@ def validate_calibration_artifacts(
         bundle_assurance_status = "synthetic_experimental"
     elif raw_case_count < 30:
         bundle_assurance_status = "insufficient_cases"
-    elif not recomputed_beats:
+    elif not recomputed_beats or (lineage["execution_verified"] and not has_any_error):
         bundle_assurance_status = "uncalibrated"
     else:
         bundle_assurance_status = "failed_verification"
@@ -4233,35 +4276,20 @@ def validate_calibration_artifacts(
     elif calibration_data.get("status") == "pass" and calibration_data.get("beats_baseline") is True and not recomputed_beats:
         issues.append(issue("REPLAY_MISMATCH", artifact=artifact_name, pointer="beats_baseline", message="calibration summary falsely claims beats_baseline"))
 
-    # VAC07, VAC08 / CR04: Cryptographic HMAC key scoping
-    attestation_type = "unattested"
-    hmac_sig = calibration_data.get("hmac_signature")
-    key_scope = calibration_data.get("key_scope")
-    if isinstance(hmac_sig, str) and hmac_sig:
-        if hmac_sig.startswith("test-key-signed:") or key_scope == "test":
-            attestation_type = "test_only_hmac"
-            if cal_verified:
-                cal_verified = False
-                bundle_assurance_status = "test_attested"
-        elif hmac_sig.startswith("internal-key-signed:") and len(hmac_sig.split(":", 1)[1]) == 64:
-            attestation_type = "internal_hmac"
-        else:
-            attestation_type = "unattested"
-            issues.append(issue("SECURITY_VIOLATION", pointer="hmac_signature", message="unverified or invalid HMAC signature"))
-    elif isinstance(hmac_sig, dict):
-        if hmac_sig.get("key_scope") == "test":
-            attestation_type = "test_only_hmac"
-            if cal_verified:
-                cal_verified = False
-                bundle_assurance_status = "test_attested"
-        elif hmac_sig.get("key_scope") == "production" and hmac_sig.get("signature"):
-            attestation_type = "internal_hmac"
-        else:
-            attestation_type = "unattested"
-            issues.append(issue("SECURITY_VIOLATION", pointer="hmac_signature", message="unverified HMAC signature"))
+    attestation_type = lineage["attestation_type"]
+    if calibration_data.get("hmac_signature") and attestation_type == "unattested":
+        # Candidate-owned signatures are not a host trust anchor.
+        issues.append(issue("UNVERIFIED_ATTESTATION", pointer="hmac_signature",
+                            message="signature declaration is not an independently verified receipt", severity="warning"))
 
     return {
         "calibration_present": True,
+        "lineage": lineage,
+        "execution_verified": lineage["execution_verified"],
+        "probability_calibration_verified": cal_verified,
+        "expected_calibration_error": calibration_error,
+        "calibration_scope": probability_scope if cal_verified else None,
+        "causal_validity": "not_established",
         "calibration_verified": cal_verified,
         "beats_baseline": recomputed_beats,
         "is_synthetic": is_synthetic,
@@ -5037,27 +5065,25 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
             issues.append(issue("REPLAY_MISMATCH", artifact="replay_report", pointer="issues", message="successful replay must have no issues"))
 
     target_calibration = calibration_report if calibration_report is not None else calibration_bundle
-    target_calibration_artifact = "calibration_report" if calibration_report is not None else "calibration_bundle"
     cal_eval: dict[str, Any] = {}
-    if target_calibration is not None:
-        cal_eval = validate_calibration_artifacts(
-            workspace,
-            manifest,
-            target_calibration,
-            model_digest,
-            model_formula_version,
-            model,
-            issues,
-            artifact_name=target_calibration_artifact,
-        )
+    calibration_results = []
+    for target_name, target in (("calibration_report", calibration_report), ("calibration_bundle", calibration_bundle)):
+        if target is not None:
+            calibration_results.append(validate_calibration_artifacts(
+                workspace, manifest, target, model_digest, model_formula_version, model,
+                issues, artifact_name=target_name,
+            ))
+    if calibration_results:
+        cal_eval = calibration_results[0]
+        if len(calibration_results) > 1:
+            for field in ("case_count", "unique_case_count", "recomputed_metrics", "assurance_status", "calibration_scope"):
+                if calibration_results[0].get(field) != calibration_results[1].get(field):
+                    issues.append(issue("CALIBRATION_VIEW_MISMATCH", pointer=field,
+                                        message="calibration summary and bundle disagree"))
+            cal_eval["calibration_verified"] = all(r.get("calibration_verified") for r in calibration_results) and not any(i.severity == "error" for i in issues)
     elif manifest.get("likelihood_mode") == "calibrated_probability":
-        issues.append(
-            issue(
-                "MISSING_ARTIFACT",
-                pointer="manifest.artifact_paths.calibration_report",
-                message="calibrated_probability mode requires a calibration report or bundle",
-            )
-        )
+        issues.append(issue("MISSING_ARTIFACT", pointer="manifest.artifact_paths.calibration_report",
+                            message="calibrated_probability mode requires a calibration report or bundle"))
 
     if sensitivity is not None:
         declared_hash = sensitivity.get("report_hash")
@@ -5100,6 +5126,9 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
             "independent_replay_passed": independent_replay_passed,
             "calibration_present": target_calibration is not None,
             "calibration_verified": cal_eval.get("calibration_verified", False),
+            "execution_verified": cal_eval.get("execution_verified", False),
+            "probability_calibration_verified": cal_eval.get("calibration_verified", False),
+            "lineage": cal_eval.get("lineage", {}),
             "is_synthetic": cal_eval.get("is_synthetic", False),
             "recomputed_metrics": cal_eval.get("recomputed_metrics", {}),
             "beats_baseline": cal_eval.get("beats_baseline", False),

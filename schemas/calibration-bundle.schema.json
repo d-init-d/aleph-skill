@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://aleph.local/contracts/v2/calibration-bundle.schema.json",
   "title": "Causal Timeline Calibration Bundle Schema",
-  "description": "Authoritative contract for versioned calibration bundles (V2). Enforces precommitted locked policies, raw observation and dataset provenance, per-case model config hashes, independent metric recomputation (CR04), temporal leakage audits (CR06), and strict tier boundaries (internal_hmac vs uncalibrated).",
+  "description": "Calibration bundle with per-case source resolution and replay. Local integrity, historical provenance, probability calibration and causal validity are distinct.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -115,6 +115,39 @@
         "untrusted_candidate"
       ],
       "description": "Cryptographic and trust provenance level of calibration attestation."
+    },
+    "calibration_scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model_mode": {
+      "enum": [
+        "static",
+        "rolling"
+      ]
+    },
+    "bundle_hash": {
+      "type": "string"
+    },
+    "model_hash": {
+      "type": "string"
+    },
+    "formula_version": {
+      "type": "string"
+    },
+    "model_version": {
+      "type": "string"
+    },
+    "case_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "unique_case_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "beats_baseline": {
+      "type": "boolean"
     }
   },
   "$defs": {
@@ -197,6 +230,24 @@
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "forecast_commitments": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "calibration_scope": {
+          "type": "string"
+        },
+        "baseline": {
+          "type": "string"
+        },
+        "recipe": {
+          "type": "string"
+        },
+        "commitment_phase": {
+          "type": "string"
         }
       }
     },
@@ -258,7 +309,10 @@
         "formula_version",
         "input_snapshot_digests",
         "input_cutoff_time",
-        "point_prediction"
+        "point_prediction",
+        "execution",
+        "model_hash",
+        "evidence"
       ],
       "properties": {
         "case_id": {
@@ -306,8 +360,35 @@
         },
         "evidence": {
           "type": "array",
+          "minItems": 2,
           "items": {
-            "type": "object"
+            "type": "object",
+            "required": [
+              "file_path",
+              "sha256",
+              "record_index",
+              "role"
+            ],
+            "properties": {
+              "file_path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^(sha256:)?[0-9a-f]{64}$"
+              },
+              "record_index": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "role": {
+                "enum": [
+                  "input",
+                  "outcome"
+                ]
+              }
+            }
           }
         },
         "predicted_probabilities": {
@@ -320,6 +401,31 @@
         },
         "seed": {
           "type": "integer"
+        },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file_path",
+            "sha256"
+          ],
+          "properties": {
+            "file_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^(sha256:)?[0-9a-f]{64}$"
+            }
+          }
+        },
+        "model_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "is_synthetic": {
+          "type": "boolean"
         }
       }
     },
@@ -400,8 +506,10 @@
           "minimum": 1
         },
         "effective_sample_size": {
-          "type": "number",
-          "minimum": 1.0
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "candidate_metrics": {
           "type": "object",

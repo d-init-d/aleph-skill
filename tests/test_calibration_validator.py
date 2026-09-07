@@ -177,8 +177,8 @@ class CalibrationValidatorAcceptanceTests(unittest.TestCase):
             self.assertEqual(result.status, "fail")
             self.assertIn("MISSING_ARTIFACT", {i.code for i in result.issues})
 
-    def test_a03_valid_raw_cases_positive(self) -> None:
-        """A03: Workspace provides valid raw hindcast cases, matching realized outcomes, and precommitted policy."""
+    def test_a03_self_declared_cases_cannot_certify_calibration(self) -> None:
+        """A03: Self-declared values and policy lack source resolution and engine replay."""
         with tempfile.TemporaryDirectory() as temporary:
             workspace, manifest, manifest_path, _, model_digest = _setup_base_workspace(temporary)
             manifest["likelihood_mode"] = "calibrated_probability"
@@ -236,10 +236,9 @@ class CalibrationValidatorAcceptanceTests(unittest.TestCase):
             write_json_atomic(workspace / "calibration-report.json", summary)
 
             result = validate_numerical_artifacts(workspace, manifest)
-            self.assertEqual(result.status, "pass", [i.to_dict() for i in result.issues])
-            self.assertTrue(result.metrics.get("calibration_verified"))
-            self.assertTrue(result.metrics.get("beats_baseline"))
-            self.assertEqual(result.metrics.get("assurance_status"), "calibrated")
+            self.assertEqual(result.status, "fail")
+            self.assertFalse(result.metrics.get("calibration_verified"))
+            self.assertIn("CALIBRATION_LINEAGE", {i.code for i in result.issues})
 
     def test_a04_case_count_mismatch(self) -> None:
         """A04: Summary declares case_count=30, unique_case_count=30, but raw case directory contains only 20 cases."""
@@ -814,7 +813,7 @@ class CalibrationValidatorAcceptanceTests(unittest.TestCase):
             write_json_atomic(workspace / "calibration-report.json", summary)
 
             result = validate_numerical_artifacts(workspace, manifest)
-            self.assertEqual(result.metrics.get("attestation_type"), "internal_hmac")
+            self.assertEqual(result.metrics.get("attestation_type"), "unattested")
 
 
 if __name__ == "__main__":

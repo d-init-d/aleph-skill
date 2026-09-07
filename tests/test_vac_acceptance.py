@@ -421,7 +421,7 @@ class VACAcceptanceTestSuite(unittest.TestCase):
             write_json_atomic(workspace / "calibration-report.json", summary)
 
             result = validate_numerical_artifacts(workspace, manifest)
-            self.assertEqual(result.metrics.get("attestation_type"), "test_only_hmac")
+            self.assertEqual(result.metrics.get("attestation_type"), "unattested")
             self.assertFalse(result.metrics.get("calibration_verified"))
             self.assertNotEqual(result.metrics.get("assurance_status"), "calibrated")
 
@@ -992,7 +992,7 @@ class VACAcceptanceTestSuite(unittest.TestCase):
         ]
         self.assertTrue(len(mismatch_issues) > 0)
 
-    def test_vac21_valid_positive_calibration_e2e(self) -> None:
+    def test_vac21_unresolved_legacy_calibration_cannot_pass(self) -> None:
         """VAC21: Valid positive end-to-end calibration achieves calibrated empirical assurance."""
         with tempfile.TemporaryDirectory() as temporary:
             workspace, manifest, _, _, model_digest = _setup_base_workspace(temporary)
@@ -1050,10 +1050,10 @@ class VACAcceptanceTestSuite(unittest.TestCase):
             write_json_atomic(workspace / "calibration-report.json", summary)
 
             result = validate_numerical_artifacts(workspace, manifest)
-            self.assertEqual(result.status, "pass", [i.to_dict() for i in result.issues])
-            self.assertTrue(result.metrics.get("calibration_verified"))
+            self.assertEqual(result.status, "fail")
+            self.assertFalse(result.metrics.get("calibration_verified"))
             self.assertTrue(result.metrics.get("beats_baseline"))
-            self.assertEqual(result.metrics.get("assurance_status"), "calibrated")
+            self.assertNotEqual(result.metrics.get("assurance_status"), "calibrated")
 
     def test_vac22_error_propagation_across_downstream_gates(self) -> None:
         """VAC22: Error on calibration policy propagates across validator, quality, and release gates."""

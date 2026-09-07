@@ -3,8 +3,8 @@
   "package_version": "2.4.1",
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
-  "file_count": 499,
-  "tree_sha256": "7ac006f03c0877fcd6a9cb97bf28e6810a1f644fbf28af06a37d0b7e4f7ed47a",
+  "file_count": 505,
+  "tree_sha256": "9b0e435a3d870763a2c10e53c4fe332f7ecda8b2f05af1603174ea0fd3fb8521",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -88,8 +88,8 @@
     },
     {
       "path": "SKILL.md",
-      "sha256": "6cc55bf444c30e33de98058c8317d456a62d9b3c49b9b5ea8d2ee5f875085038",
-      "size": 13683
+      "sha256": "6084f2ed7807d4104921fbd6ac741108c13c416faeac6b0634bcd5c6dbc76b54",
+      "size": 13852
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -148,8 +148,8 @@
     },
     {
       "path": "component-lock.json",
-      "sha256": "b993ef262f8c491fc5944bc960987124ef6446295484387bac76238d6d2f3e09",
-      "size": 131802
+      "sha256": "4841cc181609583bc2f684cb2e85b2cd8117a0ddad96258cc82da5484cf24eea",
+      "size": 132649
     },
     {
       "path": "components/d-research/AGENTS.md",
@@ -183,8 +183,8 @@
     },
     {
       "path": "components/d-research/SKILL.md",
-      "sha256": "85ca81c5aa2605302363966226c8f1db8a491f7a291bc1189c933178ba737c2c",
-      "size": 16685
+      "sha256": "098c66cc762fb78951a245fc8cf81547bd5c44e2ff35bfba422fe5babcb615d3",
+      "size": 16758
     },
     {
       "path": "components/d-research/adapters/citation-resolver.md",
@@ -573,7 +573,7 @@
     },
     {
       "path": "components/d-research/package.json",
-      "sha256": "46028bebef89e4d6ce477c386e0a4031788fda575dd5e2c2c182a033acd4274d",
+      "sha256": "1b28260ece1fe4f794cf2d75cea669ed3bcb4c28964eae7036609481d85645b5",
       "size": 8728
     },
     {
@@ -805,6 +805,11 @@
       "path": "components/d-research/references/source-discovery.md",
       "sha256": "2a4af00fe42fabf933b089083d049dcb3978a0acf359ffa20d2620e05333f2ce",
       "size": 5136
+    },
+    {
+      "path": "components/d-research/references/source-grounding.md",
+      "sha256": "daa9d19fc910df3346401956066933945460b5ca3645117a0743c60051d19a9e",
+      "size": 1060
     },
     {
       "path": "components/d-research/references/source-quality-rubric.md",
@@ -1073,8 +1078,8 @@
     },
     {
       "path": "components/d-research/scripts/quality_eval.py",
-      "sha256": "c3338ef4d340e54f0605ebed6072a5431218bcad5e3e4d3cdc7c86a944990a4d",
-      "size": 200318
+      "sha256": "c3fc50affe5bcddb983601161548093281d89c24d62a71cf809d403b9755c5b6",
+      "size": 199698
     },
     {
       "path": "components/d-research/scripts/release_verify.py",
@@ -1083,8 +1088,8 @@
     },
     {
       "path": "components/d-research/scripts/report_render.py",
-      "sha256": "a47ef1c58f3ab4b854a94e94f2a181462df8efd2337663a2d0fdc5ffae37efc2",
-      "size": 116820
+      "sha256": "253330ce3b7d332ea46ecdfcd3a6445bd12b347dde3250b4e1124596d5279d49",
+      "size": 114857
     },
     {
       "path": "components/d-research/scripts/research_plan.py",
@@ -1125,6 +1130,11 @@
       "path": "components/d-research/scripts/social_snapshot.py",
       "sha256": "e9f6eaf0707aa33bf5960d1e71c8ab429a3950212b527182aa435a2d7b568b3c",
       "size": 78911
+    },
+    {
+      "path": "components/d-research/scripts/source_grounding.py",
+      "sha256": "3ed9cb5ac131c08d5dc4a7c46645f5e6c2f211f343539c70f785afff00e2c92c",
+      "size": 4814
     },
     {
       "path": "components/d-research/scripts/translate.py",
@@ -1627,6 +1637,11 @@
       "size": 9655
     },
     {
+      "path": "references/calibration-lineage.md",
+      "sha256": "31a0acc42b66300925fe41e88e9015b6aba04ab02082c7c523e4774f3fba5390",
+      "size": 3954
+    },
+    {
       "path": "references/causal-edge-protocol.md",
       "sha256": "e9c63cbb008561f544b462c1c7291fd4c49bf72591502d60ecfbdd70684e6064",
       "size": 5151
@@ -1688,8 +1703,8 @@
     },
     {
       "path": "schemas/calibration-bundle.schema.json",
-      "sha256": "0562b91c1af313e25c0b29dffb7dfbf3735df48474907b889f917137a30e1d0d",
-      "size": 16856
+      "sha256": "f271ef1a0eb639c5c3631ac6c58f1cf030ba0b5791d608d4a52c62661cca9303",
+      "size": 19099
     },
     {
       "path": "schemas/causal-edge.schema.json",
@@ -1777,6 +1792,11 @@
       "size": 14041
     },
     {
+      "path": "scripts/aleph/calibration_lineage.py",
+      "sha256": "c2b9abb0c97454080b9718fb0825e400f10f31be0e69a078d8ea22dc0872d9d7",
+      "size": 13193
+    },
+    {
       "path": "scripts/aleph/component_registry.py",
       "sha256": "e0fbfb1bc8e98a7297e8d23a1340b0fbfbef6f4fb862a7db9a817bf103e19759",
       "size": 48665
@@ -1788,8 +1808,8 @@
     },
     {
       "path": "scripts/aleph/empirical_pilot.py",
-      "sha256": "d570b8e0903a3b2d9c53b38dc41b639b56ae037f3c39daacb58c3349a728f6c3",
-      "size": 15484
+      "sha256": "3e0561e7bc264de83702b95b8fdcf6061c0f8f3146416ef66ccaa20f289ebf0a",
+      "size": 16521
     },
     {
       "path": "scripts/aleph/engine.py",
@@ -1883,8 +1903,8 @@
     },
     {
       "path": "scripts/aleph/validator.py",
-      "sha256": "0b078777346412ee77bf13522e7106fb43c85d415b1d10602b7faf1b8b18be79",
-      "size": 278661
+      "sha256": "1dd23c7b9c67a2e4fc65bdf70d1d86952ebf9b9ef328b9adbe80a60142a98b0d",
+      "size": 286744
     },
     {
       "path": "scripts/build_release_assets.py",
@@ -1900,6 +1920,11 @@
       "path": "scripts/compile_model.py",
       "sha256": "01960ad3052da20ffe1d74b5912d0e6a164a46121fa2dd8661564a8a314e893a",
       "size": 12801
+    },
+    {
+      "path": "scripts/evaluate_point_forecasts.py",
+      "sha256": "9fc5c2f6ac805cae38be9ac182694bb6c324a3270dc10d1e910332a3c8ed0f49",
+      "size": 5566
     },
     {
       "path": "scripts/evaluate_simulation_quality.py",
@@ -2222,9 +2247,14 @@
       "size": 956
     },
     {
+      "path": "tests/test_calibration_lineage.py",
+      "sha256": "ed3099e34656b801f4a334a46209d5a312fc49174d21aa35c1c5cad0d14b6c9f",
+      "size": 11817
+    },
+    {
       "path": "tests/test_calibration_validator.py",
-      "sha256": "c3487f9e50da342e66c0222a53318c63ac552bdc3b0e6d58379126a5aa584380",
-      "size": 38213
+      "sha256": "86e65565a96c990b38a2e6c5482765f5c216e19444fcddd220beb5c6118ba9ff",
+      "size": 38924
     },
     {
       "path": "tests/test_capability_baseline.py",
@@ -2458,8 +2488,8 @@
     },
     {
       "path": "tests/test_vac_acceptance.py",
-      "sha256": "d33283ea9d626147e4a8ea9dc0192a735a8686c422cbf93fe7aa1b6b3a166456",
-      "size": 52859
+      "sha256": "a37d44624d1d5eefdc1755de50ba7aafd3a7cf0c85114abe78248bf890059f34",
+      "size": 53945
     },
     {
       "path": "tests/test_validation.py",
@@ -2483,8 +2513,8 @@
     },
     {
       "path": "tests/test_vpi_acceptance.py",
-      "sha256": "68bd5b117f83a5dd7a83ce16cca46864e5a822aa19a23aab2a9c1f65f34eab44",
-      "size": 14254
+      "sha256": "ced0edc37084632bd06500b97dcc25265e7dd2eb1e8321f75d422f365866e4c3",
+      "size": 14524
     },
     {
       "path": "tests/test_workspace_formula_resolution_v220.py",

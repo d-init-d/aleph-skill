@@ -4,8 +4,8 @@ Provides:
 1. Strict Temporal Cutoff Auditing: detects lookahead temporal leakage (VPI02, VPI03).
 2. Authentic Provenance Verification: audits raw retrieval provenance and file digests (VPI01).
 3. Genuine Aleph Simulation Engine Execution: calls compile_model & run_deterministic (VPI05, VPI06).
-4. Authentic Statistical Inference: computes MAE, RMSE, Brier score, paired t-stat, p-value, and
-   Student's t confidence intervals without fake constants (VPI08).
+4. Point Forecast Evaluation: computes errors and moving-block bootstrap intervals;
+   it does not manufacture event probabilities from point predictions.
 5. Effective Sample Size & Baseline Verification: enforces >= 30 rolling origins (VPI07, VPI09).
 6. Honest Status Assignment: distinguishes valid negative scientific results from invalid execution (VPI10).
 """
@@ -13,14 +13,17 @@ from __future__ import annotations
 
 import hashlib
 import math
+import random
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+from urllib.parse import urlsplit
 
 from aleph.engine import (
     ComputationalModel,
     EngineConfig,
     compile_model,
+    config_payload,
     model_hash,
     run_deterministic,
 )
@@ -82,7 +85,7 @@ def audit_provenance(
             "reason": "SYNTHETIC_DATASET_CANNOT_CLAIM_EMPIRICAL_PROVENANCE",
         }
 
-    if not retrieval_url or not str(retrieval_url).startswith("http"):
+    if not retrieval_url or urlsplit(str(retrieval_url)).scheme not in {"http", "https"} or not urlsplit(str(retrieval_url)).netloc:
         return {
             "ok": False,
             "provenance_verified": False,
@@ -103,6 +106,12 @@ def audit_provenance(
             "reason": "MISSING_DATASET_SHA256_DIGEST",
         }
 
+    if file_path is None or not file_path.is_file():
+        return {"ok": False, "provenance_verified": False, "reason": "RAW_SNAPSHOT_REQUIRED"}
+    try:
+        _parse_utc_iso(str(access_date))
+    except ValueError:
+        return {"ok": False, "provenance_verified": False, "reason": "INVALID_ACCESS_DATE"}
     clean_sha = str(declared_sha).removeprefix("sha256:")
     if file_path is not None and file_path.is_file():
         actual_sha = compute_file_sha256(file_path)
@@ -119,6 +128,8 @@ def audit_provenance(
         "ok": True,
         "provenance_verified": True,
         "dataset_id": dataset_id,
+        "verification_scope": "local_bytes_and_metadata_only",
+        "historical_authenticity_verified": False,
         "retrieval_url": retrieval_url,
         "sha256": clean_sha,
         "reason": None,
@@ -160,7 +171,8 @@ def audit_temporal_cutoff(
             continue
 
         try:
-            rel_dt = _parse_utc_iso(str(rel_date_str))
+            dates = [feat[k] for k in ("official_release_date", "publication_date", "vintage_date", "available_at") if feat.get(k)]
+            rel_dt = max(_parse_utc_iso(str(value)) for value in dates)
             if rel_dt > cutoff_dt:
                 violations.append({
                     "type": "VINTAGE_AFTER_CUTOFF",
@@ -201,8 +213,20 @@ def execute_engine_cpi_forecast(
     available: list[dict[str, Any]] = []
     for obs in all_observations:
         rel_ts = obs.get("official_release_date")
-        if rel_ts and _parse_utc_iso(str(rel_ts)) <= origin_dt:
+        vintage_ts = obs.get("vintage_date", rel_ts)
+        if rel_ts and vintage_ts and max(_parse_utc_iso(str(rel_ts)), _parse_utc_iso(str(vintage_ts))) <= origin_dt:
+            value = obs.get("value")
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise ValueError("CPI observations require finite numeric values")
             available.append(obs)
+    available.sort(key=lambda obs: (str(obs.get("period", obs.get("official_release_date"))), str(obs.get("vintage_date", obs.get("official_release_date")))))
+    by_period: dict[str, dict[str, Any]] = {}
+    for obs in available:
+        key = str(obs.get("period", obs.get("official_release_date")))
+        if key in by_period and obs.get("vintage_date") == by_period[key].get("vintage_date") and obs["value"] != by_period[key]["value"]:
+            raise ValueError("conflicting values for the same period/vintage")
+        by_period[key] = obs
+    available = list(by_period.values())
 
     if not available:
         raise ValueError(f"No observations available prior to origin {origin_ts}")
@@ -304,131 +328,78 @@ def execute_engine_cpi_forecast(
         "model_config_hash": model_config_hash,
         "formula_version": formula_version,
         "compiled_model": model,
+        "available_observations": available,
+        "model_execution": {
+            "contract_version": "aleph-case-replay-1", "nodes": nodes, "edges": edges,
+            "interventions": [], "config": config_payload(config), "ticks": 1,
+            "result_hash": canonical_hash(run_result), "output_variable": "factor:cpi_forecast",
+            "baseline_variable": "factor:cpi_base", "output_decimals": 3,
+        },
+        "historical_vintage_assurance": "requires_external_source_review",
         "simulation_converged": True,
     }
-
-
-def _t_critical_value_95(df: int) -> float:
-    """Return 95% two-tailed critical value for Student's t distribution."""
-    # Lookup table for common df values (30 to 50), with asymptotic fallback
-    t_table = {
-        29: 2.045, 30: 2.042, 31: 2.040, 32: 2.037, 33: 2.035,
-        34: 2.032, 35: 2.030, 36: 2.028, 37: 2.026, 38: 2.024,
-        39: 2.023, 40: 2.021, 45: 2.014, 50: 2.009,
-    }
-    if df in t_table:
-        return t_table[df]
-    if df > 50:
-        return 1.960 + (2.37 / df)
-    return 2.042
-
-
-def _student_t_pvalue(t_stat: float, df: int) -> float:
-    """Compute approximate two-tailed p-value for Student's t-statistic using Hill's approximation."""
-    if math.isnan(t_stat) or df <= 0:
-        return 1.0
-    abs_t = abs(t_stat)
-    if abs_t == 0.0:
-        return 1.0
-    # Hill's approximation for student t tail probability
-    z = (abs_t * (1.0 - 1.0 / (4.0 * df))) / math.sqrt(1.0 + (abs_t * abs_t) / (2.0 * df))
-    p = 2.0 * 0.5 * math.erfc(z / math.sqrt(2.0))
-    return max(0.0001, min(1.0, round(p, 4)))
 
 
 def compute_authentic_evaluation_metrics(
     cases: list[dict[str, Any]],
     confidence_level: float = 0.95,
 ) -> dict[str, Any]:
-    """Independently compute authentic evaluation metrics without fake constants (VPI08)."""
-    n = len(cases)
-    if n == 0:
-        raise ValueError("Cases list cannot be empty")
+    """Descriptive point errors and a reproducible moving-block bootstrap interval.
 
-    cand_preds: list[float] = []
-    base_preds: list[float] = []
-    actuals: list[float] = []
-
+    The interval assumes approximately stationary ordered loss differences.
+    It is not a probability calibration certificate or a causal validation test.
+    No probability is inferred from a point prediction's magnitude.
+    """
+    if not cases or not 0 < confidence_level < 1:
+        raise ValueError("nonempty cases and 0 < confidence_level < 1 required")
+    triples = []
     for c in cases:
-        p = float(c.get("point_prediction", c.get("candidate_prediction", 0.0)))
-        b = float(c.get("baseline_prediction", 0.0))
-        a = float(c.get("actual_value", 0.0))
-        cand_preds.append(p)
-        base_preds.append(b)
-        actuals.append(a)
-
-    cand_errors = [abs(p - a) for p, a in zip(cand_preds, actuals, strict=True)]
-    base_errors = [abs(b - a) for b, a in zip(base_preds, actuals, strict=True)]
-
-    cand_sq_errors = [(p - a) ** 2 for p, a in zip(cand_preds, actuals, strict=True)]
-    base_sq_errors = [(b - a) ** 2 for b, a in zip(base_preds, actuals, strict=True)]
-
-    cand_mae = round(sum(cand_errors) / n, 4)
-    base_mae = round(sum(base_errors) / n, 4)
-    cand_rmse = round(math.sqrt(sum(cand_sq_errors) / n), 4)
-    base_rmse = round(math.sqrt(sum(base_sq_errors) / n), 4)
-
-    # Paired error differences for t-test
-    differences = [e_c - e_b for e_c, e_b in zip(cand_errors, base_errors, strict=True)]
-    mean_diff = sum(differences) / n
-    variance_diff = sum((d - mean_diff) ** 2 for d in differences) / (n - 1) if n > 1 else 0.0
-    se_diff = math.sqrt(variance_diff / n) if variance_diff > 0 else 0.0
-
-    t_stat = round(mean_diff / se_diff, 4) if se_diff > 0 else 0.0
-    p_val = _student_t_pvalue(t_stat, n - 1)
-
-    # Authentic 95% Confidence Intervals using Student's t critical value
-    t_crit = _t_critical_value_95(n - 1)
-    cand_var = sum((e - cand_mae) ** 2 for e in cand_errors) / (n - 1) if n > 1 else 0.0
-    cand_se = math.sqrt(cand_var / n) if cand_var > 0 else 0.0
-    mae_ci_lower = max(0.0, round(cand_mae - t_crit * cand_se, 4))
-    mae_ci_upper = round(cand_mae + t_crit * cand_se, 4)
-
-    # Brier score on directional momentum prediction (inflation increases vs decreases)
-    # Event: actual CPI increased relative to baseline persistence
-    brier_scores: list[float] = []
-    for p, b, a in zip(cand_preds, base_preds, actuals, strict=True):
-        actual_increase = 1.0 if a > b else 0.0
-        # Model predicted probability of increase
-        pred_delta = p - b
-        prob_increase = 1.0 / (1.0 + math.exp(-max(-10.0, min(10.0, pred_delta * 2.0))))
-        brier_scores.append((prob_increase - actual_increase) ** 2)
-
-    cand_brier = round(sum(brier_scores) / n, 4)
-
-    # Baseline persistence has flat zero direction prediction (p=0.5)
-    base_brier_scores = [(0.5 - (1.0 if a > b else 0.0)) ** 2 for b, a in zip(base_preds, actuals, strict=True)]
-    base_brier = round(sum(base_brier_scores) / n, 4)
-
-    beats_baseline = (cand_mae < base_mae and cand_rmse < base_rmse)
-
+        values = (c.get("point_prediction", c.get("candidate_prediction")), c.get("baseline_prediction"), c.get("actual_value"))
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in values):
+            raise ValueError("prediction, baseline and actual must be finite numbers")
+        triples.append(tuple(float(cast(float, v)) for v in values))
+    n = len(triples)
+    errors = [abs(p-a) for p, _, a in triples]
+    base_errors = [abs(b-a) for _, b, a in triples]
+    differences = [x-y for x, y in zip(errors, base_errors, strict=True)]
+    mean = sum(differences)/n
+    variance = sum((d-mean)**2 for d in differences)
+    positive_correlations = []
+    if variance > 0:
+        for lag in range(1, min(n, max(2, int(math.sqrt(n))+1))):
+            correlation = sum((differences[i]-mean)*(differences[i-lag]-mean) for i in range(lag,n))/variance
+            if correlation <= 0:
+                break
+            positive_correlations.append(correlation)
+    effective_n = n / (1 + 2*sum(positive_correlations)) if variance > 0 else None
+    block_length = min(n, max(1, math.ceil(n**(1/3))))
+    interval = None
+    if n >= 8:
+        rng = random.Random(0)
+        estimates = []
+        for _ in range(2000):
+            sample: list[float] = []
+            while len(sample) < n:
+                start = rng.randrange(n-block_length+1)
+                sample.extend(differences[start:start+block_length])
+            estimates.append(sum(sample[:n])/n)
+        estimates.sort()
+        alpha = (1-confidence_level)/2
+        interval = [estimates[int(alpha*1999)], estimates[int((1-alpha)*1999)]]
+    candidate: dict[str, Any] = {"mae": sum(errors)/n, "rmse": math.sqrt(sum((p-a)**2 for p,_,a in triples)/n), "brier_score": None}
+    baseline: dict[str, Any] = {"mae": sum(base_errors)/n, "rmse": math.sqrt(sum((b-a)**2 for _,b,a in triples)/n), "brier_score": None}
+    beats = candidate["mae"] < baseline["mae"] and candidate["rmse"] < baseline["rmse"]
     return {
-        "case_count": n,
-        "unique_case_count": len({str(c.get("case_id")) for c in cases}),
-        "effective_sample_size": float(n),
-        "candidate_metrics": {
-            "mae": cand_mae,
-            "rmse": cand_rmse,
-            "brier_score": cand_brier,
-        },
-        "baseline_metrics": {
-            "mae": base_mae,
-            "rmse": base_rmse,
-            "brier_score": base_brier,
-        },
-        "paired_difference": {
-            "delta_mae": round(cand_mae - base_mae, 4),
-            "delta_rmse": round(cand_rmse - base_rmse, 4),
-            "t_statistic": t_stat,
-            "p_value": p_val,
-        },
-        "uncertainty_bounds": {
-            "confidence_level": confidence_level,
-            "metric_confidence_intervals": {
-                "mae": [mae_ci_lower, mae_ci_upper],
-            },
-        },
-        "beats_baseline": beats_baseline,
-        "assurance_status": "calibrated" if (beats_baseline and n >= 30) else "uncalibrated",
-        "empirical_improvement": "established_within_scope" if beats_baseline else "not_established",
+        "case_count": n, "unique_case_count": len({str(c.get("case_id")) for c in cases}),
+        "effective_sample_size": effective_n,
+        "effective_sample_size_method": "positive_autocorrelation_estimate" if effective_n is not None else "not_estimable_zero_variance",
+        "candidate_metrics": candidate, "baseline_metrics": baseline,
+        "paired_difference": {"delta_mae": mean, "delta_rmse": candidate["rmse"]-baseline["rmse"], "t_statistic": None, "p_value": None},
+        "uncertainty_bounds": {"confidence_level": confidence_level,
+            "method": "moving_block_bootstrap", "block_length": block_length, "resamples": 2000,
+            "assumption": "approximately stationary ordered paired losses",
+            "metric_confidence_intervals": {"delta_mae": interval}},
+        "beats_baseline": beats, "assurance_status": "uncalibrated",
+        "probability_calibration_verified": False,
+        "empirical_improvement": "observed_in_sample" if beats else "not_established",
     }

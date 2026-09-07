@@ -7,32 +7,32 @@
       "package_name": "d-research-skill-tools",
       "version": "3.4.1",
       "source_repository": "https://github.com/d-init-d/d-research-skill",
-      "source_tag": "repair/v4-source-context",
-      "upstream_tag_object": "06a1999bb070bb7bcc1a658b806d69771b54e028",
-      "upstream_commit": "06a1999bb070bb7bcc1a658b806d69771b54e028",
-      "upstream_tree": "7a0e886632e460a6e78570672d450fab41daaf26",
+      "source_tag": "4943d15d9495d2b982c0c6a7b8848ae6766c094d",
+      "upstream_tag_object": "4943d15d9495d2b982c0c6a7b8848ae6766c094d",
+      "upstream_commit": "4943d15d9495d2b982c0c6a7b8848ae6766c094d",
+      "upstream_tree": "b46ade2687c3bec1aac203079514b4669366f6d7",
       "source_archive_format": "git-archive-tar",
-      "source_archive_sha256": "sha256:3724057a5c10c51c680b45a99ae3b83de9d0e21e7a51f245bb3bba911fbb896f",
+      "source_archive_sha256": "sha256:2d9da3fcdb2103487a322d4cd7dcb36b404489ee0cc9961f21022a8158382315",
       "source_artifacts": {
         "workflow_source": {
           "name": "d-research-skill-v3.4.1.tar.gz",
-          "sha256": "sha256:3c011363411ae550632aa2a243ca3de174c5e6d40067128c0fda4b0822e5c34a"
+          "sha256": "sha256:62cceeda36c12dcbc7633bd6884621775f90ab79663796b2fdc86206e026198a"
         },
         "full_profile": {
           "name": "d-research-3.4.1-full.tar.gz",
-          "sha256": "sha256:bbc826e6cb3f0715288e254b72758c0ea33e70186e432a956d422d17aaa07174",
+          "sha256": "sha256:f3b81b60c7129e2baf07a4b6796cc360f31b0f1922a236ccc320abebb5a4cc05",
           "manifest_name": "d-research-3.4.1-full.manifest.json",
-          "manifest_sha256": "sha256:e6afc3327cd83aa9a76f47997c5a95366f884e361ab186d3aa7762daeca94798",
-          "file_count": 777
+          "manifest_sha256": "sha256:8ebd2cb6911f5fb4a87fcc2fa17a69467c04dbf4551ed5e060e99668d3ad3544",
+          "file_count": 780
         },
         "runtime_profile": {
           "name": "d-research-3.4.1-runtime.tar.gz",
-          "sha256": "sha256:aac7e3394bf023860c4404b9a733378113e7cc70a64019fdaa8f0a8b875aa387",
+          "sha256": "sha256:c00f60eee4edbfff00489283a6f6938aee5acc4575cc7e5b9bf5c21bd783fad0",
           "manifest_name": "d-research-3.4.1-runtime.manifest.json",
-          "manifest_sha256": "sha256:1cace337242fa23f89c469f4891bb696c1a2dc7e3aa65e2c4f01857cb79e18ff",
-          "file_count": 217,
-          "tree_sha256": "sha256:fbef259b3a1a05db9383bbaa68c1b514e50e8accbb2133b5bd7041c1c9b05493",
-          "ordered_paths_sha256": "sha256:892e22a7a0890e5bc2fd77c9c4987d96ea4f3775dab8f3212dbc73b4ba002b6c"
+          "manifest_sha256": "sha256:8649143b60bf42b87dfe238fd93e0213e69e5bcc69ad5a3738ab52eacfa0d4e5",
+          "file_count": 219,
+          "tree_sha256": "sha256:c343887e76d31e1de77d87bb7d15d7cbceed37bbb2635bbdeb8874bc55dfd9c5",
+          "ordered_paths_sha256": "sha256:e3bc95940d59a6e6dc4a91f75d9cdadf94eb4e7c647a98e5a03ed4f9f5f817c5"
         },
         "interop_contract": {
           "path": "templates/interop-contract.json",
@@ -602,6 +602,7 @@
           "tests/test_semantic_review_router.py",
           "tests/test_snapshot_binding.py",
           "tests/test_social_offline_dns.py",
+          "tests/test_source_grounding.py",
           "tests/test_ssrf_production_guards.py",
           "tests/test_trust_boundary.py",
           "tests/test_vev_acceptance.py"
@@ -633,13 +634,13 @@
           {
             "path": "package.json",
             "transform": "runtime-package-v1",
-            "source_sha256": "sha256:5c55d0ad4a7b72df18437063f7ac69b120917b49cad84fb0b0fb1be59dc4efa0",
-            "output_sha256": "sha256:46028bebef89e4d6ce477c386e0a4031788fda575dd5e2c2c182a033acd4274d"
+            "source_sha256": "sha256:82d61a57638052fe598090997a86c954dd664bc6ce7af9f385ab7f480b97cad0",
+            "output_sha256": "sha256:1b28260ece1fe4f794cf2d75cea669ed3bcb4c28964eae7036609481d85645b5"
           }
         ]
       },
-      "tree_sha256": "sha256:1ab1daf133f6ad59a735c7fef68036a6190c4d347a89de9968984bc01a8bfc9d",
-      "file_count": 217,
+      "tree_sha256": "sha256:5300385ce27929c5bdd62dc29e171a9eec42eefd0fc7fbd91c20334e2fb51d0c",
+      "file_count": 219,
       "entrypoints": [
         "scripts/evidence_ledger.py",
         "scripts/investigation_policy.py",
@@ -679,8 +680,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 16685,
-          "sha256": "sha256:85ca81c5aa2605302363966226c8f1db8a491f7a291bc1189c933178ba737c2c"
+          "size": 16758,
+          "sha256": "sha256:098c66cc762fb78951a245fc8cf81547bd5c44e2ff35bfba422fe5babcb615d3"
         },
         {
           "path": "adapters/citation-resolver.md",
@@ -1070,7 +1071,7 @@
         {
           "path": "package.json",
           "size": 8728,
-          "sha256": "sha256:46028bebef89e4d6ce477c386e0a4031788fda575dd5e2c2c182a033acd4274d"
+          "sha256": "sha256:1b28260ece1fe4f794cf2d75cea669ed3bcb4c28964eae7036609481d85645b5"
         },
         {
           "path": "pyproject.toml",
@@ -1301,6 +1302,11 @@
           "path": "references/source-discovery.md",
           "size": 5136,
           "sha256": "sha256:2a4af00fe42fabf933b089083d049dcb3978a0acf359ffa20d2620e05333f2ce"
+        },
+        {
+          "path": "references/source-grounding.md",
+          "size": 1060,
+          "sha256": "sha256:daa9d19fc910df3346401956066933945460b5ca3645117a0743c60051d19a9e"
         },
         {
           "path": "references/source-quality-rubric.md",
@@ -1569,8 +1575,8 @@
         },
         {
           "path": "scripts/quality_eval.py",
-          "size": 200318,
-          "sha256": "sha256:c3338ef4d340e54f0605ebed6072a5431218bcad5e3e4d3cdc7c86a944990a4d"
+          "size": 199698,
+          "sha256": "sha256:c3fc50affe5bcddb983601161548093281d89c24d62a71cf809d403b9755c5b6"
         },
         {
           "path": "scripts/release_verify.py",
@@ -1579,8 +1585,8 @@
         },
         {
           "path": "scripts/report_render.py",
-          "size": 116820,
-          "sha256": "sha256:a47ef1c58f3ab4b854a94e94f2a181462df8efd2337663a2d0fdc5ffae37efc2"
+          "size": 114857,
+          "sha256": "sha256:253330ce3b7d332ea46ecdfcd3a6445bd12b347dde3250b4e1124596d5279d49"
         },
         {
           "path": "scripts/research_plan.py",
@@ -1621,6 +1627,11 @@
           "path": "scripts/social_snapshot.py",
           "size": 78911,
           "sha256": "sha256:e9f6eaf0707aa33bf5960d1e71c8ab429a3950212b527182aa435a2d7b568b3c"
+        },
+        {
+          "path": "scripts/source_grounding.py",
+          "size": 4814,
+          "sha256": "sha256:3ed9cb5ac131c08d5dc4a7c46645f5e6c2f211f343539c70f785afff00e2c92c"
         },
         {
           "path": "scripts/translate.py",
@@ -1733,7 +1744,7 @@
           "sha256": "sha256:743b8c25836a152470d13c117d01212cfa5c95f76c39c65b342792e523e1ad39"
         }
       ],
-      "tree_hash": "sha256:1ab1daf133f6ad59a735c7fef68036a6190c4d347a89de9968984bc01a8bfc9d",
+      "tree_hash": "sha256:5300385ce27929c5bdd62dc29e171a9eec42eefd0fc7fbd91c20334e2fb51d0c",
       "file_manifest": [
         {
           "path": "AGENTS.md",
@@ -1767,8 +1778,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 16685,
-          "sha256": "sha256:85ca81c5aa2605302363966226c8f1db8a491f7a291bc1189c933178ba737c2c"
+          "size": 16758,
+          "sha256": "sha256:098c66cc762fb78951a245fc8cf81547bd5c44e2ff35bfba422fe5babcb615d3"
         },
         {
           "path": "adapters/citation-resolver.md",
@@ -2158,7 +2169,7 @@
         {
           "path": "package.json",
           "size": 8728,
-          "sha256": "sha256:46028bebef89e4d6ce477c386e0a4031788fda575dd5e2c2c182a033acd4274d"
+          "sha256": "sha256:1b28260ece1fe4f794cf2d75cea669ed3bcb4c28964eae7036609481d85645b5"
         },
         {
           "path": "pyproject.toml",
@@ -2389,6 +2400,11 @@
           "path": "references/source-discovery.md",
           "size": 5136,
           "sha256": "sha256:2a4af00fe42fabf933b089083d049dcb3978a0acf359ffa20d2620e05333f2ce"
+        },
+        {
+          "path": "references/source-grounding.md",
+          "size": 1060,
+          "sha256": "sha256:daa9d19fc910df3346401956066933945460b5ca3645117a0743c60051d19a9e"
         },
         {
           "path": "references/source-quality-rubric.md",
@@ -2657,8 +2673,8 @@
         },
         {
           "path": "scripts/quality_eval.py",
-          "size": 200318,
-          "sha256": "sha256:c3338ef4d340e54f0605ebed6072a5431218bcad5e3e4d3cdc7c86a944990a4d"
+          "size": 199698,
+          "sha256": "sha256:c3fc50affe5bcddb983601161548093281d89c24d62a71cf809d403b9755c5b6"
         },
         {
           "path": "scripts/release_verify.py",
@@ -2667,8 +2683,8 @@
         },
         {
           "path": "scripts/report_render.py",
-          "size": 116820,
-          "sha256": "sha256:a47ef1c58f3ab4b854a94e94f2a181462df8efd2337663a2d0fdc5ffae37efc2"
+          "size": 114857,
+          "sha256": "sha256:253330ce3b7d332ea46ecdfcd3a6445bd12b347dde3250b4e1124596d5279d49"
         },
         {
           "path": "scripts/research_plan.py",
@@ -2709,6 +2725,11 @@
           "path": "scripts/social_snapshot.py",
           "size": 78911,
           "sha256": "sha256:e9f6eaf0707aa33bf5960d1e71c8ab429a3950212b527182aa435a2d7b568b3c"
+        },
+        {
+          "path": "scripts/source_grounding.py",
+          "size": 4814,
+          "sha256": "sha256:3ed9cb5ac131c08d5dc4a7c46645f5e6c2f211f343539c70f785afff00e2c92c"
         },
         {
           "path": "scripts/translate.py",
@@ -2821,13 +2842,13 @@
           "sha256": "sha256:743b8c25836a152470d13c117d01212cfa5c95f76c39c65b342792e523e1ad39"
         }
       ],
-      "pin_note": "v3.4.1 candidate commit c6e9e93 (Gate G5 evaluation & benchmark sync)",
+      "pin_note": "Frozen local Codex upgrade; projected from verified runtime release bytes.",
       "upstream_repo": "repos/d-research-skill",
-      "synced_at": "2026-09-05T10:15:00Z"
+      "synced_at": "2026-09-07T14:03:49.432663+00:00"
     }
   },
   "upstream_repo": "repos/d-research-skill",
-  "upstream_commit": "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c",
-  "synced_at": "2026-09-05T10:15:00Z",
+  "upstream_commit": "4943d15d9495d2b982c0c6a7b8848ae6766c094d",
+  "synced_at": "2026-09-07T14:03:49.432663+00:00",
   "version": "3.4.1"
 }
