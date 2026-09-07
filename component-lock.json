@@ -7,31 +7,31 @@
       "package_name": "d-research-skill-tools",
       "version": "3.4.1",
       "source_repository": "https://github.com/d-init-d/d-research-skill",
-      "source_tag": "4943d15d9495d2b982c0c6a7b8848ae6766c094d",
-      "upstream_tag_object": "4943d15d9495d2b982c0c6a7b8848ae6766c094d",
-      "upstream_commit": "4943d15d9495d2b982c0c6a7b8848ae6766c094d",
-      "upstream_tree": "b46ade2687c3bec1aac203079514b4669366f6d7",
+      "source_tag": "ce5f7797aecde35685096fe9123a53edf3a89527",
+      "upstream_tag_object": "ce5f7797aecde35685096fe9123a53edf3a89527",
+      "upstream_commit": "ce5f7797aecde35685096fe9123a53edf3a89527",
+      "upstream_tree": "55841173e2e3ebff7873d857131f04399573e93d",
       "source_archive_format": "git-archive-tar",
-      "source_archive_sha256": "sha256:2d9da3fcdb2103487a322d4cd7dcb36b404489ee0cc9961f21022a8158382315",
+      "source_archive_sha256": "sha256:56d1b54a146926fa4ef16ffb31b40be8d0d57a8da143057bd3dc5fa702255c71",
       "source_artifacts": {
         "workflow_source": {
           "name": "d-research-skill-v3.4.1.tar.gz",
-          "sha256": "sha256:62cceeda36c12dcbc7633bd6884621775f90ab79663796b2fdc86206e026198a"
+          "sha256": "sha256:c6e95e60c12a92b55842cbb5ef7288b9506060ee993890a995e626f8df3dffb4"
         },
         "full_profile": {
           "name": "d-research-3.4.1-full.tar.gz",
-          "sha256": "sha256:f3b81b60c7129e2baf07a4b6796cc360f31b0f1922a236ccc320abebb5a4cc05",
+          "sha256": "sha256:324feffc2b0b3e5ecf32bb361aaf799aefb958fbadb126a1582e47cb12c2f346",
           "manifest_name": "d-research-3.4.1-full.manifest.json",
-          "manifest_sha256": "sha256:8ebd2cb6911f5fb4a87fcc2fa17a69467c04dbf4551ed5e060e99668d3ad3544",
+          "manifest_sha256": "sha256:87b13b77b5a2fdf07223916a675aa65bb31816ed9841696892ad0b80066b6782",
           "file_count": 780
         },
         "runtime_profile": {
           "name": "d-research-3.4.1-runtime.tar.gz",
-          "sha256": "sha256:c00f60eee4edbfff00489283a6f6938aee5acc4575cc7e5b9bf5c21bd783fad0",
+          "sha256": "sha256:9d4bdb6a12b08a48a45a2a8549afa7c9ed5730eed2a57f3b4feacf145874bb80",
           "manifest_name": "d-research-3.4.1-runtime.manifest.json",
-          "manifest_sha256": "sha256:8649143b60bf42b87dfe238fd93e0213e69e5bcc69ad5a3738ab52eacfa0d4e5",
+          "manifest_sha256": "sha256:716cd42d116173c97171d64127fc1667a44ef99bfce150de451a875edd47cd94",
           "file_count": 219,
-          "tree_sha256": "sha256:c343887e76d31e1de77d87bb7d15d7cbceed37bbb2635bbdeb8874bc55dfd9c5",
+          "tree_sha256": "sha256:5a9bd61a30264eeabc831f9513660f3f7c07de13b035cf155feab8b80eb9122a",
           "ordered_paths_sha256": "sha256:e3bc95940d59a6e6dc4a91f75d9cdadf94eb4e7c647a98e5a03ed4f9f5f817c5"
         },
         "interop_contract": {
@@ -639,7 +639,7 @@
           }
         ]
       },
-      "tree_sha256": "sha256:5300385ce27929c5bdd62dc29e171a9eec42eefd0fc7fbd91c20334e2fb51d0c",
+      "tree_sha256": "sha256:5d1c84cbccb26b6774b1f66374ae96600bc08d71e8fbfab788291979ad5a27a0",
       "file_count": 219,
       "entrypoints": [
         "scripts/evidence_ledger.py",
@@ -671,7 +671,7 @@
         {
           "path": "README.md",
           "size": 62421,
-          "sha256": "sha256:daba25dd9cbffb3f347a44409a3138a18b4fe70e601d991c9b102d7f672c1d02"
+          "sha256": "sha256:882419e85e2ff8958ce1304100566942268937032ad49566983835a27f3d6ce9"
         },
         {
           "path": "README.vi.md",
@@ -1730,8 +1730,8 @@
         },
         {
           "path": "templates/route-manifest.json",
-          "size": 24289,
-          "sha256": "sha256:310396dc9f67cda35c09cfadda4d0c168d11095e940f271a7a60400b9bc93da9"
+          "size": 25417,
+          "sha256": "sha256:64b45b8fe1dd97edf9c0c8ee2d92ccefb52e5b1dd296a1075ef59935638f2141"
         },
         {
           "path": "templates/screening-log.csv",
@@ -1744,7 +1744,7 @@
           "sha256": "sha256:743b8c25836a152470d13c117d01212cfa5c95f76c39c65b342792e523e1ad39"
         }
       ],
-      "tree_hash": "sha256:5300385ce27929c5bdd62dc29e171a9eec42eefd0fc7fbd91c20334e2fb51d0c",
+      "tree_hash": "sha256:5d1c84cbccb26b6774b1f66374ae96600bc08d71e8fbfab788291979ad5a27a0",
       "file_manifest": [
         {
           "path": "AGENTS.md",
@@ -1769,7 +1769,7 @@
         {
           "path": "README.md",
           "size": 62421,
-          "sha256": "sha256:daba25dd9cbffb3f347a44409a3138a18b4fe70e601d991c9b102d7f672c1d02"
+          "sha256": "sha256:882419e85e2ff8958ce1304100566942268937032ad49566983835a27f3d6ce9"
         },
         {
           "path": "README.vi.md",
@@ -2828,8 +2828,8 @@
         },
         {
           "path": "templates/route-manifest.json",
-          "size": 24289,
-          "sha256": "sha256:310396dc9f67cda35c09cfadda4d0c168d11095e940f271a7a60400b9bc93da9"
+          "size": 25417,
+          "sha256": "sha256:64b45b8fe1dd97edf9c0c8ee2d92ccefb52e5b1dd296a1075ef59935638f2141"
         },
         {
           "path": "templates/screening-log.csv",
@@ -2844,11 +2844,11 @@
       ],
       "pin_note": "Frozen local Codex upgrade; projected from verified runtime release bytes.",
       "upstream_repo": "repos/d-research-skill",
-      "synced_at": "2026-09-07T14:03:49.432663+00:00"
+      "synced_at": "2026-09-07T14:11:09.524197+00:00"
     }
   },
   "upstream_repo": "repos/d-research-skill",
-  "upstream_commit": "4943d15d9495d2b982c0c6a7b8848ae6766c094d",
-  "synced_at": "2026-09-07T14:03:49.432663+00:00",
+  "upstream_commit": "ce5f7797aecde35685096fe9123a53edf3a89527",
+  "synced_at": "2026-09-07T14:11:09.524197+00:00",
   "version": "3.4.1"
 }

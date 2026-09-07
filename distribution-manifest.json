@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 505,
-  "tree_sha256": "9b0e435a3d870763a2c10e53c4fe332f7ecda8b2f05af1603174ea0fd3fb8521",
+  "tree_sha256": "cb657f47d228abbf2b67c08b564ccb1e467553336561f5ada3a14cd398637a69",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -148,7 +148,7 @@
     },
     {
       "path": "component-lock.json",
-      "sha256": "4841cc181609583bc2f684cb2e85b2cd8117a0ddad96258cc82da5484cf24eea",
+      "sha256": "d86220144f7163d08ead3862857799ae05183c7825a1e4f1f69c468a24e49c52",
       "size": 132649
     },
     {
@@ -173,7 +173,7 @@
     },
     {
       "path": "components/d-research/README.md",
-      "sha256": "daba25dd9cbffb3f347a44409a3138a18b4fe70e601d991c9b102d7f672c1d02",
+      "sha256": "882419e85e2ff8958ce1304100566942268937032ad49566983835a27f3d6ce9",
       "size": 62421
     },
     {
@@ -1233,8 +1233,8 @@
     },
     {
       "path": "components/d-research/templates/route-manifest.json",
-      "sha256": "310396dc9f67cda35c09cfadda4d0c168d11095e940f271a7a60400b9bc93da9",
-      "size": 24289
+      "sha256": "64b45b8fe1dd97edf9c0c8ee2d92ccefb52e5b1dd296a1075ef59935638f2141",
+      "size": 25417
     },
     {
       "path": "components/d-research/templates/screening-log.csv",
