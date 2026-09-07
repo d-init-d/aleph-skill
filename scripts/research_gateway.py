@@ -151,6 +151,7 @@ SCRIPT_INVENTORY: tuple[str, ...] = (
     "scripts/citation_render.py",
     "scripts/citation_resolver.py",
     "scripts/content_sanitize.py",
+    "scripts/source_grounding.py",
     "scripts/data_clean.py",
     "scripts/dedup_near.py",
     "scripts/embed_corpus.py",
@@ -200,6 +201,7 @@ NON_DISPATCHABLE_SCRIPTS = frozenset(
     {
         "scripts/_ssrf_helpers.py",
         "scripts/content_sanitize.py",
+        "scripts/source_grounding.py",
         "scripts/generate_test_pdf.py",  # hard-codes writes beside __file__
         "scripts/run_python.mjs",  # accepts an arbitrary script path
         "scripts/lib/browser_limits.mjs",

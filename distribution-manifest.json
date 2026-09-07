@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 505,
-  "tree_sha256": "cb657f47d228abbf2b67c08b564ccb1e467553336561f5ada3a14cd398637a69",
+  "tree_sha256": "0de44dbe2878dfb8e24cd85b68fd54f2701f83f65d6404fffadc278ecb89bce9",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -1983,8 +1983,8 @@
     },
     {
       "path": "scripts/research_gateway.py",
-      "sha256": "d8f5de09c7c4b0fd3f5e977e4c9dacea56540e3210dfd29abe11b1d9724a1c76",
-      "size": 76813
+      "sha256": "f8c1cd49ccd15446dda97e2f825e3080a4557c68cb9be2469c65ec736107b9f2",
+      "size": 78966
     },
     {
       "path": "scripts/run_hindcast.py",
@@ -2263,13 +2263,13 @@
     },
     {
       "path": "tests/test_component_integration.py",
-      "sha256": "2d6f5cb2a8ab3f83daaf4111adb0d7010340aa26198fb9e1d7b39e4abac757b5",
-      "size": 32597
+      "sha256": "c27d225ebbb65532f729fbe24e80633164afab43b027bcb7d4a22190f177c474",
+      "size": 32144
     },
     {
       "path": "tests/test_component_packaging.py",
-      "sha256": "6bee44d11360cea31f2a60dff87eba38b08e3fb8ac1e18833c8c587aabd90925",
-      "size": 16038
+      "sha256": "ec4753f88a9f7426bea7801687a45dcf83618e2486c36e25cb67542771675ee7",
+      "size": 15363
     },
     {
       "path": "tests/test_component_provenance.py",
@@ -2508,8 +2508,8 @@
     },
     {
       "path": "tests/test_vig_acceptance.py",
-      "sha256": "e25a342b6eb00c3f9ed9bc6b6d618b50c9e8413c3c4fa43774113291bb1e421d",
-      "size": 22904
+      "sha256": "f3ad64abcfdd8c813daa3067f6e03dc60e12bce3c582f06e154b5b42d2a14dc5",
+      "size": 23332
     },
     {
       "path": "tests/test_vpi_acceptance.py",

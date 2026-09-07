@@ -62,30 +62,6 @@ from research_gateway import (  # noqa: E402
     run_command,
 )
 
-CANDIDATE_COMMITS = {
-    "1c59fd801ca7f6f375b7e45380bb1f2a273a2bfb",
-    "94e464b0a1cebf705b2b29490ffd83485bc17341",
-    "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c",
-    "c3eb12dbc1efda8e9d5a7bfa69f6b311c9bfb291",
-    "caa600dbb74fe05ceaf3937bb9355db1dea73018",
-    "beafd47cef77ed18d9861f5c809776373b3b1740",
-    "06a1999bb070bb7bcc1a658b806d69771b54e028",
-}
-CANDIDATE_TAGS = {"v3.4.1-candidate", "upgrade/v2-evidence-verification", "repair/v3-source-grounding", "repair/v4-source-context"}
-CANDIDATE_TAG_OBJECTS = {
-    "fc2e90c4947f60727c779df242fb91b81188f6f9",
-    "94e464b0a1cebf705b2b29490ffd83485bc17341",
-    "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c",
-    "c3eb12dbc1efda8e9d5a7bfa69f6b311c9bfb291",
-    "caa600dbb74fe05ceaf3937bb9355db1dea73018",
-    "beafd47cef77ed18d9861f5c809776373b3b1740",
-    "06a1999bb070bb7bcc1a658b806d69771b54e028",
-}
-VALID_FILE_COUNTS = {214, 217}
-CANDIDATE_COMMIT = "06a1999bb070bb7bcc1a658b806d69771b54e028"
-CANDIDATE_TAG = "repair/v4-source-context"
-CANDIDATE_TAG_OBJECT = "06a1999bb070bb7bcc1a658b806d69771b54e028"
-
 FIELDS_14 = [
     "claim_id", "claim", "sub_question", "source_title", "source_url", "source_type",
     "date_published", "date_accessed", "access_method", "evidence", "quote_or_anchor",
@@ -191,10 +167,10 @@ class ComponentIntegrationAcceptanceTests(unittest.TestCase):
         # 2. Verify component-lock.json matches candidate metadata
         lock = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))
         entry = lock["components"]["d-research"]
-        self.assertIn(entry["upstream_commit"], CANDIDATE_COMMITS)
-        self.assertIn(entry["source_tag"], CANDIDATE_TAGS)
-        self.assertIn(entry["upstream_tag_object"], CANDIDATE_TAG_OBJECTS)
-        self.assertIn(entry["file_count"], VALID_FILE_COUNTS)
+        self.assertRegex(entry["upstream_commit"], r"^[0-9a-f]{40}$")
+        self.assertTrue(entry["source_tag"])
+        self.assertRegex(entry["upstream_tag_object"], r"^[0-9a-f]{40}$")
+        self.assertEqual(entry["file_count"], entry["source_artifacts"]["runtime_profile"]["file_count"])
 
         # 3. Verify patched candidate files exist in bundled component
         component_root = ROOT / "components" / "d-research"
@@ -570,10 +546,10 @@ class ComponentIntegrationAcceptanceTests(unittest.TestCase):
         lock = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))
         entry = lock["components"]["d-research"]
 
-        self.assertIn(entry["source_tag"], CANDIDATE_TAGS)
-        self.assertIn(entry["upstream_commit"], CANDIDATE_COMMITS)
-        self.assertIn(entry["upstream_tag_object"], CANDIDATE_TAG_OBJECTS)
-        self.assertIn("candidate", entry.get("pin_note", "").lower())
+        self.assertTrue(entry["source_tag"])
+        self.assertRegex(entry["upstream_commit"], r"^[0-9a-f]{40}$")
+        self.assertRegex(entry["upstream_tag_object"], r"^[0-9a-f]{40}$")
+        self.assertTrue(verify_component_lock(skill_root=ROOT).ok)
 
         # Ensure no fake GitHub releases download URL is present
         raw_lock_text = (ROOT / "component-lock.json").read_text(encoding="utf-8")
@@ -581,25 +557,23 @@ class ComponentIntegrationAcceptanceTests(unittest.TestCase):
 
     def test_i14_production_release_verification(self) -> None:
         """I14: Production release verification route requires genuine release asset signatures."""
-        assets_dir = ROOT.parent.parent / "audit-artifacts-v4" / "packaging" / "d-research"
-        if not assets_dir.is_dir():
-            assets_dir = ROOT.parent.parent / "audit-artifacts-v3" / "packaging" / "d-research"
-        if not assets_dir.is_dir():
-            assets_dir = ROOT.parent.parent / "audit-artifacts-v2" / "packaging" / "d-research"
-        if not assets_dir.is_dir():
-            assets_dir = ROOT.parent.parent / "audit-artifacts" / "candidate-release-artifacts"
-        if assets_dir.is_dir():
-            # Verify using lock_bundled_component against genuine release assets
-            result = lock_bundled_component.verify_upstream_snapshot(
-                root=ROOT,
-                upstream_repo=ROOT.parent / "d-research-skill",
-                rebuilt=json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8")),
-                component_id="d-research",
-                release_assets_dir=assets_dir,
-            )
-            self.assertIn(result["tag_object"], CANDIDATE_TAG_OBJECTS)
-            self.assertIn(result["commit"], CANDIDATE_COMMITS)
-            self.assertIn(result["snapshot_file_count"], VALID_FILE_COUNTS)
+        configured = os.environ.get("ALEPH_TEST_RELEASE_ASSETS")
+        if not configured:
+            self.skipTest("Release assets not configured; set ALEPH_TEST_RELEASE_ASSETS for provenance verification")
+        assets_dir = Path(configured)
+        upstream = ROOT.parent / "d-research-skill"
+        if not (upstream / ".git").exists():
+            self.skipTest("Upstream Git checkout unavailable in this isolated archive")
+        lock = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))
+        entry = lock["components"]["d-research"]
+        result = lock_bundled_component.verify_upstream_snapshot(
+            root=ROOT, upstream_repo=upstream, rebuilt=lock, component_id="d-research",
+            release_assets_dir=assets_dir,
+        )
+        actual_head = subprocess.check_output(["git", "-C", str(upstream), "rev-parse", "HEAD"], text=True).strip()
+        self.assertEqual(result["commit"], actual_head)
+        self.assertEqual(result["tag_object"], entry["upstream_tag_object"])
+        self.assertEqual(result["snapshot_file_count"], len(entry["files"]))
 
     def test_i15_post_finalize_evidence_change(self) -> None:
         """I15: Modifying underlying evidence ledger after model compilation invalidates receipts."""

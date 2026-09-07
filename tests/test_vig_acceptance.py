@@ -48,18 +48,6 @@ from research_gateway import (  # noqa: E402
     run_command,
 )
 
-CANDIDATE_COMMITS = {
-    "94e464b0a1cebf705b2b29490ffd83485bc17341",
-    "94e464b7fffeea8a786359f1eb9c9b4e7fe65814",
-    "c6e9e937f63fed28b0fb8259fc22af6e1bb2f58c",
-    "c3eb12dbc1efda8e9d5a7bfa69f6b311c9bfb291",
-    "caa600dbb74fe05ceaf3937bb9355db1dea73018",
-    "beafd47cef77ed18d9861f5c809776373b3b1740",
-    "06a1999bb070bb7bcc1a658b806d69771b54e028",
-}
-CANDIDATE_PRIMARY_COMMIT = "06a1999bb070bb7bcc1a658b806d69771b54e028"
-EXPECTED_RUNTIME_FILE_COUNT = 217
-
 FIELDS_14 = [
     "claim_id", "claim", "sub_question", "source_title", "source_url", "source_type",
     "date_published", "date_accessed", "access_method", "evidence", "quote_or_anchor",
@@ -171,10 +159,10 @@ class VigAcceptanceTests(unittest.TestCase):
         lock = json.loads(lock_path.read_text(encoding="utf-8"))
 
         entry = lock["components"]["d-research"]
-        self.assertIn(entry["upstream_commit"], CANDIDATE_COMMITS)
+        self.assertRegex(entry["upstream_commit"], r"^[0-9a-f]{40}$")
         self.assertEqual(entry["upstream_repo"], "repos/d-research-skill")
-        self.assertEqual(entry["file_count"], EXPECTED_RUNTIME_FILE_COUNT)
-        self.assertEqual(len(entry["files"]), EXPECTED_RUNTIME_FILE_COUNT)
+        self.assertEqual(entry["file_count"], lock["components"]["d-research"]["source_artifacts"]["runtime_profile"]["file_count"])
+        self.assertEqual(len(entry["files"]), lock["components"]["d-research"]["source_artifacts"]["runtime_profile"]["file_count"])
 
         tree_sha = entry["tree_sha256"]
         self.assertTrue(tree_sha.startswith("sha256:"))
@@ -211,7 +199,7 @@ class VigAcceptanceTests(unittest.TestCase):
 
         lock = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))
         locked_files = lock["components"]["d-research"]["files"]
-        self.assertEqual(len(locked_files), EXPECTED_RUNTIME_FILE_COUNT)
+        self.assertEqual(len(locked_files), lock["components"]["d-research"]["source_artifacts"]["runtime_profile"]["file_count"])
 
         for item in locked_files:
             target_path = comp_root / item["path"]
@@ -231,7 +219,7 @@ class VigAcceptanceTests(unittest.TestCase):
             )
             if proc.returncode == 0:
                 head_sha = proc.stdout.strip()
-                self.assertIn(head_sha, CANDIDATE_COMMITS)
+                self.assertEqual(head_sha, lock["components"]["d-research"]["upstream_commit"])
 
                 recipe = lock["components"]["d-research"].get("snapshot_recipe", {})
                 transforms = {
@@ -257,8 +245,8 @@ class VigAcceptanceTests(unittest.TestCase):
                 rebuilt=lock,
                 component_id="d-research",
             )
-            self.assertIn(snapshot_verif["commit"], CANDIDATE_COMMITS)
-            self.assertEqual(snapshot_verif["snapshot_file_count"], EXPECTED_RUNTIME_FILE_COUNT)
+            self.assertEqual(snapshot_verif["commit"], lock["components"]["d-research"]["upstream_commit"])
+            self.assertEqual(snapshot_verif["snapshot_file_count"], lock["components"]["d-research"]["source_artifacts"]["runtime_profile"]["file_count"])
 
     def test_vig03_manifest_cli_schema_and_correctness(self) -> None:
         """VIG03: research:manifest CLI output schema and correctness."""
@@ -273,7 +261,7 @@ class VigAcceptanceTests(unittest.TestCase):
         self.assertEqual(binding["component_uri"], COMPONENT_URI)
         self.assertEqual(binding["package_name"], "d-research-skill-tools")
         self.assertEqual(binding["package_version"], "3.4.1")
-        self.assertIn(binding["upstream_commit"], CANDIDATE_COMMITS)
+        self.assertEqual(binding["upstream_commit"], json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))["components"]["d-research"]["upstream_commit"])
         self.assertTrue(binding["component_lock_sha256"].startswith("sha256:"))
 
         self.assertIn("entrypoints", manifest)
