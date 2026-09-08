@@ -61,6 +61,8 @@ class ReleaseGateOrchestrationTests(unittest.TestCase):
             ({"status": "fail"}, False),
             ({"status": "pass", "issues": [{"severity": "error", "code": "BROKEN"}]}, False),
             ({"ok": True, "checks": [{"status": "pass", "subchecks": [{"ok": False}]}]}, False),
+            ({"status": "degraded", "result": {"checks": [{"status": "fail", "exit_code": 1}]}}, False),
+            ({"status": "degraded", "result": {"checks": [{"status": "pass", "exit_code": 0}]}}, True),
             ({"ok": True, "checks": []}, False),
             ({"ok": True, "checks": [42]}, False),
             ({"ok": True, "checks": [{"ok": True, "issues": "invalid"}]}, False),

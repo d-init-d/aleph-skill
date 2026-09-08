@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 505,
-  "tree_sha256": "e731f0b5996f449d55e43e6b8b8e32a341686fb5d449f81d9970bfce5528eef5",
+  "tree_sha256": "8651e40925465122d2aee1fd1da55287b569883a72d0c7f87262e298f22b9798",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -1968,8 +1968,8 @@
     },
     {
       "path": "scripts/release_gate.py",
-      "sha256": "550116aceabd8648f9277509bbd0ee32734e2c5c07703c56a245410a22c3a543",
-      "size": 17545
+      "sha256": "9e840096b5644b67bd35d8a3e35ee667ac4ac9e0197e172a01fabeacf2bbe31c",
+      "size": 17883
     },
     {
       "path": "scripts/render_simulation_report.py",
@@ -2428,8 +2428,8 @@
     },
     {
       "path": "tests/test_release_quality_v201.py",
-      "sha256": "396a0b0756b91f31cb88af49f7916a720f393819ea0824fd3990502b96a0f145",
-      "size": 37056
+      "sha256": "6ea6a71403cac1ad090ead1f0ea074b9e28b2ce135a0b7183425faa73f9bd53d",
+      "size": 37265
     },
     {
       "path": "tests/test_release_tag_verifier.py",

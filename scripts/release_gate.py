@@ -44,6 +44,13 @@ def _structured_failures(value: Any, pointer: str = "") -> list[str]:
         for item in issues:
             if not isinstance(item, dict) or item.get("severity") not in ("info", "warning"):
                 failures.append(f"{pointer}/issues contains an error or malformed issue")
+    # Gateway adapters wrap the actual check tree in a singular result object.
+    if "result" in value:
+        result = value["result"]
+        if not isinstance(result, dict):
+            failures.append(f"{pointer}/result is not an object")
+        else:
+            failures.extend(_structured_failures(result, f"{pointer}/result"))
     for field in ("checks", "subchecks", "results"):
         if field not in value:
             continue
