@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 505,
-  "tree_sha256": "dd862087e7fe0f93e899a57e05298878655bb25d6d9b1f48a21550a3b3a84222",
+  "tree_sha256": "7e9b6defb3b21de94400e55b2e3654d401320c0653693fe083ee9477b99abc0a",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -88,8 +88,8 @@
     },
     {
       "path": "SKILL.md",
-      "sha256": "b7a09eb3740eb81d5b6bc0755c086e482fe60d9f7b2d8a362e40aed68f656149",
-      "size": 13723
+      "sha256": "d504638d46cac93561b2f6b4e5057124f9a7c5b7bfe40a9ca000a0480d515295",
+      "size": 14040
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -1668,8 +1668,8 @@
     },
     {
       "path": "references/propagation-engine.md",
-      "sha256": "ef1c33a37939a59b5d10059bfcd4f8e5048962230e1a3ae5711447583de71837",
-      "size": 8615
+      "sha256": "158ac4e56968dd596d9275ee90448120f5e33a04a1d9db1891243cba65924948",
+      "size": 9233
     },
     {
       "path": "references/reporting-contract.md",
@@ -1998,8 +1998,8 @@
     },
     {
       "path": "scripts/run_simulation.py",
-      "sha256": "d213a7c58c7761701c78783736894b7c57d7b5d3de94993bd092da50d5ce1a80",
-      "size": 18070
+      "sha256": "13cb7de751fea5eda5f4c9b52dba9ffbb4550a169ec3227d5fb3b928a01a13ec",
+      "size": 18867
     },
     {
       "path": "scripts/score_butterfly.py",
@@ -2373,8 +2373,8 @@
     },
     {
       "path": "tests/test_numerical_cold_start.py",
-      "sha256": "ccb010162cb6f7ccd3e36e0eab22c1aca2d11237933b95cb40f8840ef33af45c",
-      "size": 6746
+      "sha256": "f74735b6b0e27bf13e9aad4518bf428de2e3aa390fa79e5f98208170dccd4a29",
+      "size": 10107
     },
     {
       "path": "tests/test_numerical_cycles.py",

@@ -289,9 +289,19 @@ def main() -> None:
         nodes if isinstance(nodes, list) else [],
         edges if isinstance(edges, list) else [],
     )
+    if trace_path is not None and trace_path.is_file() and trace_path.stat().st_size and trace_issues:
+        print(json.dumps({"ok": False, "code": "TRACE_EMPTY",
+                          "error": "existing trace failed validation; repair it explicitly before rerunning",
+                          "issues": [value.to_dict() for value in trace_issues]}, indent=2))
+        raise SystemExit(EXIT_SEMANTIC)
     is_cold_start = trace_path is None or not trace_path.is_file() or not trace_rows
 
     if is_cold_start:
+        if not str(declared_trace).endswith(".json"):
+            print(json.dumps({"ok": False, "code": "TRACE_FORMAT",
+                              "error": "engine-derived traces require a .json artifact; declare artifact_paths.execution_trace as execution-trace.json",
+                              "path": str(declared_trace)}, indent=2))
+            raise SystemExit(EXIT_SEMANTIC)
         # Engine-derived numerical execution trace (R06 / F07 cold start)
         model_id = manifest.get("model_id", compiled.get("model_id", "model:compiled")) if isinstance(manifest, dict) else "model:compiled"
         trace_data = generate_numerical_execution_trace(

@@ -104,6 +104,7 @@ python "$env:ALEPH_SKILL_ROOT\scripts\preflight.py" --json
 Cold-start simulation generates authentic execution traces directly from mathematical model execution without requiring pre-authored trace numbers:
 
 1. **Specification**: Agent specifies model nodes, causal edges, and engine configuration in workspace artifacts (`nodes.json`, `edges.json`, `simulation-manifest.json`).
+   For a newly initialized qualitative workspace, explicitly select `simulation_mode: deterministic|monte_carlo` and set `artifact_paths.execution_trace: execution-trace.json` to a new or empty file. Preserve the qualitative template separately; do not direct engine-generated JSON into a legacy `.jsonl` trace path.
 2. **Engine execution**: `<ALEPH_SKILL_ROOT>/scripts/run_simulation.py` executes mathematical propagation (formula 2.1 or legacy 2.0), dynamically computing state transitions, edge delivery queues, and fixed-point cycle convergence, and automatically generates an authentic, schema-compliant `execution-trace.json` (with `generation_mode: engine_derived` and deterministic `replay_hash`).
 3. **Replay & validation**: `<ALEPH_SKILL_ROOT>/scripts/replay_simulation.py` independently verifies the generated trace against analytical transitions and checks trace contracts. `<ALEPH_SKILL_ROOT>/scripts/validate_simulation_artifacts.py` validates schema conformity and artifact integrity.
 4. **Finalization**: Atomic receipts bind the model and trace digests.

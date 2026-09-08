@@ -24,6 +24,54 @@ class NumericalColdStartTests(unittest.TestCase):
     def setUp(self) -> None:
         self.schema = json.loads(EXECUTION_TRACE_SCHEMA_PATH.read_text(encoding="utf-8"))
 
+    def test_initialized_workspace_requires_json_execution_trace_and_preserves_invalid_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            workspace = Path(temporary_dir)/"initialized"
+            init = subprocess.run([
+                sys.executable, "-B", str(SCRIPTS/"init_simulation_workspace.py"),
+                "--slug", "initialized", "--change-point", "Synthetic investment increase",
+                "--time", "2026-01-01", "--horizon", "P1Y", "--out-dir", temporary_dir,
+            ], capture_output=True, text=True)
+            self.assertEqual(init.returncode, 0, init.stderr)
+            manifest_path = workspace/"simulation-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["simulation_mode"] = "deterministic"
+            write_json_atomic(manifest_path, manifest)
+            # An empty draft trace requests a new engine-generated trajectory.
+            legacy_trace = workspace/manifest["artifact_paths"]["propagation_trace"]
+            legacy_trace.write_bytes(b"")
+            command = [sys.executable, "-B", str(SCRIPTS/"run_simulation.py"),
+                       "--workspace", str(workspace), "--ticks", "2"]
+            before = {p.name: p.read_bytes() for p in workspace.iterdir() if p.is_file()}
+            invalid_format = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(invalid_format.returncode, 1, invalid_format.stderr)
+            self.assertEqual(json.loads(invalid_format.stdout)["code"], "TRACE_FORMAT")
+            self.assertEqual(before, {p.name: p.read_bytes() for p in workspace.iterdir() if p.is_file()})
+
+            manifest["artifact_paths"]["execution_trace"] = "execution-trace.json"
+            write_json_atomic(manifest_path, manifest)
+            valid_run = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(valid_run.returncode, 0, valid_run.stdout + valid_run.stderr)
+            trace_path = workspace/"execution-trace.json"
+            trace = json.loads(trace_path.read_text(encoding="utf-8"))
+            jsonschema.validate(instance=trace, schema=self.schema)
+            replay = subprocess.run([
+                sys.executable, "-B", str(SCRIPTS/"replay_simulation.py"), "--workspace", str(workspace)
+            ], capture_output=True, text=True)
+            self.assertEqual(replay.returncode, 0, replay.stdout + replay.stderr)
+            self.assertTrue(json.loads(replay.stdout)["match"])
+
+            # A malformed existing trace must never be replaced with a fresh valid one.
+            for raw, expected_code in ((b'{"broken":', "MODEL_COMPILE"),
+                                       (b'{"steps":[]}', "TRACE_EMPTY")):
+                with self.subTest(expected_code=expected_code):
+                    trace_path.write_bytes(raw)
+                    before = {p.name: p.read_bytes() for p in workspace.iterdir() if p.is_file()}
+                    malformed = subprocess.run(command, capture_output=True, text=True)
+                    self.assertEqual(malformed.returncode, 1, malformed.stderr)
+                    self.assertEqual(json.loads(malformed.stdout)["code"], expected_code)
+                    self.assertEqual(before, {p.name: p.read_bytes() for p in workspace.iterdir() if p.is_file()})
+
     def test_t01_cold_start_trace_generation(self) -> None:
         """T01: Cold-start numerical workspace containing only model definition without any pre-authored trace files (F07).
 
