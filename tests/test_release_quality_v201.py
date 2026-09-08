@@ -53,6 +53,24 @@ def _attested_source(root: Path) -> Path:
 
 
 class ReleaseGateOrchestrationTests(unittest.TestCase):
+    def test_real_acceptance_assertions_keep_expected_rejections_distinct(self) -> None:
+        command = [sys.executable, "-B", "scripts/acceptance.py",
+                   "--skip-unit-tests", "--skip-component-checks"]
+        accepted = release_gate._run("lifecycle-acceptance", command, ROOT)
+        self.assertTrue(accepted["ok"], accepted)
+        payload = json.loads(accepted["stdout"])
+        rejected_inputs = [r for r in payload["results"] if r["observed_returncode"] != 0]
+        self.assertEqual(len(rejected_inputs), 1)
+        self.assertEqual(rejected_inputs[0]["observed_returncode"], EXIT_SEMANTIC)
+        self.assertIs(rejected_inputs[0]["ok"], True)
+        with tempfile.TemporaryDirectory() as temporary:
+            failed = release_gate._run(
+                "lifecycle-acceptance", command + ["--adversarial", str(Path(temporary)/"missing")], ROOT
+            )
+        self.assertFalse(failed["ok"])
+        self.assertEqual(failed["returncode"], EXIT_SEMANTIC)
+        self.assertTrue(any("/ok is not true" in error for error in failed["semantic_errors"]))
+
     def test_real_child_process_semantics_cannot_be_hidden_by_exit_zero(self) -> None:
         cases = [
             ({"ok": True, "checks": [{"status": "pass"}]}, True),

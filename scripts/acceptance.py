@@ -304,7 +304,10 @@ def main() -> None:
                     {
                         "stage": result.get("stage"),
                         "cmd": result["cmd"],
-                        "returncode": result["returncode"],
+                        # The assertion outcome differs from the process outcome
+                        # when an adversarial input is correctly rejected.
+                        "observed_returncode": result["returncode"],
+                        "ok": result.get("pass", result["returncode"] == 0),
                         "pass": result.get("pass", result["returncode"] == 0),
                     }
                     for result in results
