@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 505,
-  "tree_sha256": "7e9b6defb3b21de94400e55b2e3654d401320c0653693fe083ee9477b99abc0a",
+  "tree_sha256": "4190b5da9c9da12357d11aa6530f9979587d562264c1d9feb8fe524fb4c97b6e",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -2393,8 +2393,8 @@
     },
     {
       "path": "tests/test_packaging_relocatability.py",
-      "sha256": "89310c54e79d02e8cea8d6e6174c3e92b988388319c11578fde9bc40bf9b158d",
-      "size": 15852
+      "sha256": "741c3a965e347c325b4b86b0850dcb310f7338f598ff595c15b97f9649047b79",
+      "size": 15924
     },
     {
       "path": "tests/test_protocol_edges_v2.py",

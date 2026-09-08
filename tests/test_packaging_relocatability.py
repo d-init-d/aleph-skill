@@ -195,6 +195,7 @@ class PackagingRelocatabilityAcceptanceTests(unittest.TestCase):
             shutil.copytree(ROOT / "scripts", isolated / "scripts")
             shutil.copytree(ROOT / "schemas", isolated / "schemas")
             shutil.copytree(ROOT / "tests", isolated / "tests")
+            shutil.copytree(ROOT / "templates", isolated / "templates")
             for f in ["SKILL.md", "pyproject.toml", "distribution-manifest.json"]:
                 if (ROOT / f).is_file():
                     shutil.copy2(ROOT / f, isolated / f)
