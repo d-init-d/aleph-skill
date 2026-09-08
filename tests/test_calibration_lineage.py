@@ -206,6 +206,121 @@ class CalibrationLineageTests(unittest.TestCase):
         policy["thresholds"]["max_mae"] = 2.0
         self.assertNotEqual(before, policy_design_hash(policy))
 
+    def test_root_role_cannot_remove_source_binding(self) -> None:
+        from aleph.engine import EngineConfig, compile_model, model_hash, run_deterministic
+        from aleph.io import load_json_secure
+
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            cases, _, _ = fixture(ws, 1)
+            case = cases[0]
+            path = ws/case["execution"]["file_path"]
+            execution, _ = load_json_secure(path)
+            for node in execution["nodes"]:
+                if node["id"] == "factor:momentum":
+                    node["role"] = "endogenous"
+            model = compile_model(execution["nodes"], execution["edges"], formula_version=case["formula_version"])
+            execution["result_hash"] = canonical_hash(run_deterministic(model, EngineConfig(**execution["config"]), ticks=1))
+            case["model_hash"] = model_hash(model)
+            write_json_atomic(path, execution)
+            case["execution"]["sha256"] = sha256_file(path)
+            self.assertTrue(replay_case(ws, case)["replay_verified"])
+            del execution["input_bindings"]["factor:momentum"]
+            write_json_atomic(path, execution)
+            case["execution"]["sha256"] = sha256_file(path)
+            with self.assertRaisesRegex(ValueError, "graph-root"):
+                replay_case(ws, case)
+
+    def test_graph_records_cannot_be_silently_discarded(self) -> None:
+        from aleph.io import load_json_secure
+
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            cases, _, _ = fixture(ws, 1)
+            case = cases[0]
+            path = ws/case["execution"]["file_path"]
+            original, _ = load_json_secure(path)
+            for kind in ("duplicate_node", "unknown_edge", "duplicate_edge", "bad_binding"):
+                with self.subTest(kind=kind):
+                    execution = copy.deepcopy(original)
+                    if kind == "duplicate_node":
+                        execution["nodes"].append(copy.deepcopy(execution["nodes"][0]))
+                    elif kind == "unknown_edge":
+                        execution["edges"].append({"id": "bad", "source": "missing", "target": "missing"})
+                    elif kind == "duplicate_edge":
+                        execution["edges"].append(copy.deepcopy(execution["edges"][0]))
+                    else:
+                        execution["input_bindings"]["factor:cpi_base"] = []
+                    write_json_atomic(path, execution)
+                    case["execution"]["sha256"] = sha256_file(path)
+                    with self.assertRaises(ValueError):
+                        replay_case(ws, case)
+
+    def test_oversized_execution_becomes_structured_issue(self) -> None:
+        from aleph.io import DEFAULT_MAX_FILE_BYTES
+
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            cases, policy, summary = fixture(ws, 1)
+            path = ws/"oversized.json"
+            with path.open("wb") as handle:
+                handle.seek(DEFAULT_MAX_FILE_BYTES)
+                handle.write(b"0")
+            cases[0]["execution"] = {"file_path": path.name, "sha256": "0"*64}
+            issues = []
+            result = verify_lineage(ws, cases, policy, summary, issues)
+            self.assertFalse(result["execution_verified"])
+            self.assertIn("RESOURCE_LIMIT", {i.code for i in issues})
+
+    def test_vintage_order_uses_instants_not_offset_strings(self) -> None:
+        observations = [
+            {"period": "2020-01-01", "value": 102.0, "official_release_date": "2020-01-01T00:00:00Z", "vintage_date": "2020-01-02T03:00:00Z"},
+            {"period": "2020-01-01", "value": 101.0, "official_release_date": "2020-01-01T00:00:00Z", "vintage_date": "2020-01-02T09:30:00+07:00"},
+        ]
+        forecast = execute_engine_cpi_forecast("2020-01-03T00:00:00Z", observations)
+        self.assertEqual(forecast["baseline_prediction"], 102.0)
+
+    def test_point_evaluation_preserves_persistence_precision(self) -> None:
+        from evaluate_point_forecasts import evaluate
+
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            source = ws/"raw.csv"
+            source.write_text("period,value,official_release_date\n" + "\n".join(
+                f"2020-0{i}-01,{100+i+0.12345},2020-0{i}-05T00:00:00Z" for i in range(1, 7)), encoding="utf-8")
+            report = evaluate(source, ws/"evaluation")
+            self.assertEqual(report["status"], "pass", report["issues"])
+            self.assertEqual(report["lineage"]["verified_case_count"], 2)
+
+    def test_point_evaluation_uses_only_available_revisions(self) -> None:
+        import json
+
+        from evaluate_point_forecasts import evaluate
+
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            source = ws/"revisions.csv"
+            rows = []
+            for i in range(1, 7):
+                rows.append(f"2020-0{i}-01,{100+i},2020-0{i}-05T00:00:00Z,")
+                rows.append(f"2020-0{i}-01,999,2020-0{i}-05T00:00:00Z,2021-01-01T00:00:00Z")
+            source.write_text("period,value,official_release_date,vintage_date\n" + "\n".join(rows), encoding="utf-8")
+            report = evaluate(source, ws/"evaluation")
+            self.assertEqual(report["status"], "pass", report["issues"])
+            case = json.loads((ws/"evaluation/hindcast/case-001.json").read_text(encoding="utf-8"))
+            self.assertEqual(case["baseline_prediction"], 104)
+            self.assertEqual(case["point_prediction"], 105)
+            self.assertEqual(case["actual_value"], 105)
+            self.assertFalse(report["probability_calibration_verified"])
+
+    def test_same_vintage_offsets_cannot_hide_conflicting_values(self) -> None:
+        observations = [
+            {"period": "2020-01-01", "value": 102.0, "official_release_date": "2020-01-01T00:00:00Z", "vintage_date": "2020-01-02T03:00:00Z"},
+            {"period": "2020-01-01", "value": 101.0, "official_release_date": "2020-01-01T00:00:00Z", "vintage_date": "2020-01-02T10:00:00+07:00"},
+        ]
+        with self.assertRaisesRegex(ValueError, "conflicting"):
+            execute_engine_cpi_forecast("2020-01-03T00:00:00Z", observations)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,6 +20,47 @@ from _lib import ArtifactLoadError, load_json, skill_root
 from aleph import PACKAGE_VERSION, SCHEMA_VERSION
 
 
+def _structured_failures(value: Any, pointer: str = "") -> list[str]:
+    """Reject failed or malformed result trees even when the process exits zero."""
+    if not isinstance(value, dict) or not value:
+        return [f"{pointer}: expected nonempty result object"]
+    failures = []
+    if "ok" in value and value["ok"] is not True:
+        failures.append(f"{pointer}/ok is not true")
+    if "status" in value and value["status"] not in ("pass", "ok", "degraded"):
+        failures.append(f"{pointer}/status is not successful")
+    for field in ("returncode", "exit_code"):
+        if field in value and (type(value[field]) is not int or value[field] != 0):
+            failures.append(f"{pointer}/{field} is not zero")
+    for field in ("timed_out", "output_exceeded"):
+        if value.get(field):
+            failures.append(f"{pointer}/{field}")
+    if value.get("errors"):
+        failures.append(f"{pointer}/errors is nonempty")
+    issues = value.get("issues", [])
+    if not isinstance(issues, list):
+        failures.append(f"{pointer}/issues is not an array")
+    else:
+        for item in issues:
+            if not isinstance(item, dict) or item.get("severity") not in ("info", "warning"):
+                failures.append(f"{pointer}/issues contains an error or malformed issue")
+    for field in ("checks", "subchecks", "results"):
+        if field not in value:
+            continue
+        children = value[field]
+        if isinstance(children, dict):
+            children = list(children.values())
+        if not isinstance(children, list) or not children:
+            failures.append(f"{pointer}/{field} is not a nonempty check collection")
+            continue
+        for index, child in enumerate(children):
+            if not isinstance(child, dict) or ("ok" not in child and "status" not in child):
+                failures.append(f"{pointer}/{field}/{index} lacks an outcome")
+            else:
+                failures.extend(_structured_failures(child, f"{pointer}/{field}/{index}"))
+    return failures
+
+
 def _run(name: str, command: list[str], cwd: Path) -> dict[str, Any]:
     try:
         completed = subprocess.run(
@@ -43,19 +84,21 @@ def _run(name: str, command: list[str], cwd: Path) -> dict[str, Any]:
         }
     reported_status: str | None = None
     json_error: str | None = None
+    semantic_errors: list[str] = []
     stripped_stdout = completed.stdout.strip()
-    if stripped_stdout.startswith("{"):
+    if stripped_stdout.startswith(("{", "[")):
         try:
-            payload = json.loads(stripped_stdout)
+            payload = json.loads(stripped_stdout, parse_constant=lambda value: (_ for _ in ()).throw(ValueError(f"invalid JSON constant: {value}")))
+            semantic_errors = _structured_failures(payload)
             if isinstance(payload, dict) and isinstance(payload.get("status"), str):
                 reported_status = str(payload["status"])
-        except json.JSONDecodeError as exc:
+        except ValueError as exc:
             json_error = str(exc)
     result: dict[str, Any] = {
         "name": name,
         "command": command,
         "returncode": completed.returncode,
-        "ok": completed.returncode == 0,
+        "ok": completed.returncode == 0 and not semantic_errors and json_error is None,
         "stdout": completed.stdout[-8000:],
         "stderr": completed.stderr[-4000:],
     }
@@ -63,6 +106,8 @@ def _run(name: str, command: list[str], cwd: Path) -> dict[str, Any]:
         result["reported_status"] = reported_status
     if json_error is not None:
         result["json_error"] = json_error
+    if semantic_errors:
+        result["semantic_errors"] = semantic_errors
     return result
 
 

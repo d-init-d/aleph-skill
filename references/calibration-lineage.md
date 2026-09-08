@@ -13,6 +13,15 @@ when values were revised. The command preserves the raw bytes, saves each
 model/config/result binding, commits predictions separately from outcomes, and
 independently replays all cases. It does not create historical preregistration.
 
+Rows must be grouped by increasing period; a period may have multiple distinct
+vintages. Input selection uses actual UTC instants and excludes future revisions.
+The retrospective outcome is the first supplied vintage of each target period,
+recorded as `outcome_selection: first_supplied_vintage` in the policy. This is
+not a claim that the supplied file contains the original historical vintage.
+An empty optional vintage cell defaults to the declared release date. Conflicting
+values at the same period/vintage are rejected, including equivalent timestamps
+written with different offsets. Persistence baselines retain the source precision.
+
 The result is a descriptive persistence comparison with a moving-block bootstrap
 interval on paired loss differences. The interval assumes approximate stationarity;
 the effective sample size is an autocorrelation estimate, not the number of rows.
@@ -30,8 +39,11 @@ Execution JSON uses `contract_version: aleph-case-replay-1`, source `nodes`,
 `edges`, `interventions`, the full `config_payload(EngineConfig)`, positive `ticks`,
 `output_variable`, `baseline_variable`, optional `output_decimals`, and a
 `result_hash` of `run_deterministic`'s complete return value. `input_bindings`
-maps every exogenous variable to `evidence_indices` with `identity` or ordered
-`mean_difference`. The compiled model hash and replayed forecast must match the
+maps every exogenous variable and every graph-root variable to `evidence_indices`
+with `identity` or ordered `mean_difference`. Renaming a root as endogenous does
+not remove this obligation. Node/edge identities must be unique and all edge
+endpoints must exist; records silently discarded by generic compilation are not
+valid replay evidence. The compiled model hash and replayed forecast must match the
 case; every rolling origin is checked against its own model.
 
 Policy `forecast_commitments` hashes `forecast_payload(case)` before outcomes

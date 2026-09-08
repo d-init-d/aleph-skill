@@ -248,6 +248,10 @@
         },
         "commitment_phase": {
           "type": "string"
+        },
+        "outcome_selection": {
+          "type": "string",
+          "enum": ["first_supplied_vintage"]
         }
       }
     },

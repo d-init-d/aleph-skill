@@ -16,12 +16,13 @@ from typing import Any
 
 from aleph.calibration_lineage import forecast_payload, utc, verify_lineage
 from aleph.empirical_pilot import compute_authentic_evaluation_metrics, execute_engine_cpi_forecast
-from aleph.io import canonical_hash, sha256_file, write_json_atomic
+from aleph.io import ResourceLimitError, canonical_hash, sha256_file, write_json_atomic
 from aleph.issues import Issue
 
 
 def evaluate(source: Path, output: Path) -> dict[str, Any]:
     source = source.resolve(strict=True)
+    sha256_file(source)  # Enforce the same raw-file resource bound as replay.
     with source.open(encoding="utf-8-sig", newline="") as handle:
         observations = [{**row, "value": float(row["value"]), "period": row.get("period") or row.get("date")} for row in csv.DictReader(handle)]
     if len(observations) < 5:
@@ -29,8 +30,14 @@ def evaluate(source: Path, output: Path) -> dict[str, Any]:
     periods = [str(o["period"]) for o in observations]
     if any(o["period"] is None for o in observations):
         raise ValueError("period or date column required")
-    if periods != sorted(set(periods)):
-        raise ValueError("observations must have unique increasing periods")
+    unique_periods = list(dict.fromkeys(periods))
+    if unique_periods != sorted(unique_periods) or len(unique_periods) < 5:
+        raise ValueError("at least five increasing periods required; revisions may share a period")
+    grouped = {period: [i for i, value in enumerate(periods) if value == period] for period in unique_periods}
+    for indices in grouped.values():
+        vintages = [utc(observations[i].get("vintage_date") or observations[i]["official_release_date"]) for i in indices]
+        if len(vintages) != len(set(vintages)):
+            raise ValueError("duplicate period/vintage observation")
     if output.exists():
         raise ValueError("output already exists; use a new directory to preserve evidence")
     output.mkdir(parents=True)
@@ -40,16 +47,18 @@ def evaluate(source: Path, output: Path) -> dict[str, Any]:
     (output / "hindcast").mkdir()
     (output / "executions").mkdir()
     cases = []
-    for target in range(4, len(observations)):
-        previous = observations[target-1]
+    for position in range(4, len(unique_periods)):
+        previous_period, target_period = unique_periods[position-1:position+1]
+        previous = min((observations[i] for i in grouped[previous_period]), key=lambda row: utc(row["official_release_date"]))
+        target = min(grouped[target_period], key=lambda i: utc(observations[i].get("vintage_date") or observations[i]["official_release_date"]))
         origin = (utc(previous["official_release_date"])+timedelta(seconds=1)).isoformat().replace("+00:00", "Z")
         forecast = execute_engine_cpi_forecast(origin, observations)
         available = forecast["available_observations"]
         used = available[-4:]
         indices = [observations.index(row) for row in used]
-        if indices[-1] != target-1:
+        if len(used) != 4 or used[-1]["period"] != previous_period:
             raise ValueError("release order does not support the declared one-period forecast")
-        cid = f"case-{target-3:03d}"
+        cid = f"case-{position-3:03d}"
         execution = forecast["model_execution"]
         execution["input_bindings"] = {
             "factor:cpi_base": {"operation": "identity", "evidence_indices": [3]},
@@ -69,6 +78,7 @@ def evaluate(source: Path, output: Path) -> dict[str, Any]:
         write_json_atomic(output / "hindcast" / (cid + ".json"), case)
     policy = {"policy_locked": True, "precommitted": False, "commitment_phase": "retrospective_replay",
               "baseline": "persistence", "recipe": "trailing-three-difference-plus-last-level",
+              "outcome_selection": "first_supplied_vintage",
               "case_commitments": {c["case_id"]: canonical_hash(c) for c in cases},
               "forecast_commitments": {c["case_id"]: canonical_hash(forecast_payload(c)) for c in cases}}
     policy["policy_hash"] = canonical_hash(policy)
@@ -92,7 +102,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         report = evaluate(args.data, args.out)
-    except (ValueError, KeyError, OSError) as exc:
+    except (ResourceLimitError, ValueError, KeyError, TypeError, OverflowError, OSError) as exc:
         report = {"status": "fail", "issues": [{"severity": "error", "code": "INVALID_DATA", "message": str(exc)}]}
     print(json.dumps(report, indent=2, allow_nan=False))
     return 0 if report["status"] == "pass" else 1

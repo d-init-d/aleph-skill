@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .engine import EngineConfig, compile_model, config_payload, model_hash, run_deterministic
-from .io import canonical_hash, load_json_secure, sha256_file
+from .io import ResourceLimitError, canonical_hash, load_json_secure, sha256_file
 from .issues import Issue, issue
 from .paths import resolve_in_workspace
 
@@ -88,13 +88,48 @@ def resolve_observation(workspace: Path, ref: dict[str, Any]) -> dict[str, Any]:
         value = float(value)
     value = number(value)
     release = row.get("official_release_date")
-    vintage = row.get("vintage_date", release)
-    utc(release)
-    utc(vintage)
+    vintage = row.get("vintage_date") or release
+    if utc(vintage) < utc(release):
+        raise ValueError("observation vintage precedes its initial release")
     period = row.get("period") or row.get("target_period") or row.get("date")
     if not isinstance(period, str) or not period:
         raise ValueError("observation lacks period")
     return {"value": value, "official_release_date": release, "vintage_date": vintage, "period": period}
+
+
+def _required_inputs(nodes: Any, edges: Any) -> set[str]:
+    """Validate graph identity and bind root variables regardless of role labels."""
+    if not isinstance(nodes, list) or not nodes or not isinstance(edges, list):
+        raise ValueError("execution nodes/edges must be arrays with a nonempty model")
+    identifiers: set[str] = set()
+    exogenous: set[str] = set()
+    for node in nodes:
+        if not isinstance(node, dict) or not isinstance(node.get("id"), str) or not node["id"]:
+            raise ValueError("model node requires a nonempty string id")
+        identifier = node["id"]
+        if identifier in identifiers:
+            raise ValueError("duplicate model node id")
+        identifiers.add(identifier)
+        if node.get("role", "endogenous") not in ("exogenous", "endogenous"):
+            raise ValueError("unsupported model node role")
+        if node.get("role") == "exogenous":
+            exogenous.add(identifier)
+    targets: set[str] = set()
+    edge_ids: set[str] = set()
+    for edge in edges:
+        if not isinstance(edge, dict) or not isinstance(edge.get("id"), str) or not edge["id"]:
+            raise ValueError("model edge requires a nonempty string id")
+        if edge["id"] in edge_ids:
+            raise ValueError("duplicate model edge id")
+        edge_ids.add(edge["id"])
+        source, target = edge.get("from", edge.get("source")), edge.get("to", edge.get("target"))
+        if not isinstance(source, str) or not isinstance(target, str) or source not in identifiers or target not in identifiers:
+            raise ValueError("model edge references an unknown variable")
+        for primary, alias in (("from", "source"), ("to", "target")):
+            if primary in edge and alias in edge and edge[primary] != edge[alias]:
+                raise ValueError("model edge endpoint aliases disagree")
+        targets.add(target)
+    return exogenous | (identifiers - targets)
 
 
 def replay_case(workspace: Path, case: dict[str, Any]) -> dict[str, Any]:
@@ -125,13 +160,18 @@ def replay_case(workspace: Path, case: dict[str, Any]) -> dict[str, Any]:
     bindings = execution.get("input_bindings")
     if not isinstance(nodes, list) or not isinstance(bindings, dict):
         raise ValueError("model nodes/input bindings missing")
+    required_inputs = _required_inputs(nodes, execution.get("edges"))
     bound_values: dict[str, float] = {}
     for variable, binding in bindings.items():
+        if not isinstance(binding, dict):
+            raise ValueError("input binding must be an object")
         indices = binding.get("evidence_indices")
-        if not isinstance(indices, list) or not indices or len(set(indices)) != len(indices):
+        if not isinstance(indices, list) or not indices:
             raise ValueError("input binding requires distinct evidence indices")
         if any(isinstance(i, bool) or not isinstance(i, int) or i < 0 or i >= len(evidence) or evidence[i]["role"] != "input" for i in indices):
             raise ValueError("model input references non-input evidence")
+        if len(set(indices)) != len(indices):
+            raise ValueError("input binding requires distinct evidence indices")
         values = [observations[i]["value"] for i in indices]
         if binding.get("operation") == "identity" and len(values) == 1:
             bound_values[variable] = values[0]
@@ -142,9 +182,8 @@ def replay_case(workspace: Path, case: dict[str, Any]) -> dict[str, Any]:
             bound_values[variable] = sum(b - a for a, b in zip(values[:-1], values[1:], strict=True)) / (len(values) - 1)
         else:
             raise ValueError("unsupported input binding operation")
-    exogenous = {n["id"] for n in nodes if n.get("role") == "exogenous"}
-    if set(bound_values) != exogenous:
-        raise ValueError("all and only exogenous variables must be bound to source observations")
+    if set(bound_values) != required_inputs:
+        raise ValueError("all and only exogenous and graph-root variables must be bound to source observations")
     for node in nodes:
         if node["id"] in bound_values:
             value = bound_values[node["id"]]
@@ -188,6 +227,8 @@ def verify_lineage(workspace: Path, cases: list[dict[str, Any]], policy: dict[st
             if not isinstance(commitments, dict) or commitments.get(cid) != replay["forecast_commitment"]:
                 raise ValueError("forecast commitment missing or changed")
             verified[cid] = replay
+        except ResourceLimitError as exc:
+            issues.append(exc.issue)
         except (ValueError, TypeError, KeyError, IndexError, AttributeError, OSError, OverflowError) as exc:
             issues.append(issue("CALIBRATION_LINEAGE", pointer=f"cases/{cid}/execution", message=str(exc)))
     execution_ok = bool(cases) and len(verified) == len(cases)
@@ -216,7 +257,7 @@ def verify_lineage(workspace: Path, cases: list[dict[str, Any]], policy: dict[st
                     raise ValueError("source bytes/vintages absent from trusted receipt set")
             trusted = receipts.get("point_in_time_verified") is True and receipts.get("holdout_verified") is True
             trust_reason = "host receipt verified" if trusted else "holdout or vintage review missing"
-        except (ValueError, TypeError, KeyError, OSError, AttributeError) as exc:
+        except (ResourceLimitError, ValueError, TypeError, KeyError, OSError, AttributeError) as exc:
             trust_reason = str(exc)
     return {"execution_verified": execution_ok, "verified_case_count": len(verified),
             "historical_provenance_verified": trusted, "attestation_type": "host_trust_receipt" if trusted else "unattested",

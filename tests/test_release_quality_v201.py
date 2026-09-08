@@ -53,6 +53,28 @@ def _attested_source(root: Path) -> Path:
 
 
 class ReleaseGateOrchestrationTests(unittest.TestCase):
+    def test_real_child_process_semantics_cannot_be_hidden_by_exit_zero(self) -> None:
+        cases = [
+            ({"ok": True, "checks": [{"status": "pass"}]}, True),
+            ({"status": "pass", "issues": [{"severity": "warning", "code": "OPTIONAL"}]}, True),
+            ({"ok": False}, False),
+            ({"status": "fail"}, False),
+            ({"status": "pass", "issues": [{"severity": "error", "code": "BROKEN"}]}, False),
+            ({"ok": True, "checks": [{"status": "pass", "subchecks": [{"ok": False}]}]}, False),
+            ({"ok": True, "checks": []}, False),
+            ({"ok": True, "checks": [42]}, False),
+            ({"ok": True, "checks": [{"ok": True, "issues": "invalid"}]}, False),
+            ({"ok": True, "errors": ["failure"]}, False),
+            ({"ok": True, "timed_out": True}, False),
+            ([], False),
+        ]
+        for payload, expected in cases:
+            with self.subTest(payload=payload):
+                command = [sys.executable, "-c", "print(" + repr(json.dumps(payload)) + ")"]
+                result = release_gate._run("real-child", command, ROOT)
+                self.assertEqual(result["returncode"], 0)
+                self.assertEqual(result["ok"], expected)
+
     def test_dev_gate_runs_one_unit_suite_and_one_lifecycle(self) -> None:
         observed: list[tuple[str, list[str]]] = []
 
@@ -863,4 +885,3 @@ class InstallerTransactionCoverageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

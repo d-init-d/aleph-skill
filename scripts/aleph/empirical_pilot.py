@@ -213,18 +213,21 @@ def execute_engine_cpi_forecast(
     available: list[dict[str, Any]] = []
     for obs in all_observations:
         rel_ts = obs.get("official_release_date")
-        vintage_ts = obs.get("vintage_date", rel_ts)
+        vintage_ts = obs.get("vintage_date") or rel_ts
         if rel_ts and vintage_ts and max(_parse_utc_iso(str(rel_ts)), _parse_utc_iso(str(vintage_ts))) <= origin_dt:
             value = obs.get("value")
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
                 raise ValueError("CPI observations require finite numeric values")
             available.append(obs)
-    available.sort(key=lambda obs: (str(obs.get("period", obs.get("official_release_date"))), str(obs.get("vintage_date", obs.get("official_release_date")))))
+    available.sort(key=lambda obs: (str(obs.get("period") or obs.get("date") or obs.get("official_release_date")), _parse_utc_iso(str(obs.get("vintage_date") or obs.get("official_release_date")))))
     by_period: dict[str, dict[str, Any]] = {}
     for obs in available:
-        key = str(obs.get("period", obs.get("official_release_date")))
-        if key in by_period and obs.get("vintage_date") == by_period[key].get("vintage_date") and obs["value"] != by_period[key]["value"]:
-            raise ValueError("conflicting values for the same period/vintage")
+        key = str(obs.get("period") or obs.get("date") or obs.get("official_release_date"))
+        if key in by_period:
+            previous = by_period[key]
+            same_vintage = _parse_utc_iso(str(obs.get("vintage_date") or obs["official_release_date"])) == _parse_utc_iso(str(previous.get("vintage_date") or previous["official_release_date"]))
+            if same_vintage and obs["value"] != previous["value"]:
+                raise ValueError("conflicting values for the same period/vintage")
         by_period[key] = obs
     available = list(by_period.values())
 
@@ -234,7 +237,7 @@ def execute_engine_cpi_forecast(
     # Baseline: naive persistence = last known published CPI value
     last_obs = available[-1]
     last_cpi = float(last_obs["value"])
-    baseline_prediction = round(last_cpi, 3)
+    baseline_prediction = last_cpi
 
     # Calculate trailing 3-month momentum from available observations
     if len(available) >= 4:
