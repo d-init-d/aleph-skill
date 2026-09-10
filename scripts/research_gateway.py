@@ -598,7 +598,7 @@ def _reconcile_component_acceptance(
     # Earlier locked identities remain reconciliable so re-locking an older
     # snapshot never loses capability.
     component_version = str(reconciliation.get("component_version") or "")
-    if component_version in {"3.4.0", "3.4.1"}:
+    if component_version in {"3.4.0", "3.4.1", "3.4.2"}:
         # Empirically verified on the locked v3.4.x snapshots: the only
         # repository-only failure is check_contract's self-test reading the
         # excluded CI workflow file.

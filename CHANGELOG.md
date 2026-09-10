@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.4.2
+
+- Generate and replay numerical engine traces from valid cold-start workspaces; reject invalid trace formats before committing outputs and preserve malformed traces.
+- Bind graph roots and exogenous inputs to raw sources; reject malformed topology, identifiers, and bindings.
+- Verify per-case calibration provenance, raw dataset snapshots, model identity, and deterministic replay while keeping statistical assurance separate.
+- Support ordered data vintages, UTC cutoff selection, duplicate-instant conflict checks, and full-precision baseline persistence.
+- Reject nested adapter failures and malformed release results; distinguish expected negative-test exits from assertion outcomes.
+- Update the locked bundled component to D Research 3.4.2 with source and release-artifact verification.
+- Synchronize the development/test lockfile and install declared test extras across the portable CI matrix.
+- Preserve workspace schema and formula versions. Existing version-bound receipts may require regeneration.
+
+See [release notes](.github/release-notes/v2.4.2.md) for upgrade instructions and validation limits.
+
 ## 2.4.1
 
 ### Changed

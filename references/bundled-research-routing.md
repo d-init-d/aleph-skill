@@ -153,7 +153,7 @@ release jobs so a no-browser job cannot masquerade as a browser pass.
 
 Upstream 3.4.1 makes the social-snapshot self-test hermetic for known mocked
 fixture hosts while retaining the production resolver for private and malformed
-targets. The locked 3.4.1 component therefore reconciles only exact
+targets. The locked 3.4.2 component retains this behavior and reconciles only exact
 repository-only case `23`. Aleph retains the historical 3.4.0 DNS-policy
 reconciliation for exact legacy bindings: if a host maps the public fixture
 name to a non-public address, only wrapper failures `22` and `26` may be

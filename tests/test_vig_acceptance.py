@@ -260,7 +260,7 @@ class VigAcceptanceTests(unittest.TestCase):
         binding = manifest["component_binding"]
         self.assertEqual(binding["component_uri"], COMPONENT_URI)
         self.assertEqual(binding["package_name"], "d-research-skill-tools")
-        self.assertEqual(binding["package_version"], "3.4.1")
+        self.assertEqual(binding["package_version"], "3.4.2")
         self.assertEqual(binding["upstream_commit"], json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))["components"]["d-research"]["upstream_commit"])
         self.assertTrue(binding["component_lock_sha256"].startswith("sha256:"))
 
