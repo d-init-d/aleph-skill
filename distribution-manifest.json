@@ -1,10 +1,10 @@
 {
   "schema_version": "2.0.0",
-  "package_version": "2.4.2",
+  "package_version": "2.4.3",
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
-  "file_count": 524,
-  "tree_sha256": "5fde4cef300146e6f81c49c78eb9fa90df627182e2508fb5f414f8ee574c9acc",
+  "file_count": 525,
+  "tree_sha256": "c3687c40c9e361e24e74e2ea52a25a87454b70b1bc440f618598109f0d52ce4c",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -52,6 +52,11 @@
       "size": 5104
     },
     {
+      "path": ".github/release-notes/v2.4.3.md",
+      "sha256": "feca5a6d9fcfb86a07a77680686f49f0a447ac765427a390bf0ad75da68a6e21",
+      "size": 5615
+    },
+    {
       "path": ".github/workflows/ci.yml",
       "sha256": "a301376df378a48bd5e6075c00a0a128ebff571e612eff85f03d800afa01b701",
       "size": 263
@@ -73,8 +78,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "63d1f4d15d33445b48231ec5dac91cf1a3d6dabdd0a880594f669d47bb86e242",
-      "size": 37726
+      "sha256": "a7675948e10c8e284c509667ce04421bdc7241b30194eb9b4a9c3d3e051e8a31",
+      "size": 37837
     },
     {
       "path": "LICENSE",
@@ -83,7 +88,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "8da3641dcea63135c7dc79ebcda98bab738f48201c9ece22357daf24d7c4c028",
+      "sha256": "32bb49052230e965184114ded8b7e3ae04c0b85d0b9a33439486cf0729873a76",
       "size": 15440
     },
     {
@@ -93,7 +98,7 @@
     },
     {
       "path": "SKILL.md",
-      "sha256": "4ae5e05d6bd132854c4431f89b843f86507bb178a7d00812dad614ea41c74e1a",
+      "sha256": "95ab80cb339f08d7b1ebafa3ec388edb51c22aa6c75be0aaa8805c1ffd54a05a",
       "size": 14040
     },
     {
@@ -118,17 +123,17 @@
     },
     {
       "path": "adapters/external/aider.json",
-      "sha256": "0a2c20e455c45ffecd5455a0adfd2ec08e00739d42497999ae487e0266459d82",
+      "sha256": "f600b53e3977483ebc3c54556633a5cd0ab1a7b858c15ba229bcfcb6766a4153",
       "size": 907
     },
     {
       "path": "adapters/external/generic-cli.json",
-      "sha256": "34678e4997cbdb29a432f39323c744bf71616a70bd4631854822860916b75d56",
+      "sha256": "da6eec79aa4a5bfd0adfa4e9a2f31cd22600e3396304956861ca497fa0669a39",
       "size": 880
     },
     {
       "path": "adapters/external/grok-build.json",
-      "sha256": "70ef4f74c2bc912ebe873c2e1bc6b5ef0a1fd323e79001770b7dd7f939b47eb0",
+      "sha256": "9a013392a1c07b3beb952a134369661863783a742c2d81a70c17faa9c4a80d56",
       "size": 910
     },
     {
@@ -143,7 +148,7 @@
     },
     {
       "path": "adapters/registry.json",
-      "sha256": "872ae5d4ec05125e6032767e507d918515e17120bc6adbbe1779e76181b3ffac",
+      "sha256": "d7a815d0dad4d2dc560e3f0faf6bb2caf5715621868987244a525d087c4eafaa",
       "size": 8291
     },
     {
@@ -1348,12 +1353,12 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "29700890dca6daee6f2215d413045c4a94738b9eed2baacc29973aaef5517589",
+      "sha256": "dc3de90e0e8f116ed59cfb59176ec65ad09166bbfaa173a1a8fad77d52855406",
       "size": 230
     },
     {
       "path": "package.json",
-      "sha256": "ed010a9ab1e255f15e157d8e9def9b564bc32b11fec6723fe2ee7568d5976c23",
+      "sha256": "150d3ee847a928c4b54f14e8c41238d53e13fa7c319d531b40c0ab1f8169c402",
       "size": 2211
     },
     {
@@ -1708,7 +1713,7 @@
     },
     {
       "path": "pyproject.toml",
-      "sha256": "6dcd233b2a1aa83042d1dc2aa4be9f0d2464e4a147126f2d8fcdd35d6dff4dfe",
+      "sha256": "6419940f360896b78ff60bf17ad0d4c5781e192bd9b01b99781065d8f9b64f46",
       "size": 1185
     },
     {
@@ -1878,7 +1883,7 @@
     },
     {
       "path": "scripts/aleph/__init__.py",
-      "sha256": "96852d73aaab58735f3c6fb118e2f7c4592e954a59ac01f761dd04b6ccb728bf",
+      "sha256": "e6d9c9a13e7117d2921e5120bdf1de2d378fbc68e8989ca61c1bc9de522ed75b",
       "size": 1127
     },
     {
@@ -2623,7 +2628,7 @@
     },
     {
       "path": "uv.lock",
-      "sha256": "318e5bb1363632eb53b43fa9c3ae26d2fcdf2b619ad9eb44cc7a79b6311d8aaa",
+      "sha256": "c86506fbe84569b053003919dbb97881edb00bf59857d8da43c7fee37e0661d7",
       "size": 292918
     }
   ]

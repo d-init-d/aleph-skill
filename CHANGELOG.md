@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.4.3 - 2026-09-19
 
 ### Changed
 - Updated the locked internal D Research component from `3.4.2` to `3.5.0`, adding mandatory documentary and social research branches, bounded Playwright exploration, execution-backed completion, and hash-verified captures.
@@ -13,6 +13,8 @@
 ### Security and provenance
 - Pinned GitHub-verified annotated tag object `b00a260ae87f8244baa86a072080c532cc446ce9`, commit `c0dd972b40b2de6470cf9ac355f510c8acc18454`, and Git tree `f76b3b43686647ef97153ed740bcee750a77d32a`.
 - Bound the reproducible Git archive and official source, full, and runtime release artifacts; vendored the exact 237-file runtime profile with its declared `package.json` projection.
+
+See [release notes](.github/release-notes/v2.4.3.md) for upgrade instructions and validation details.
 
 ## 2.4.2
 
