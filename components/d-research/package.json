@@ -4,8 +4,8 @@
     "projection": "runtime-package-v1",
     "source_package_manifest": {
       "algorithm": "sha256",
-      "file_count": 226,
-      "paths_sha256": "sha256:89d47f7e751e0c10d452fc29bfc1e5c2f95a3b13082e7829063d27e198c6fd16",
+      "file_count": 244,
+      "paths_sha256": "sha256:85f9051215cbb3b78a4029794e00658db948661f20615b4807a27f0883afb195",
       "schema_version": 1
     }
   },
@@ -34,6 +34,7 @@
     "!examples/**/*.pyd",
     "references/**/*.md",
     "references/i18n/*.json",
+    "schemas/*.json",
     "scripts/*.py",
     "scripts/*.mjs",
     "scripts/lib/*.mjs",
@@ -46,6 +47,7 @@
   "private": true,
   "scripts": {
     "api:fetch": "node scripts/api_fetch.mjs",
+    "browser:interact": "node scripts/browser_interaction.mjs",
     "cache:purge": "node scripts/run_python.mjs scripts/http_cache.py purge",
     "cache:stats": "node scripts/run_python.mjs scripts/http_cache.py stats",
     "citation:enrich": "node scripts/run_python.mjs scripts/citation_export.py enrich",
@@ -56,6 +58,7 @@
     "cite:resolve:isbn": "node scripts/run_python.mjs scripts/citation_resolver.py isbn",
     "cite:resolve:oa": "node scripts/run_python.mjs scripts/citation_resolver.py oa",
     "cite:resolve:pmid": "node scripts/run_python.mjs scripts/citation_resolver.py pmid",
+    "claim:assess": "node scripts/run_python.mjs scripts/lineage_tracker.py assess-claim",
     "crawl": "node scripts/playwright_crawl.mjs",
     "data:clean": "node scripts/run_python.mjs scripts/data_clean.py clean",
     "data:dedup": "node scripts/run_python.mjs scripts/data_clean.py dedup",
@@ -119,9 +122,13 @@
     "report:to-docx": "node scripts/run_python.mjs scripts/report_render.py to-docx",
     "report:to-html": "node scripts/run_python.mjs scripts/report_render.py to-html",
     "report:to-pdf": "node scripts/run_python.mjs scripts/report_render.py to-pdf",
+    "research:controller": "node scripts/run_python.mjs scripts/research_controller.py",
+    "research:fast": "node scripts/run_python.mjs scripts/fast_evaluator.py",
+    "research:reconcile": "node scripts/run_python.mjs scripts/reconciliation.py",
     "score:source": "node scripts/run_python.mjs scripts/score_source.py score",
     "search:web": "node scripts/web_search.mjs",
     "self-test:runtime": "node scripts/runtime_self_test.mjs",
+    "social:capabilities": "node scripts/run_python.mjs scripts/social_adapters.py capabilities",
     "social:snapshot": "node scripts/run_python.mjs scripts/social_snapshot.py snapshot",
     "social:to-ledger": "node scripts/run_python.mjs scripts/social_snapshot.py to-ledger",
     "social:verify": "node scripts/run_python.mjs scripts/social_snapshot.py verify",
@@ -138,5 +145,5 @@
     "wikidata:sparql": "node scripts/run_python.mjs scripts/wikidata.py sparql"
   },
   "type": "module",
-  "version": "3.4.2"
+  "version": "3.5.0"
 }

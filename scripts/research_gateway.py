@@ -139,6 +139,7 @@ SCRIPT_INVENTORY: tuple[str, ...] = (
     "scripts/adversarial_acceptance.py",
     "scripts/api_fetch.mjs",
     "scripts/bench_harness_check.py",
+    "scripts/browser_interaction.mjs",
     "scripts/browser_smoke.mjs",
     "scripts/build_release_artifacts.py",
     "scripts/check_contract.py",
@@ -157,11 +158,14 @@ SCRIPT_INVENTORY: tuple[str, ...] = (
     "scripts/embed_corpus.py",
     "scripts/eval_harness.py",
     "scripts/evidence_ledger.py",
+    "scripts/execution_evidence.py",
     "scripts/extract_tables.py",
+    "scripts/fast_evaluator.py",
     "scripts/generate_test_pdf.py",
     "scripts/harvest_terms.py",
     "scripts/http_cache.py",
     "scripts/investigation_policy.py",
+    "scripts/lineage_tracker.py",
     "scripts/multi_extract.py",
     "scripts/ocr.py",
     "scripts/package_manifest_check.mjs",
@@ -171,9 +175,11 @@ SCRIPT_INVENTORY: tuple[str, ...] = (
     "scripts/playwright_extract.mjs",
     "scripts/playwright_probe.mjs",
     "scripts/quality_eval.py",
+    "scripts/reconciliation.py",
     "scripts/release_verify.py",
     "scripts/report_render.py",
     "scripts/research_plan.py",
+    "scripts/research_controller.py",
     "scripts/resource_limits.py",
     "scripts/run_dogfood.py",
     "scripts/run_metadata.py",
@@ -181,6 +187,7 @@ SCRIPT_INVENTORY: tuple[str, ...] = (
     "scripts/runtime_self_test.mjs",
     "scripts/score_source.py",
     "scripts/social_snapshot.py",
+    "scripts/social_adapters.py",
     "scripts/translate.py",
     "scripts/wayback.py",
     "scripts/web_search.mjs",
@@ -201,6 +208,7 @@ NON_DISPATCHABLE_SCRIPTS = frozenset(
     {
         "scripts/_ssrf_helpers.py",
         "scripts/content_sanitize.py",
+        "scripts/execution_evidence.py",  # imported trust-boundary helper; no CLI
         "scripts/source_grounding.py",
         "scripts/generate_test_pdf.py",  # hard-codes writes beside __file__
         "scripts/run_python.mjs",  # accepts an arbitrary script path
@@ -229,6 +237,7 @@ FALLBACK_CHAIN = [
 PATH_OPTIONS = frozenset(
     {
         "--artifact",
+        "--activity-log",
         "--baseline-metrics",
         "--bench",
         "--bib",
@@ -236,8 +245,10 @@ PATH_OPTIONS = frozenset(
         "--ci-evidence",
         "--csl",
         "--config",
+        "--capture-records",
         "--extract-to",
         "--file",
+        "--fixture",
         "--findings-ledger",
         "--fixtures",
         "--forward-artifacts",
@@ -266,6 +277,7 @@ PATH_OPTIONS = frozenset(
         "--source-file",
         "--source-root",
         "--workspace",
+        "--workspace-dir",
         "--workflow-path",
     }
 )
@@ -389,6 +401,9 @@ COMMAND_ROUTES: dict[str, dict[str, Any]] = {
     "research:browser-crawl": _route(
         "scripts/playwright_crawl.mjs", kind="node", network=True, browser=True
     ),
+    "research:browser-interact": _route(
+        "scripts/browser_interaction.mjs", kind="node", network=True, browser=True
+    ),
     "research:api-fetch": _route("scripts/api_fetch.mjs", kind="node", network=True),
     "research:web-search": _route(
         "scripts/web_search.mjs",
@@ -404,6 +419,11 @@ COMMAND_ROUTES: dict[str, dict[str, Any]] = {
     # not a CLI subcommand, so the old route was never executable.
     "research:import": _route("scripts/evidence_ledger.py", prefix=("verify",), hmac=True),
     "research:plan": _route("scripts/research_plan.py", hmac=True),
+    "research:controller": _route("scripts/research_controller.py"),
+    "research:fast": _route("scripts/fast_evaluator.py"),
+    "research:lineage": _route("scripts/lineage_tracker.py"),
+    "research:reconcile": _route("scripts/reconciliation.py"),
+    "research:social-capabilities": _route("scripts/social_adapters.py"),
     "research:policy": _route("scripts/investigation_policy.py"),
     "research:package-check": _route("scripts/package_manifest_check.mjs", kind="node"),
     "research:runtime-self-test": _route("scripts/runtime_self_test.mjs", kind="node"),
@@ -460,6 +480,7 @@ for _rel in SCRIPT_INVENTORY:
         _kind = "python"
     _network = _rel in {
         "scripts/api_fetch.mjs",
+        "scripts/browser_interaction.mjs",
         "scripts/playwright_probe.mjs",
         "scripts/playwright_extract.mjs",
         "scripts/playwright_crawl.mjs",
@@ -485,6 +506,7 @@ for _rel in SCRIPT_INVENTORY:
                 "scripts/playwright_probe.mjs",
                 "scripts/playwright_extract.mjs",
                 "scripts/playwright_crawl.mjs",
+                "scripts/browser_interaction.mjs",
                 "scripts/browser_smoke.mjs",
             },
             disabled=_rel in NON_DISPATCHABLE_SCRIPTS,
@@ -598,8 +620,8 @@ def _reconcile_component_acceptance(
     # Earlier locked identities remain reconciliable so re-locking an older
     # snapshot never loses capability.
     component_version = str(reconciliation.get("component_version") or "")
-    if component_version in {"3.4.0", "3.4.1", "3.4.2"}:
-        # Empirically verified on the locked v3.4.x snapshots: the only
+    if component_version in {"3.4.0", "3.4.1", "3.4.2", "3.5.0"}:
+        # Empirically verified on the locked v3.4.x and v3.5.0 snapshots: the only
         # repository-only failure is check_contract's self-test reading the
         # excluded CI workflow file.
         repo_only_failures = ["23_unsafe_runtime_config"]

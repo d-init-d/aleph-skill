@@ -87,8 +87,12 @@ bindings. Stable task routes include:
 | Ledger init/validate/sign/verify/export | `research:evidence-ledger` | `scripts/evidence_ledger.py` |
 | Signed-ledger import verification | `research:import` | `scripts/evidence_ledger.py verify` |
 | Research plan and gates | `research:plan` | `scripts/research_plan.py` |
+| Dual-branch controller and evidence-backed fast evaluation | `research:controller`, `research:fast` | `scripts/research_controller.py`, `scripts/fast_evaluator.py` |
+| Lineage tracking and cross-branch reconciliation | `research:lineage`, `research:reconcile` | `scripts/lineage_tracker.py`, `scripts/reconciliation.py` |
+| Social payload normalization and capability reporting | `research:social-capabilities` | `scripts/social_adapters.py` |
 | Investigation scope and source policy | `research:policy` | `scripts/investigation_policy.py` |
 | Browser probe/extract/crawl | `research:browser-probe`, `research:browser-extract`, `research:browser-crawl` | `scripts/playwright_*.mjs` |
+| Dynamic browser interaction and capture | `research:browser-interact` | `scripts/browser_interaction.mjs` |
 | Public API fetch | `research:api-fetch` | `scripts/api_fetch.mjs` |
 | Web search | `research:web-search` | `scripts/web_search.mjs` |
 | Citation resolve/export/render | `research:citation-resolver`, `research:citation-export`, `research:citation-render` | citation helpers |
@@ -153,7 +157,7 @@ release jobs so a no-browser job cannot masquerade as a browser pass.
 
 Upstream 3.4.1 makes the social-snapshot self-test hermetic for known mocked
 fixture hosts while retaining the production resolver for private and malformed
-targets. The locked 3.4.2 component retains this behavior and reconciles only exact
+targets. The locked 3.5.0 component retains this behavior and reconciles only exact
 repository-only case `23`. Aleph retains the historical 3.4.0 DNS-policy
 reconciliation for exact legacy bindings: if a host maps the public fixture
 name to a non-public address, only wrapper failures `22` and `26` may be

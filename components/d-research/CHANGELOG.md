@@ -7,6 +7,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-09-19
+
+Stable production release of evidence-backed dual-track documentary and social
+research.
+
+- Require documentary and social coverage for every substantive research
+  question, with concurrent or round-robin scheduling and anti-starvation
+  checks.
+- Add deep Playwright exploration for dynamic posts, replies, pagination,
+  scrolling, expansion controls, and transcript panels.
+- Bind branch completion to successful browser activity and readable,
+  hash-verified captures instead of URLs, snippets, or evaluator counters.
+- Preserve source class, lineage, correction context, contradictions, access
+  blockers, and verification status through final reconciliation.
+- Promote the signed `v3.5.0-rc.2` candidate after exact-SHA CI on Ubuntu and
+  Windows, deterministic package verification, source archive reproduction,
+  and provenance attestation.
+
+See [release notes](docs/release-v3.5.0.md) for upgrade instructions,
+compatibility, and assurance limits.
+
+## [3.5.0-rc.2] - 2026-09-19
+
+Release-candidate refresh for the evidence-backed dual-track research upgrade.
+
+- Include the final v3.5.0 release documentation inside the frozen package
+  closure so stable promotion does not add packaged files after candidate
+  verification.
+- Rebind candidate metadata, package closure, and stable-promotion validation to
+  `v3.5.0-rc.2`.
+- Preserve the runtime and social-depth implementation from `v3.5.0-rc.1`.
+- Require the complete exact-SHA CI, artifact, signed-tag, archive reproduction,
+  and provenance gates again before stable promotion.
+
+No independent live baseline-versus-candidate agent benchmark is claimed.
+See [release notes](docs/release-v3.5.0-rc.2.md) for details.
+
+## [3.5.0-rc.1] - 2026-09-19
+
+Release candidate for evidence-backed dual-track documentary and social
+research.
+
+### Added
+
+- Added mandatory documentary and social branches for every substantive
+  research question, with concurrent or round-robin scheduling and explicit
+  anti-starvation coverage.
+- Added Playwright interaction records for search, open, expansion, replies,
+  pagination, scrolling, and transcript panels.
+- Added activity-log, capture-record, and research-coverage contracts with
+  hash-bound source artifacts and execution-derived telemetry.
+- Added social source classification, lineage tracking, cross-branch
+  reconciliation, and separate reporting for official evidence, supported
+  community facts, unverified leads, contradictions, and blockers.
+
+### Changed
+
+- Research completion now requires resolvable execution evidence. URLs,
+  snippets, evaluator counters, empty captures, and unresolvable IDs cannot
+  complete a research branch.
+- Social research guidance now requires opening original content, preserving
+  thread and reply context, following corrections and provenance, and recording
+  extraction limits.
+- Platform capability reporting now distinguishes fixture verification, live
+  verification, environment-specific limits, and blocked access.
+
+### Fixed
+
+- Persist browser activity and observed-state artifacts when navigation or a
+  requested action fails.
+- Reject empty or whitespace-only captures and prevent captures after failed
+  browser actions.
+- Return nonzero status for failed requested actions and prevent contradictory
+  success/error records for one activity ID.
+- Prevent URL-only claims and fabricated evidence identifiers from being
+  promoted as verified research.
+
+### Verification
+
+- Passed 162 automated tests, Ruff, repository contract validation, skill
+  validation, package closure, and the complete Node/Python self-test suite.
+- Passed hostile, fuzz, mutation, and promotion anti-spoof checks.
+- Verified live Playwright success and hash-bound text capture on Hacker News
+  and Tinhte; preserved honest partial, timeout, and error results without
+  source promotion for Bluesky, Mastodon, YouTube, and Reddit in the tested
+  environment.
+- No independent live baseline-versus-candidate agent benchmark is claimed.
+
+See [release notes](docs/release-v3.5.0-rc.1.md) for upgrade instructions,
+compatibility, and assurance limits.
+
 ## [3.4.2] - 2026-09-10
 
 - Bind report claims to actual source snapshot bytes and reject contradicted support in strict mode.
@@ -1373,7 +1464,10 @@ git push origin v2.1.0 bench/v2.1 v3.0.0
   evidence-ledger schema, anti-bot fallback chain, citation export,
   systematic-review protocol, and PRISMA flow template.
 
-[Unreleased]: https://github.com/d-init-d/d-research-skill/compare/v3.4.2...HEAD
+[Unreleased]: https://github.com/d-init-d/d-research-skill/compare/v3.5.0...HEAD
+[3.5.0]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.5.0
+[3.5.0-rc.2]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.5.0-rc.2
+[3.5.0-rc.1]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.5.0-rc.1
 [3.4.1]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.4.1
 [3.4.1-rc.2]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.4.1-rc.2
 [3.4.1-rc.1]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.4.1-rc.1

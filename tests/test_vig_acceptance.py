@@ -211,15 +211,16 @@ class VigAcceptanceTests(unittest.TestCase):
         # Compare against upstream clone if present
         upstream_repo = (ROOT.parent / "d-research-skill").resolve()
         if upstream_repo.is_dir() and (upstream_repo / ".git").exists():
+            source_tag = lock["components"]["d-research"]["source_tag"]
             proc = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
+                ["git", "rev-parse", f"{source_tag}^{{}}"],
                 capture_output=True,
                 text=True,
                 cwd=str(upstream_repo),
             )
             if proc.returncode == 0:
-                head_sha = proc.stdout.strip()
-                self.assertEqual(head_sha, lock["components"]["d-research"]["upstream_commit"])
+                tag_commit = proc.stdout.strip()
+                self.assertEqual(tag_commit, lock["components"]["d-research"]["upstream_commit"])
 
                 recipe = lock["components"]["d-research"].get("snapshot_recipe", {})
                 transforms = {
@@ -232,9 +233,17 @@ class VigAcceptanceTests(unittest.TestCase):
                 for item in locked_files:
                     if item["path"] in transforms:
                         continue
-                    up_file = upstream_repo / item["path"]
-                    self.assertTrue(up_file.is_file(), f"Upstream file missing: {item['path']}")
-                    up_bytes = up_file.read_bytes().replace(b"\r\n", b"\n")
+                    upstream_blob = subprocess.run(
+                        ["git", "show", f"{tag_commit}:{item['path']}"],
+                        capture_output=True,
+                        cwd=str(upstream_repo),
+                    )
+                    self.assertEqual(
+                        upstream_blob.returncode,
+                        0,
+                        f"Upstream file missing from pinned tag: {item['path']}",
+                    )
+                    up_bytes = upstream_blob.stdout.replace(b"\r\n", b"\n")
                     comp_bytes = (comp_root / item["path"]).read_bytes().replace(b"\r\n", b"\n")
                     self.assertEqual(comp_bytes, up_bytes, f"Projection mismatch with upstream: {item['path']}")
 
@@ -260,7 +269,7 @@ class VigAcceptanceTests(unittest.TestCase):
         binding = manifest["component_binding"]
         self.assertEqual(binding["component_uri"], COMPONENT_URI)
         self.assertEqual(binding["package_name"], "d-research-skill-tools")
-        self.assertEqual(binding["package_version"], "3.4.2")
+        self.assertEqual(binding["package_version"], "3.5.0")
         self.assertEqual(binding["upstream_commit"], json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))["components"]["d-research"]["upstream_commit"])
         self.assertTrue(binding["component_lock_sha256"].startswith("sha256:"))
 

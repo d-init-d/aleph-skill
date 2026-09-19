@@ -222,12 +222,24 @@ class ComponentIntegrationAcceptanceTests(unittest.TestCase):
                 finally:
                     temp_csv.unlink(missing_ok=True)
 
-        # If standalone repo exists on disk, check byte parity of the helper script
-        standalone_helper = ROOT.parent / "d-research-skill" / "scripts" / "evidence_ledger.py"
-        if standalone_helper.is_file():
+        # If a standalone clone exists, compare with the immutable commit pinned
+        # by the component lock. Its working tree may legitimately be on another
+        # branch while this Aleph checkout verifies an older or newer release.
+        standalone_repo = ROOT.parent / "d-research-skill"
+        if (standalone_repo / ".git").exists():
+            pinned_blob = subprocess.run(
+                [
+                    "git",
+                    "show",
+                    f"{resolution.upstream_commit}:scripts/evidence_ledger.py",
+                ],
+                capture_output=True,
+                cwd=str(standalone_repo),
+            )
+            self.assertEqual(pinned_blob.returncode, 0, pinned_blob.stderr.decode(errors="replace"))
             self.assertEqual(
                 hashlib.sha256(helper_path.read_bytes()).hexdigest(),
-                hashlib.sha256(standalone_helper.read_bytes()).hexdigest(),
+                hashlib.sha256(pinned_blob.stdout).hexdigest(),
             )
 
     def test_i03_component_tamper_detection(self) -> None:
@@ -570,8 +582,11 @@ class ComponentIntegrationAcceptanceTests(unittest.TestCase):
             root=ROOT, upstream_repo=upstream, rebuilt=lock, component_id="d-research",
             release_assets_dir=assets_dir,
         )
-        actual_head = subprocess.check_output(["git", "-C", str(upstream), "rev-parse", "HEAD"], text=True).strip()
-        self.assertEqual(result["commit"], actual_head)
+        tagged_commit = subprocess.check_output(
+            ["git", "-C", str(upstream), "rev-parse", f"{entry['source_tag']}^{{}}"],
+            text=True,
+        ).strip()
+        self.assertEqual(result["commit"], tagged_commit)
         self.assertEqual(result["tag_object"], entry["upstream_tag_object"])
         self.assertEqual(result["snapshot_file_count"], len(entry["files"]))
 

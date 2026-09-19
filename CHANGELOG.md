@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Updated the locked internal D Research component from `3.4.2` to `3.5.0`, adding mandatory documentary and social research branches, bounded Playwright exploration, execution-backed completion, and hash-verified captures.
+- Extended exact gateway acceptance reconciliation to the locked D Research 3.5.0 identity while preserving support for historical 3.4.x component receipts.
+
+### Compatibility
+- Existing Aleph commands, workspace schemas, formula versions, and 14/19/22/23/37-column evidence ledgers remain supported. Component-bound research receipts should be regenerated when they need to bind D Research 3.5.0.
+- Python 3.10+ and Node.js 18+ remain supported. Playwright browser binaries remain a separate environment dependency.
+
+### Security and provenance
+- Pinned GitHub-verified annotated tag object `b00a260ae87f8244baa86a072080c532cc446ce9`, commit `c0dd972b40b2de6470cf9ac355f510c8acc18454`, and Git tree `f76b3b43686647ef97153ed740bcee750a77d32a`.
+- Bound the reproducible Git archive and official source, full, and runtime release artifacts; vendored the exact 237-file runtime profile with its declared `package.json` projection.
+
 ## 2.4.2
 
 - Generate and replay numerical engine traces from valid cold-start workspaces; reject invalid trace formats before committing outputs and preserve malformed traces.
