@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [3.6.0-rc.1] - 2026-10-06
+## [3.6.0-rc.2] - 2026-10-06
 
 Local candidate; official upstream attestation is unavailable.
 
@@ -1474,8 +1474,8 @@ git push origin v2.1.0 bench/v2.1 v3.0.0
   evidence-ledger schema, anti-bot fallback chain, citation export,
   systematic-review protocol, and PRISMA flow template.
 
-[Unreleased]: https://github.com/d-init-d/d-research-skill/compare/v3.6.0-rc.1...HEAD
-[3.6.0-rc.1]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.6.0-rc.1
+[Unreleased]: https://github.com/d-init-d/d-research-skill/compare/v3.6.0-rc.2...HEAD
+[3.6.0-rc.2]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.6.0-rc.2
 [3.5.0]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.5.0
 [3.5.0-rc.2]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.5.0-rc.2
 [3.5.0-rc.1]: https://github.com/d-init-d/d-research-skill/releases/tag/v3.5.0-rc.1

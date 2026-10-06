@@ -68,7 +68,7 @@ class ComponentPackagingTests(unittest.TestCase):
         lock = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))
         entry = lock["components"]["d-research"]
         self.assertEqual(entry["uri"], "aleph-component://d-research")
-        self.assertEqual(entry["version"], "3.6.0-rc.1")
+        self.assertEqual(entry["version"], "3.6.0-rc.2")
         mode = entry.get("provenance", {}).get("mode", "upstream_release")
         self.assertIn(mode, {"upstream_release", "local_candidate"})
         self.assertEqual(entry["file_count"], entry["source_artifacts"]["runtime_profile"]["file_count"])

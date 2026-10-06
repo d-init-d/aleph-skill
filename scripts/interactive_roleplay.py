@@ -10,6 +10,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -26,14 +27,14 @@ from aleph.interactive_roleplay import (
 from aleph.io import canonical_hash, load_json_secure, write_json_atomic
 
 
-def _load_object(path: str | Path) -> dict:
+def _load_object(path: str | Path) -> dict[str, Any]:
     data, issues = load_json_secure(Path(path))
     if issues or not isinstance(data, dict):
         raise ValueError(f"INVALID_ARTIFACT: {path}: expected a valid JSON object")
     return data
 
 
-def _session_config(session: dict) -> EngineConfig:
+def _session_config(session: dict[str, Any]) -> EngineConfig:
     value = session.get("engine_config")
     if not isinstance(value, dict):
         raise ValueError("SESSION_CONFIG_MISSING: initialize a new session")
@@ -83,7 +84,7 @@ def _resolve_model(args: argparse.Namespace) -> ComputationalModel:
 def cmd_init(args: argparse.Namespace) -> int:
     spec = _load_object(args.spec)
     model = _resolve_model(args)
-    config = EngineConfig(**_load_object(args.config)) if args.config else EngineConfig(seed=42)
+    config = EngineConfig(**_load_object(args.config)) if args.config else EngineConfig(seed="42")
     session = init_roleplay_session(spec, model, config)
     out_path = Path(args.out) if args.out else Path(args.spec).parent / f"session-{quote(session['session_id'], safe='')}.json"
     write_json_atomic(out_path, session)

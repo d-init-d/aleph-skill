@@ -1,9 +1,14 @@
 # Candidate upgrade contract
 
-This local `2.5.0-rc.1` candidate includes a byte-locked local D Research candidate.
-`provenance.mode = local_candidate` verifies artifact/recipe/snapshot integrity;
-it does not assert an official upstream release. `--require-upstream` refuses
-this mode. Official releases retain their tag/tree/archive verification policy.
+This `2.5.0-rc.1` prerelease pins the published D Research `3.6.0-rc.2`
+runtime profile to its immutable annotated tag, source commit, Git tree,
+reproducible source archive and full/runtime artifact digests. CI verifies the
+projection against upstream Git objects. Published prerelease provenance does
+not establish stable-promotion readiness or live-provider availability.
+
+Development snapshots can still use `provenance.mode = local_candidate`.
+That policy verifies artifact/recipe/snapshot integrity without asserting an
+upstream release. `--require-upstream` refuses such local snapshots.
 
 ## Evidence to model
 
@@ -61,5 +66,5 @@ python3 scripts/acceptance.py
 python3 scripts/release_gate.py
 ```
 
-The parent workspace report records actual local results, artifact digests,
-historical fixture replacements and unexecuted CI/platform/credential checks.
+The release notes record compatibility, verification commands and operating
+limits. Inspect the tagged CI and release workflow results before adoption.

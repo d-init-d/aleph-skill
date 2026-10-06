@@ -294,7 +294,10 @@ def propose_model(
             if isinstance(data, list):
                 raw_rows = data
             elif isinstance(data, dict):
-                raw_rows = data.get("evidence_rows", data.get("records", []))
+                candidate_rows = data.get("evidence_rows", data.get("records", []))
+                if not isinstance(candidate_rows, list):
+                    raise ValueError("Evidence rows must be a JSON array")
+                raw_rows = [item for item in candidate_rows if isinstance(item, dict)]
     else:
         raw_rows = evidence_input
 
@@ -347,7 +350,8 @@ def propose_model(
                 scale = _classify_scale(node_name)
                 unit = _detect_unit(combined_text)
                 measurements = row.get("node_measurements", {})
-                measurement = measurements.get(node_id, measurements.get(node_name, {})) if isinstance(measurements, dict) else {}
+                candidate_measurement = measurements.get(node_id, measurements.get(node_name, {})) if isinstance(measurements, dict) else {}
+                measurement: dict[str, Any] = candidate_measurement if isinstance(candidate_measurement, dict) else {}
                 baseline_val = measurement.get("baseline")
                 node_status = "inference"
                 if not _finite_number(baseline_val):
@@ -405,7 +409,7 @@ def propose_model(
                 }
                 if scale == "stock":
                     retention = measurement.get("retention")
-                    node_obj["retention"] = retention if _finite_number(retention) and 0 <= retention <= 1 else None
+                    node_obj["retention"] = retention if isinstance(retention, (int, float)) and _finite_number(retention) and 0 <= retention <= 1 else None
                     if node_obj["retention"] is None:
                         node_obj["status"] = "assumption"
                         gap_count += 1
@@ -822,7 +826,9 @@ def _verify_staged_execution(stage: Path) -> str:
     nodes, node_issues = load_json_secure(stage / "nodes.json")
     edges, edge_issues = load_json_secure(stage / "edges.json")
     manifest, manifest_issues = load_json_secure(stage / "simulation-manifest.json")
-    if node_issues or edge_issues or manifest_issues:
+    if (node_issues or edge_issues or manifest_issues
+            or not isinstance(nodes, list) or not all(isinstance(node, dict) for node in nodes)
+            or not isinstance(edges, list) or not isinstance(manifest, dict)):
         raise ValueError("INVALID_STAGED_ARTIFACT")
     evidence_ids = {eid for node in nodes for eid in node.get("evidence_ids", [])}
     node_check, node_ids = validate_nodes(nodes, evidence_ids, manifest)
@@ -843,9 +849,12 @@ def _verify_staged_execution(stage: Path) -> str:
             raise ValueError(f"STAGED_EXECUTION_FAILED: {script}: {completed.stdout[-2000:]} {completed.stderr[-1000:]}")
     saved, problems = load_json_secure(stage / "simulation-model.json")
     replay, replay_problems = load_json_secure(stage / "replay-report.json")
-    if problems or replay_problems or saved != expected or replay.get("match") is not True:
+    if problems or replay_problems or saved != expected or not isinstance(replay, dict) or replay.get("match") is not True:
         raise ValueError("STAGED_MODEL_MISMATCH: compile, disk execution and replay must agree")
-    return expected["model_hash"]
+    result_hash = expected.get("model_hash")
+    if not isinstance(result_hash, str):
+        raise ValueError("STAGED_MODEL_HASH_MISSING")
+    return result_hash
 
 
 def _publish_workspace(stage: Path, target: Path) -> None:

@@ -1,6 +1,8 @@
 # Search and browser candidate contract
 
-This `3.6.0-rc.1` is a local candidate, not an official upstream release.
+Version `3.6.0-rc.2` is a prerelease candidate for evaluation before stable promotion.
+Published release assets are bound to its immutable tag; this does not establish
+live-provider availability or stable-release readiness.
 Host search tools are called by the agent host. The Node search helper consumes
 validated host-result artifacts or configured search engines; it cannot invoke
 an arbitrary host/MCP tool by name. No API credentials are required for offline

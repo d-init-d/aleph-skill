@@ -207,7 +207,7 @@ def init_roleplay_session(
     spec_copy = copy.deepcopy(spec)
     spec_hash = canonical_hash(spec_copy)
     now = _iso_now()
-    cfg = config or EngineConfig(seed=42)
+    cfg = config or EngineConfig(seed="42")
     m_hash = model_hash(model_obj) if model_obj else None
     c_hash = canonical_hash(config_payload(cfg))
 
@@ -247,7 +247,7 @@ def generate_actor_packets(
 
     spec = session["spec"]
     decision_tick = spec["decision_ticks"][round_idx]
-    cfg = config or EngineConfig(seed=42)
+    cfg = config or EngineConfig(seed="42")
     _verify_execution_identity(session, model, cfg)
 
     # Replay simulation from tick 0 to decision_tick using all committed interventions so far
@@ -445,7 +445,7 @@ def advance_roleplay_round(
     all_interventions = past_interventions + round_interventions
 
     # Run deterministic simulation from tick 0 to eval_tick
-    cfg = config or EngineConfig(seed=42)
+    cfg = config or EngineConfig(seed="42")
     _verify_execution_identity(session, model, cfg)
 
     run_model = copy.deepcopy(model)
@@ -554,7 +554,7 @@ def replay_roleplay_session(
     """Replay simulation and recalculate payoffs from logged interventions (P6.C08)."""
     spec = session["spec"]
     actors = spec["actors"]
-    cfg = config or EngineConfig(seed=42)
+    cfg = config or EngineConfig(seed="42")
 
     try:
         _verify_execution_identity(session, initial_model, cfg)
