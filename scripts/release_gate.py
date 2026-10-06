@@ -472,6 +472,10 @@ def main() -> None:
         "schema_version": SCHEMA_VERSION,
         "checks": checks,
     }
+    from aleph.component_registry import verify_component_lock
+    component = verify_component_lock(skill_root=root)
+    report["release_kind"] = component.provenance_mode
+    report["upstream_attested"] = False
     if args.json or not ok:
         print(json.dumps(report, indent=2, ensure_ascii=False))
     else:

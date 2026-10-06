@@ -287,14 +287,19 @@ class ReleasePackagingV201Tests(unittest.TestCase):
             ROOT / ".github" / "release-notes" / f"v{PACKAGE_VERSION}.md"
         ).read_text(encoding="utf-8")
         self.assertIn("sha256sum -c SHA256SUMS.txt", notes)
-        self.assertIn(f"gh attestation verify aleph-skill-v{PACKAGE_VERSION}.zip", notes)
-        self.assertIn("--repo d-init-d/aleph-skill", notes)
-        self.assertIn(
-            "--signer-workflow d-init-d/aleph-skill/.github/workflows/release.yml",
-            notes,
-        )
-        self.assertIn(f"--source-ref refs/tags/v{PACKAGE_VERSION}", notes)
-        self.assertIn("GitHub's attestation service", notes)
+        lock = json.loads((ROOT / "component-lock.json").read_text())
+        mode = lock["components"]["d-research"].get("provenance", {}).get("mode", "upstream_release")
+        if mode == "local_candidate":
+            self.assertIn("This candidate has no GitHub release attestation", notes)
+        else:
+            self.assertIn(f"gh attestation verify aleph-skill-v{PACKAGE_VERSION}.zip", notes)
+            self.assertIn("--repo d-init-d/aleph-skill", notes)
+            self.assertIn(
+                "--signer-workflow d-init-d/aleph-skill/.github/workflows/release.yml",
+                notes,
+            )
+            self.assertIn(f"--source-ref refs/tags/v{PACKAGE_VERSION}", notes)
+            self.assertIn("GitHub's attestation service", notes)
 
 
 if __name__ == "__main__":

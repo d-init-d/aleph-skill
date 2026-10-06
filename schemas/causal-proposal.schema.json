@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aleph.local/contracts/v1/causal-proposal.schema.json",
+  "title": "Causal Model Candidate Proposal Schema",
+  "description": "Deterministic sidecar proposal bridging empirical research ledger evidence into candidate causal nodes and edges for agent review.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "proposal_id",
+    "created_at",
+    "evidence_hash",
+    "candidate_nodes",
+    "candidate_edges",
+    "gaps",
+    "entity_mappings"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "proposal_id": {
+      "type": "string",
+      "pattern": "^proposal:[0-9a-zA-Z_-]+$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "evidence_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "candidate_nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "scale",
+          "baseline",
+          "status",
+          "confidence",
+          "evidence_ids"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scale": {
+            "enum": [
+              "level",
+              "flow",
+              "stock"
+            ]
+          },
+          "unit": {
+            "type": "string"
+          },
+          "baseline": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "status": {
+            "enum": [
+              "fact",
+              "inference",
+              "simulation",
+              "counterfactual",
+              "assumption"
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "retention": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "decay_rate": {
+            "type": "number",
+            "minimum": 0
+          },
+          "source_anchor": {
+            "type": "string"
+          },
+          "time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "candidate_edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "from",
+          "to",
+          "relation",
+          "sign",
+          "status",
+          "evidence_confidence",
+          "evidence_ids"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "relation": {
+            "type": "string"
+          },
+          "sign": {
+            "enum": [
+              -1,
+              1
+            ]
+          },
+          "mechanism": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lag_ticks": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "status": {
+            "enum": [
+              "proposed",
+              "incomplete",
+              "admitted",
+              "rejected"
+            ]
+          },
+          "base_strength": {
+            "type": "number"
+          },
+          "effect_size": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "evidence_confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "gap_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "gap_id",
+          "target_id",
+          "gap_type",
+          "description"
+        ],
+        "properties": {
+          "gap_id": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string"
+          },
+          "gap_type": {
+            "enum": [
+              "missing_mechanism",
+              "unknown_lag",
+              "missing_effect_size",
+              "uncalibrated_baseline",
+              "unit_mismatch",
+              "contradiction",
+              "correlation_not_causation",
+              "missing_baseline",
+              "missing_observation_time",
+              "missing_unit",
+              "missing_retention",
+              "negated_causal_statement",
+              "blocked_source"
+            ]
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "entity_mappings": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "claim_id": {
+            "type": "string"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "edge_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source_anchor": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

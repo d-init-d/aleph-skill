@@ -68,18 +68,25 @@ class ComponentPackagingTests(unittest.TestCase):
         lock = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))
         entry = lock["components"]["d-research"]
         self.assertEqual(entry["uri"], "aleph-component://d-research")
-        self.assertEqual(entry["version"], "3.5.0")
-        self.assertTrue(entry["source_tag"])
+        self.assertEqual(entry["version"], "3.6.0-rc.1")
+        mode = entry.get("provenance", {}).get("mode", "upstream_release")
+        self.assertIn(mode, {"upstream_release", "local_candidate"})
         self.assertEqual(entry["file_count"], entry["source_artifacts"]["runtime_profile"]["file_count"])
         self.assertEqual(entry["file_count"], len(entry["files"]))
         self.assertIn("scripts/evidence_ledger.py", entry["entrypoints"])
         self.assertIn("scripts/investigation_policy.py", entry["entrypoints"])
         self.assertTrue(entry["tree_sha256"].startswith("sha256:"))
-        self.assertEqual(entry["source_archive_format"], "git-archive-tar")
-        self.assertEqual(len(entry["upstream_tree"]), 40)
-        self.assertRegex(entry["upstream_commit"], r"^[0-9a-f]{40}$")
-        self.assertRegex(entry["upstream_tag_object"], r"^[0-9a-f]{40}$")
-        self.assertRegex(entry["upstream_tree"], r"^[0-9a-f]{40}$")
+        if mode == "local_candidate":
+            self.assertEqual(entry["source_archive_format"], "local-profile-snapshot")
+            self.assertIs(entry["provenance"]["upstream_attested"], False)
+            for field in ("source_tag", "upstream_commit", "upstream_tag_object", "upstream_tree"):
+                self.assertEqual(entry[field], "")
+            self.assertRegex(entry["provenance"]["snapshot_sha256"], r"^sha256:[0-9a-f]{64}$")
+        else:
+            self.assertTrue(entry["source_tag"])
+            self.assertEqual(entry["source_archive_format"], "git-archive-tar")
+            for field in ("upstream_commit", "upstream_tag_object", "upstream_tree"):
+                self.assertRegex(entry[field], r"^[0-9a-f]{40}$")
         recipe = entry["snapshot_recipe"]
         self.assertEqual(recipe["text_eol"], "lf")
         self.assertEqual(len(recipe["excluded_paths"]), len(set(recipe["excluded_paths"])))
@@ -125,23 +132,20 @@ class ComponentPackagingTests(unittest.TestCase):
         self.assertLessEqual(locked_component_paths(ROOT), distributed)
 
     def test_ci_verifies_component_against_pinned_upstream_tag(self) -> None:
-        lock = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))
-        entry = lock["components"]["d-research"]
         workflow = (ROOT / ".github" / "workflows" / "verify.yml").read_text(
             encoding="utf-8"
         )
         self.assertIn("component-provenance:", workflow)
-        self.assertIn(
-            f"UPSTREAM_REPOSITORY: {entry['source_repository']}", workflow
-        )
-        self.assertIn(f"UPSTREAM_TAG: {entry['source_tag']}", workflow)
-        self.assertIn(f"UPSTREAM_TAG_OBJECT: {entry['upstream_tag_object']}", workflow)
-        self.assertIn(f"UPSTREAM_COMMIT: {entry['upstream_commit']}", workflow)
+        self.assertIn("steps.pin.outputs.mode == 'local_candidate'", workflow)
+        self.assertIn("steps.pin.outputs.mode == 'upstream_release'", workflow)
+        self.assertIn("UPSTREAM_TAG: ${{ steps.pin.outputs.tag }}", workflow)
+        self.assertIn("--require-upstream", workflow)
+        self.assertIn('entry["upstream_tag_object"]', workflow)
         self.assertIn("git init --bare", workflow)
         self.assertIn("--no-tags --depth=1", workflow)
         self.assertIn("cat-file -t", workflow)
         self.assertIn("--upstream-repo", workflow)
-        self.assertIn("upstream_verification", workflow)
+        self.assertIn("--require-upstream", workflow)
         verifier = (ROOT / "scripts" / "lock_bundled_component.py").read_text(
             encoding="utf-8"
         )

@@ -1292,6 +1292,10 @@ def validate_edges(
             issues.append(issue("TYPE", pointer=p, message="must be object"))
             continue
         reject_unknown_fields(raw, EDGE_FIELDS, p, issues)
+        if "lag_ticks" in raw and (type(raw["lag_ticks"]) is not int or raw["lag_ticks"] < 0):
+            issues.append(issue("TYPE", pointer=f"{p}/lag_ticks", message="must be a non-negative integer"))
+        if "lag_unit" in raw and raw["lag_unit"] not in {"ticks", "days"}:
+            issues.append(issue("ENUM", pointer=f"{p}/lag_unit", actual=raw["lag_unit"]))
         for required in (
             "id",
             "from",
@@ -5239,8 +5243,8 @@ def validate_workspace(
             from .trace_contract import validate_execution_trace_data
             if isinstance(trace_doc, dict):
                 all_issues.extend(validate_execution_trace_data(trace_doc, node_ids=node_ids, edge_by_id=edge_by_id, manifest=manifest))
-        except Exception:
-            pass
+        except Exception as err:
+            all_issues.append(issue("VALIDATOR_INTERNAL_ERROR", pointer="/trace", message=f"trace contract validation error: {err}"))
         c_tr = _check("trace", t_iss)
         checks["trace"] = c_tr.to_dict()
     else:

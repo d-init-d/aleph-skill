@@ -167,9 +167,8 @@ class ComponentIntegrationAcceptanceTests(unittest.TestCase):
         # 2. Verify component-lock.json matches candidate metadata
         lock = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))
         entry = lock["components"]["d-research"]
-        self.assertRegex(entry["upstream_commit"], r"^[0-9a-f]{40}$")
-        self.assertTrue(entry["source_tag"])
-        self.assertRegex(entry["upstream_tag_object"], r"^[0-9a-f]{40}$")
+        from _component_policy import assert_component_provenance
+        assert_component_provenance(self, entry)
         self.assertEqual(entry["file_count"], entry["source_artifacts"]["runtime_profile"]["file_count"])
 
         # 3. Verify patched candidate files exist in bundled component
@@ -558,9 +557,8 @@ class ComponentIntegrationAcceptanceTests(unittest.TestCase):
         lock = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))
         entry = lock["components"]["d-research"]
 
-        self.assertTrue(entry["source_tag"])
-        self.assertRegex(entry["upstream_commit"], r"^[0-9a-f]{40}$")
-        self.assertRegex(entry["upstream_tag_object"], r"^[0-9a-f]{40}$")
+        from _component_policy import assert_component_provenance
+        assert_component_provenance(self, entry)
         self.assertTrue(verify_component_lock(skill_root=ROOT).ok)
 
         # Ensure no fake GitHub releases download URL is present

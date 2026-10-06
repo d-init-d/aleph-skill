@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-TAG_PATTERN = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
+TAG_PATTERN = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+(?:-rc\.[1-9][0-9]*)?$")
 REMOTE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 STATE_SCHEMA_VERSION = "1.0"
 MAX_STATE_BYTES = 4096
@@ -53,7 +53,7 @@ def _validate_inputs(repository: Path, tag: str, remote: str, main_branch: str) 
         raise VerificationError("REPOSITORY_INVALID", "repository path is not a directory")
     if TAG_PATTERN.fullmatch(tag) is None:
         raise VerificationError(
-            "TAG_FORMAT", "release tag must use the exact vMAJOR.MINOR.PATCH form"
+            "TAG_FORMAT", "release tag must use vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rc.N"
         )
     if REMOTE_PATTERN.fullmatch(remote) is None:
         raise VerificationError("REMOTE_INVALID", "remote name contains unsafe characters")

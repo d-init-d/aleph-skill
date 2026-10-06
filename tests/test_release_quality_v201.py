@@ -881,8 +881,8 @@ class InstallerTransactionCoverageTests(unittest.TestCase):
         self.assertTrue(lock_path.is_file())
         lock = json.loads(lock_path.read_text(encoding="utf-8"))
         d_research = lock["components"]["d-research"]
-        self.assertTrue(d_research.get("source_tag"))
-        self.assertTrue(d_research.get("upstream_commit"))
+        from _component_policy import assert_component_provenance
+        assert_component_provenance(self, d_research)
         self.assertNotIn("releases/download/v3.4.1/", json.dumps(lock))
 
         # 2. Distribution manifest generated on a clean directory without .git computes authentic digests without crashing

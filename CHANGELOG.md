@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.5.0-rc.1 (local candidate)
+
+- Add reviewed causal drafts and atomic disk-verified model publication.
+- Bind multi-round roleplay execution and replay to model/config/spec identity.
+- Distinguish local candidate component integrity from upstream attestation.
+- Preserve numerical nonconvergence and keep assumptions explicit.
+
+
 ## 2.4.3 - 2026-09-19
 
 ### Changed

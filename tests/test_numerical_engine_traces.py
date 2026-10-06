@@ -13,7 +13,10 @@ SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-import jsonschema  # noqa: E402
+try:
+    import jsonschema  # noqa: E402
+except ImportError:
+    jsonschema = None
 from aleph.engine import (  # noqa: E402
     ComputationalModel,
     EngineConfig,
@@ -51,7 +54,11 @@ class NumericalEngineTracesTests(unittest.TestCase):
         config = EngineConfig(mode="deterministic", seed=42)
 
         trace = generate_numerical_execution_trace(model, config, ticks=1)
-        jsonschema.validate(instance=trace, schema=self.schema)
+        if jsonschema is not None:
+            jsonschema.validate(instance=trace, schema=self.schema)
+        else:
+            issues = validate_execution_trace_data(trace)
+            self.assertEqual(issues, [])
 
         steps = trace["steps"]
         self.assertEqual(len(steps), 2)
@@ -107,7 +114,11 @@ class NumericalEngineTracesTests(unittest.TestCase):
         config = EngineConfig(mode="deterministic", seed=12345)
 
         trace = generate_numerical_execution_trace(model, config, ticks=3)
-        jsonschema.validate(instance=trace, schema=self.schema)
+        if jsonschema is not None:
+            jsonschema.validate(instance=trace, schema=self.schema)
+        else:
+            issues = validate_execution_trace_data(trace)
+            self.assertEqual(issues, [])
 
         # Check that sampled strength was recorded and matches sampled_edge_parameters directly
         expected_strength, expected_lag, expected_exists = sampled_edge_parameters(model.edges[0], config, run_id=0)

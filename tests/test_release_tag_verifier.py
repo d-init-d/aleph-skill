@@ -104,6 +104,30 @@ class ReleaseTagVerifierTests(unittest.TestCase):
             self._git(work, "push", "origin", "refs/tags/v2.0.1")
             self.assertEqual(self._failure_code(self._run(work)), "TAG_NOT_ANNOTATED")
 
+    def test_annotated_prerelease_tag_uses_the_same_identity_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            work, _remote = self._repository(Path(temporary))
+            tag = "v2.5.0-rc.1"
+            self._git(work, "tag", "-a", tag, "-m", "release candidate")
+            self._git(work, "push", "origin", f"refs/tags/{tag}")
+            result = subprocess.run(
+                [sys.executable, str(VERIFIER), "--repository", str(work), "--tag", tag],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["tag"], tag)
+
+    def test_malformed_prerelease_suffix_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            work, _remote = self._repository(Path(temporary))
+            for tag in ("v2.5.0-rc.0", "v2.5.0-rc.01", "v2.5.0-rc.1-extra", "v2.5.0-beta.1"):
+                with self.subTest(tag=tag):
+                    result = subprocess.run(
+                        [sys.executable, str(VERIFIER), "--repository", str(work), "--tag", tag],
+                        capture_output=True, text=True, check=False,
+                    )
+                    self.assertEqual(self._failure_code(result), "TAG_FORMAT")
+
     def test_checked_out_commit_must_match_tag(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             work, _remote = self._repository(Path(temporary))

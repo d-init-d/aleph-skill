@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aleph.local/contracts/v1/causal-review.schema.json",
+  "title": "Agent Review of Causal Model Proposal Schema",
+  "description": "Cryptographically-bound record of agent examination and admission decisions on candidate causal nodes and edges.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "review_id",
+    "proposal_id",
+    "proposal_hash",
+    "evidence_hash",
+    "reviewed_at",
+    "reviewer",
+    "edge_decisions",
+    "overall_status",
+    "node_decisions",
+    "review_kind"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "review_id": {
+      "type": "string",
+      "pattern": "^review:[0-9a-zA-Z_-]+$"
+    },
+    "proposal_id": {
+      "type": "string",
+      "pattern": "^proposal:[0-9a-zA-Z_-]+$"
+    },
+    "proposal_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "evidence_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reviewer": {
+      "type": "string"
+    },
+    "edge_decisions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "decision",
+          "rationale",
+          "evidence_refs"
+        ],
+        "properties": {
+          "decision": {
+            "enum": [
+              "admit",
+              "revise",
+              "reject",
+              "incomplete"
+            ]
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "modifications": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "node_decisions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "decision",
+          "rationale"
+        ],
+        "properties": {
+          "decision": {
+            "enum": [
+              "admit",
+              "revise",
+              "reject",
+              "incomplete"
+            ]
+          },
+          "rationale": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "overall_status": {
+      "enum": [
+        "approved",
+        "partial",
+        "rejected"
+      ]
+    },
+    "review_kind": {
+      "enum": [
+        "explicit_decisions",
+        "deterministic_screening"
+      ]
+    },
+    "interventions": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  }
+}

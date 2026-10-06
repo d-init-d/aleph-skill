@@ -8,6 +8,7 @@ root is the locked ``aleph-component://d-research`` snapshot under
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 from dataclasses import asdict, dataclass
@@ -77,13 +78,15 @@ class ComponentResolution:
     entrypoint_sha256: str
     trust_level: str
     source_kind: str
+    provenance_mode: str = "upstream_release"
+    candidate_snapshot_sha256: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     def binding(self) -> dict[str, Any]:
         """Portable receipt binding — no absolute install paths."""
-        return {
+        binding = {
             "source_kind": self.source_kind,
             "component_uri": self.component_uri,
             "component_id": self.component_id,
@@ -98,6 +101,11 @@ class ComponentResolution:
             "entrypoint": self.entrypoint,
             "entrypoint_sha256": self.entrypoint_sha256,
         }
+        if self.provenance_mode == "local_candidate":
+            binding.update(provenance_mode=self.provenance_mode,
+                           candidate_snapshot_sha256=self.candidate_snapshot_sha256,
+                           upstream_attested=False)
+        return binding
 
 
 @dataclass(frozen=True)
@@ -116,6 +124,9 @@ class ComponentVerification:
     root: str
     error_code: str | None = None
     message: str | None = None
+    provenance_mode: str = "upstream_release"
+    upstream_attested: bool = False
+    candidate_snapshot_sha256: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -312,6 +323,17 @@ _LOCK_METADATA_FIELDS = (
 )
 
 
+def candidate_snapshot_digest(entry: dict[str, Any]) -> str:
+    """Bind a local candidate's source artifacts, recipe and installed bytes."""
+    keys = (
+        "version", "source_repository", "source_artifacts", "snapshot_recipe", "files", "tree_sha256"
+    )
+    if any(key not in entry for key in keys):
+        raise ComponentError("COMPONENT_LOCK_INVALID", "candidate snapshot fields are missing")
+    payload = {key: entry[key] for key in keys}
+    return _sha256_bytes(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+
+
 def build_component_lock(
     skill_root: Path,
     *,
@@ -400,6 +422,8 @@ def build_component_lock(
     for field in ("excluded", "pin_note", "upstream_repo", "synced_at"):
         if field in entry:
             rebuilt_entry[field] = entry[field]
+    if "provenance" in entry:
+        rebuilt_entry["provenance"] = entry["provenance"]
     result = {
         "schema_version": 1,
         "algorithm": "sha256",
@@ -434,13 +458,20 @@ def verify_component_lock(
     *,
     skill_root: Path,
     component_id: str = COMPONENT_ID,
+    _unpublished_lock: dict[str, Any] | None = None,
 ) -> ComponentVerification:
     """Verify lock metadata and every locked file under the component tree."""
     skill_root = Path(skill_root).resolve(strict=False)
     try:
         if not skill_root.is_dir():
             raise ComponentError("COMPONENT_NOT_FOUND", f"skill root missing: {skill_root}")
-        lock, lock_digest = _load_lock(skill_root)
+        if _unpublished_lock is None:
+            lock, lock_digest = _load_lock(skill_root)
+        else:
+            # Build tools validate proposed metadata against the actual component
+            # before atomically replacing the on-disk lock.
+            lock = _unpublished_lock
+            lock_digest = "sha256:" + hashlib.sha256(json.dumps(lock, sort_keys=True).encode()).hexdigest()
         if lock.get("schema_version") != 1 or lock.get("algorithm") != "sha256":
             raise ComponentError("COMPONENT_LOCK_INVALID", "unsupported lock schema/algorithm")
         entry = _component_entry(lock, component_id)
@@ -457,16 +488,27 @@ def verify_component_lock(
             raise ComponentError("COMPONENT_IDENTITY_MISMATCH", f"invalid package version: {version!r}") from exc
         if major not in SUPPORTED_MAJORS:
             raise ComponentError("COMPONENT_IDENTITY_MISMATCH", f"unsupported package major: {major}")
+        provenance = entry.get("provenance", {"mode": "upstream_release"})
+        if not isinstance(provenance, dict) or provenance.get("mode") not in {"upstream_release", "local_candidate"}:
+            raise ComponentError("COMPONENT_LOCK_INVALID", "invalid provenance mode")
+        candidate = provenance["mode"] == "local_candidate"
         commit = str(entry.get("upstream_commit") or "")
-        if not HEX40.match(commit):
+        if not candidate and not HEX40.match(commit):
             raise ComponentError("COMPONENT_LOCK_INVALID", "upstream_commit must be 40-hex")
         tag_object = str(entry.get("upstream_tag_object") or "")
-        if not HEX40.match(tag_object):
+        if not candidate and not HEX40.match(tag_object):
             raise ComponentError("COMPONENT_LOCK_INVALID", "upstream_tag_object must be 40-hex")
         upstream_tree = str(entry.get("upstream_tree") or "")
-        if not HEX40.match(upstream_tree):
+        if not candidate and not HEX40.match(upstream_tree):
             raise ComponentError("COMPONENT_LOCK_INVALID", "upstream_tree must be 40-hex")
-        if entry.get("source_archive_format") != "git-archive-tar":
+        if candidate:
+            if any(entry.get(key) for key in ("source_tag", "upstream_tag_object", "upstream_commit", "upstream_tree")):
+                raise ComponentError("COMPONENT_LOCK_INVALID", "local candidates cannot claim upstream release identities")
+            if provenance.get("upstream_attested") is not False or provenance.get("snapshot_sha256") != candidate_snapshot_digest(entry):
+                raise ComponentError("COMPONENT_LOCK_INVALID", "candidate snapshot binding differs")
+            if entry.get("source_archive_format") != "local-profile-snapshot":
+                raise ComponentError("COMPONENT_LOCK_INVALID", "candidate source archive format differs")
+        elif entry.get("source_archive_format") != "git-archive-tar":
             raise ComponentError(
                 "COMPONENT_LOCK_INVALID",
                 "source_archive_format must be git-archive-tar",
@@ -756,6 +798,8 @@ def verify_component_lock(
             file_count=len(normalized),
             entrypoints=[str(ep) for ep in entrypoints],
             root=str(component_root.resolve(strict=True)),
+            provenance_mode=provenance["mode"],
+            candidate_snapshot_sha256=str(provenance.get("snapshot_sha256", "")),
         )
     except ComponentError as exc:
         return ComponentVerification(
@@ -825,8 +869,10 @@ def resolve_component(
         component_tree_sha256=verification.tree_sha256,
         entrypoint=entrypoint,
         entrypoint_sha256=entry_digest,
-        trust_level="bundled-verified",
+        trust_level="bundled-candidate-verified" if verification.provenance_mode == "local_candidate" else "bundled-verified",
         source_kind="bundled",
+        provenance_mode=verification.provenance_mode,
+        candidate_snapshot_sha256=verification.candidate_snapshot_sha256,
     )
 
 
@@ -959,6 +1005,8 @@ def discover_d_research(
             "component_lock_sha256": resolution.component_lock_sha256,
             "component_tree_sha256": resolution.component_tree_sha256,
             "trust_level": resolution.trust_level,
+            "provenance_mode": resolution.provenance_mode,
+            "upstream_attested": False,
             "tried": tried,
         }
         # Surface the component's machine-checkable interop contract (ledger
