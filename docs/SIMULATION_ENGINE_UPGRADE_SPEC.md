@@ -4,10 +4,10 @@
 # Architectural Upgrade Specification: Simulation Engine & Causal Induction (R4)
 ## Production-Grade Specification for Auto-Causal Induction, Cyclic Convergence Acceleration, and Multi-Actor Roleplay
 
-**Author:** Teamwork Specifications Worker (`worker_specs_1`)  
-**Package:** `aleph-skill` (v2.1.0 $\to$ v2.2.0 Upgrade)  
-**Status:** Approved Architectural Specification  
-**Date:** 2026-10-05  
+**Author:** Teamwork Specifications Worker (`worker_specs_1`)
+**Package:** `aleph-skill` (v2.1.0 $\to$ v2.2.0 Upgrade)
+**Status:** Approved Architectural Specification
+**Date:** 2026-10-05
 **Document ID:** `ALEPH-SPEC-2026-R4`
 
 ---
@@ -251,12 +251,12 @@ When feedback edges in an SCC are substantively significant ($\mu_e^* \ge \epsil
 
 #### Mathematical Proof of 100% Convergence (Dynamical Decoupling Theorem):
 > **Theorem:** Let $\mathcal{C}$ be a zero-lag Strongly Connected Component. If at least one edge in every simple cycle of $\mathcal{C}$ is assigned a delay $\tau \ge 1$ tick, the sub-graph of zero-lag edges within $\mathcal{C}$ becomes a Directed Acyclic Graph (DAG).
-> 
+>
 > **Proof:** By definition, a directed graph is a DAG if and only if it contains no directed cycles. If every directed cycle in $\mathcal{C}$ has at least one edge with $\tau \ge 1$, then no directed cycle consists entirely of $\tau = 0$ edges. Therefore, within any discrete time tick $t$, the zero-lag interaction matrix $W_{\tau=0}$ is strictly strictly upper-triangular under topological sorting.
-> 
+>
 > For a strictly upper-triangular matrix, all diagonal elements are zero and all eigenvalues are identically zero ($\lambda_i = 0$ for all $i$). Thus, the spectral radius is:
 > $$\rho(W_{\tau=0}) = 0 < 1$$
-> 
+>
 > The system can be resolved by forward substitution in exactly $m$ steps without iteration. Zero Jacobi iterations are required, and the algebraic non-convergence probability is identically **0.0%**. The dynamic feedback is preserved perfectly across successive time steps:
 > $$x_v(t) = b_v + w_{u \to v} \cdot x_u(t-1)$$
 > which matches the physical reality that causal effects in macroeconomic, social, and organizational systems require a non-zero propagation time.

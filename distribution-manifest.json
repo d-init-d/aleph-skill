@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 544,
-  "tree_sha256": "7f3ab6f90f9a288917df25dba0fe5ae097cc406c9e838af46f50192a2caf8916",
+  "tree_sha256": "452c6c8955ac933b6446c4e450385f1574302024c46cb12bdd79cc465bd8cdf2",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -58,8 +58,8 @@
     },
     {
       "path": ".github/release-notes/v2.5.0-rc.1.md",
-      "sha256": "20fec2b29a79b4f9aea1a0ad49fbb950bdc61f53906ef5e04d1df311336ce3d6",
-      "size": 1604
+      "sha256": "264c8533c80ba35220a07c1dff8288aed6b0997266b9d5ef1c4d07cd4fd6fe18",
+      "size": 6684
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -68,8 +68,8 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "sha256": "82e2e26caf5d8b4ed873767cc4c9f6cabb5e15f714582f842ba863d9d5df03cc",
-      "size": 3416
+      "sha256": "0e0cd79a1a6015d1ea49aab5ea91d25ac8160cf35a48c08b91e5d47ba6b96e28",
+      "size": 3587
     },
     {
       "path": ".github/workflows/verify.yml",
@@ -1368,8 +1368,8 @@
     },
     {
       "path": "docs/SIMULATION_ENGINE_UPGRADE_SPEC.md",
-      "sha256": "d9e4dbf115920c2313925aa372c86909d1421a4cbab93c5a66c0582ee0b1c543",
-      "size": 36654
+      "sha256": "79226681a36153a7de2897a9e8822bb85eec83d58169e287bb5dfadd2882218b",
+      "size": 36812
     },
     {
       "path": "examples/forward-test-prompts.md",
@@ -1938,8 +1938,8 @@
     },
     {
       "path": "scripts/aleph/auto_causal.py",
-      "sha256": "6ac599a75b9760e3c30124daa838c141d2f838655a33f52f5a1a1014983fe894",
-      "size": 47075
+      "sha256": "dcb80cfefd62118f976aa65f067ceb3c30cf07892949bfc3f9c9b9c94137d425",
+      "size": 46951
     },
     {
       "path": "scripts/aleph/calibration_lineage.py",
@@ -1948,8 +1948,8 @@
     },
     {
       "path": "scripts/aleph/component_registry.py",
-      "sha256": "b25a2c86c3769587a7ae5eebe666635db8d30ab34037f66826b9f3df42328a87",
-      "size": 51758
+      "sha256": "4c0c69d05693a85217a4d5a48658e2bf7bb51680fcfc664b50601cfd99bba727",
+      "size": 51757
     },
     {
       "path": "scripts/aleph/discovery.py",
@@ -1993,8 +1993,8 @@
     },
     {
       "path": "scripts/aleph/interactive_roleplay.py",
-      "sha256": "cd9eb41839b2f3c079d1e3c230b17b9c21cbeee3082a528ad08676c20cea8b3e",
-      "size": 31987
+      "sha256": "3c48c6ee432ede4bf47a9c032838e4439e5965a0d7b719fffb73b4dd6fcf07ef",
+      "size": 31967
     },
     {
       "path": "scripts/aleph/io.py",
@@ -2113,7 +2113,7 @@
     },
     {
       "path": "scripts/interactive_roleplay.py",
-      "sha256": "7e2682bba2f015984bb831bffb0460f70d7e6eb15d9f0dd3f776d94f6c1c63d1",
+      "sha256": "231c39f94e2ceb23c856577b83081cf81c1b6d12829ba03dfffe411603ea8b1d",
       "size": 8923
     },
     {
@@ -2193,8 +2193,8 @@
     },
     {
       "path": "scripts/verify_release_tag.py",
-      "sha256": "ee3b0a77749f60b1f09e5dd97ee3f2800a76a4b20f57ac62814c7c79f975d306",
-      "size": 8482
+      "sha256": "815f0173ef3adafaf5adee06a4c1ff137aefb58f5813d7ba27260c5be0d3785b",
+      "size": 8515
     },
     {
       "path": "templates/actor-dossier.json",
@@ -2408,8 +2408,8 @@
     },
     {
       "path": "tests/test_auto_causal_inducer.py",
-      "sha256": "601ef033f2fb3271f3c686232b776215f5fa5dc430bffa45c3b64bb8cf5b24be",
-      "size": 9335
+      "sha256": "9298a9dcc06ca73bd16bf7641897c5325b8d6bc7d73a23f46e6f714cc75fc6fd",
+      "size": 9348
     },
     {
       "path": "tests/test_backward_compatibility.py",
@@ -2433,8 +2433,8 @@
     },
     {
       "path": "tests/test_candidate_provenance.py",
-      "sha256": "dcfa1f4511ff753555e40308a587be23911ff01088c862a3d2dabc07bbd5a8f7",
-      "size": 3075
+      "sha256": "f34239c6ca805b6b81be129bb8fa6e62235e6b5b3a8e75e5f50a9f0a70931414",
+      "size": 3076
     },
     {
       "path": "tests/test_capability_baseline.py",
@@ -2448,8 +2448,8 @@
     },
     {
       "path": "tests/test_component_packaging.py",
-      "sha256": "c268a81dfc765a3fcdc09ef2f4359e097f79f7dcd2722d2015d62b7666ccabb3",
-      "size": 15238
+      "sha256": "b499cf4cda99f2c45f2ab27c487b40443502358662b98b2028847e45c603c955",
+      "size": 15103
     },
     {
       "path": "tests/test_component_provenance.py",
@@ -2548,8 +2548,8 @@
     },
     {
       "path": "tests/test_interactive_roleplay.py",
-      "sha256": "daebde9845c34cc8369b0456128b08cd7cebf760dd9128e8b995f4c0c4a92ed0",
-      "size": 14845
+      "sha256": "0644f24fcc4a22c4e5cc138d990112b70bb77c1e2229754143b62481718702a5",
+      "size": 14836
     },
     {
       "path": "tests/test_likelihood_contract_v201.py",
@@ -2558,8 +2558,8 @@
     },
     {
       "path": "tests/test_linear_auto_solver.py",
-      "sha256": "089d3418d24aad0a79276391b64c12e22628aa5b51ca17192715ccd5973fb84d",
-      "size": 7618
+      "sha256": "0a3dad722e4bb6cad0ead103cfd0afaeb1d159f4a552298e72b822907ae4fd4f",
+      "size": 7634
     },
     {
       "path": "tests/test_numerical_cold_start.py",
@@ -2623,8 +2623,8 @@
     },
     {
       "path": "tests/test_release_tag_verifier.py",
-      "sha256": "250be98bf3a50f5558ab5904205121f692847670b21fc5f9c4ff72c8cbdd1183",
-      "size": 7256
+      "sha256": "c94a59187d63c5f96a2426b4614660105259611b918fd1dfa5dd7732f8fec24b",
+      "size": 8604
     },
     {
       "path": "tests/test_research_canonical_parity.py",
@@ -2678,8 +2678,8 @@
     },
     {
       "path": "tests/test_upgrade_completion.py",
-      "sha256": "0c5b2b0e906faac433128210ba234055950e1c2fcc9c3bef45f21079bf083ab0",
-      "size": 15902
+      "sha256": "89ba54bd4e99fb2ec804cc72bdbe5b816c870c765412dd00d5aa7efa7e6a48ac",
+      "size": 16092
     },
     {
       "path": "tests/test_vac_acceptance.py",
