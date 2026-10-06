@@ -4,7 +4,7 @@
   "algorithm": "sha256",
   "self_excluded": "distribution-manifest.json",
   "file_count": 545,
-  "tree_sha256": "835c49e53098f7be8af344c5a4162f44c56852c618dbf5af08129defa38e4052",
+  "tree_sha256": "b2ebb85914b79227a0f724e5fc12f29adf706161e34ed3b24212b94d0f045c6c",
   "files": [
     {
       "path": ".github/release-notes/v2.0.1.md",
@@ -58,8 +58,8 @@
     },
     {
       "path": ".github/release-notes/v2.5.0-rc.1.md",
-      "sha256": "b5486d7290daf9e822b8488f64efad0197f02e258d59498ae856851104576f7a",
-      "size": 7012
+      "sha256": "38770feffbc463f553f54c9fa6d2a9d58ec91646ecefb709ec2949a12ec041a7",
+      "size": 7123
     },
     {
       "path": ".github/workflows/ci.yml",
