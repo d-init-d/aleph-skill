@@ -12,7 +12,10 @@ SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-import jsonschema  # noqa: E402
+try:
+    import jsonschema  # noqa: E402
+except ImportError:
+    jsonschema = None
 from aleph.io import write_json_atomic  # noqa: E402
 from aleph.trace_contract import validate_execution_trace_data  # noqa: E402
 
@@ -54,7 +57,11 @@ class NumericalColdStartTests(unittest.TestCase):
             self.assertEqual(valid_run.returncode, 0, valid_run.stdout + valid_run.stderr)
             trace_path = workspace/"execution-trace.json"
             trace = json.loads(trace_path.read_text(encoding="utf-8"))
-            jsonschema.validate(instance=trace, schema=self.schema)
+            if jsonschema is not None:
+                jsonschema.validate(instance=trace, schema=self.schema)
+            else:
+                issues = validate_execution_trace_data(trace)
+                self.assertEqual(issues, [])
             replay = subprocess.run([
                 sys.executable, "-B", str(SCRIPTS/"replay_simulation.py"), "--workspace", str(workspace)
             ], capture_output=True, text=True)
@@ -178,7 +185,11 @@ class NumericalColdStartTests(unittest.TestCase):
             trace_data = json.loads(trace_path.read_text(encoding="utf-8"))
 
             # 3. Validate against schema
-            jsonschema.validate(instance=trace_data, schema=self.schema)
+            if jsonschema is not None:
+                jsonschema.validate(instance=trace_data, schema=self.schema)
+            else:
+                issues = validate_execution_trace_data(trace_data)
+                self.assertEqual(issues, [])
 
             # 4. Check trace contract rules
             self.assertEqual(trace_data.get("generation_mode"), "engine_derived")

@@ -11,7 +11,10 @@ SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-import jsonschema  # noqa: E402
+try:
+    import jsonschema  # noqa: E402
+except ImportError:
+    jsonschema = None
 from aleph.engine import (  # noqa: E402
     ComputationalModel,
     EngineConfig,
@@ -20,6 +23,7 @@ from aleph.engine import (  # noqa: E402
     generate_numerical_execution_trace,
     run_deterministic,
 )
+from aleph.trace_contract import validate_execution_trace_data  # noqa: E402
 
 SCHEMAS_DIR = ROOT / "schemas"
 EXECUTION_TRACE_SCHEMA_PATH = SCHEMAS_DIR / "execution-trace.schema.json"
@@ -48,7 +52,11 @@ class NumericalCyclesAcceptanceTests(unittest.TestCase):
         ]
         config_conv = EngineConfig(mode="deterministic", seed=42, jacobi_max_iter=100)
         trace_conv = generate_numerical_execution_trace(converging_model, config_conv, ticks=3)
-        jsonschema.validate(instance=trace_conv, schema=self.schema)
+        if jsonschema is not None:
+            jsonschema.validate(instance=trace_conv, schema=self.schema)
+        else:
+            issues = validate_execution_trace_data(trace_conv)
+            self.assertEqual(issues, [])
 
         self.assertEqual(trace_conv["invalid_mass"], 0.0)
         final_state = trace_conv.get("final_state_vector", {})
@@ -68,7 +76,11 @@ class NumericalCyclesAcceptanceTests(unittest.TestCase):
         ]
         config_div = EngineConfig(mode="deterministic", seed=42, jacobi_max_iter=20)
         trace_div = generate_numerical_execution_trace(divergent_model, config_div, ticks=3)
-        jsonschema.validate(instance=trace_div, schema=self.schema)
+        if jsonschema is not None:
+            jsonschema.validate(instance=trace_div, schema=self.schema)
+        else:
+            issues = validate_execution_trace_data(trace_div)
+            self.assertEqual(issues, [])
 
         # Must report invalid_mass = 1.0 due to non-convergence
         self.assertEqual(trace_div["invalid_mass"], 1.0)

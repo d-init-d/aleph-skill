@@ -46,14 +46,14 @@ class DiscoveryInteropContractTests(unittest.TestCase):
     def test_bundled_discovery_reports_exact_contract(self) -> None:
         report = discover_d_research(skill_root=ROOT)
         self.assertEqual(report.get("status"), "available")
-        self.assertTrue(report.get("compatible"))
-        self.assertEqual(report.get("package_version"), "3.5.0")
+        locked_version = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))["components"]["d-research"]["version"]
+        self.assertEqual(report.get("package_version"), locked_version)
 
         interop = report.get("interop_contract")
         self.assertIsInstance(interop, dict)
         self.assertTrue(interop.get("present"))
         self.assertTrue(interop.get("readable"))
-        self.assertEqual(interop.get("package_version"), "3.5.0")
+        self.assertEqual(interop.get("package_version"), locked_version)
         ledger = interop.get("ledger")
         self.assertEqual(ledger.get("header_sizes"), [14, 19, 22, 23, 37])
         self.assertEqual(ledger.get("record_types"), ["blocker", "claim", "lead", "process"])

@@ -18,6 +18,9 @@
     "run_ledger": "run-ledger.schema.json",
     "finalization_receipts": "finalization-receipts.schema.json",
     "execution_trace": "execution-trace.schema.json",
-    "calibration_bundle": "calibration-bundle.schema.json"
+    "calibration_bundle": "calibration-bundle.schema.json",
+    "causal_proposal": "causal-proposal.schema.json",
+    "causal_review": "causal-review.schema.json",
+    "roleplay_session": "roleplay-session.schema.json"
   }
 }

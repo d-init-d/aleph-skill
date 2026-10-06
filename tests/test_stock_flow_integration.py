@@ -10,7 +10,10 @@ SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-import jsonschema  # noqa: E402
+try:
+    import jsonschema  # noqa: E402
+except ImportError:
+    jsonschema = None
 from aleph.engine import (  # noqa: E402
     ComputationalModel,
     EngineConfig,
@@ -18,6 +21,7 @@ from aleph.engine import (  # noqa: E402
     Variable,
     generate_numerical_execution_trace,
 )
+from aleph.trace_contract import validate_execution_trace_data  # noqa: E402
 
 SCHEMAS_DIR = ROOT / "schemas"
 EXECUTION_TRACE_SCHEMA_PATH = SCHEMAS_DIR / "execution-trace.schema.json"
@@ -46,7 +50,11 @@ class StockFlowIntegrationAcceptanceTests(unittest.TestCase):
 
         ticks = 4
         trace = generate_numerical_execution_trace(model, config, ticks=ticks)
-        jsonschema.validate(instance=trace, schema=self.schema)
+        if jsonschema is not None:
+            jsonschema.validate(instance=trace, schema=self.schema)
+        else:
+            issues = validate_execution_trace_data(trace)
+            self.assertEqual(issues, [])
 
         # Analytical recurrence:
         # S(0) = 10.0

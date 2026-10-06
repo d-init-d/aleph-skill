@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.5.0-rc.1 - 2026-10-06 (prerelease)
+
+- Add reviewed causal drafts and atomic disk-verified model publication.
+- Bind multi-round roleplay execution and replay to model/config/spec identity.
+- Pin the published D Research 3.6.0-rc.2 runtime by signed tag, Git objects and artifact digests; retain a separate integrity policy for local development snapshots.
+- Publish RC tags as prereleases without changing the latest stable release.
+- Preserve numerical nonconvergence and keep assumptions explicit.
+
+
 ## 2.4.3 - 2026-09-19
 
 ### Changed

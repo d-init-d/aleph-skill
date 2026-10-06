@@ -184,6 +184,8 @@ EDGE_FIELDS = frozenset(
         "evidence_confidence",
         "mechanism",
         "lag_distribution",
+        "lag_ticks",
+        "lag_unit",
         "context_modifiers",
         "evidence",
         "assumption_ref",

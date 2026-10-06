@@ -3,7 +3,7 @@ name: aleph-skill
 description: Evidence-grounded causal timeline simulation for AI CLI and IDE hosts that support Agent Skills or an Aleph adapter contract. Use for counterfactual history, prospective interventions, hybrid past-to-future projections, butterfly effects, calibrated scenario analysis, domain-pack modeling, evidence-based or assumption-only actor decisions, and auditable uncertainty.
 ---
 
-# Aleph Skill 2.4.3
+# Aleph Skill 2.5.0-rc.1
 
 Model how a defined intervention propagates through a causal system. Treat Aleph as a simulation protocol, never an oracle. Keep these labels distinct:
 
@@ -34,8 +34,8 @@ A hypothetical change point is valid without evidence that it already occurred. 
 
 1. Research the baseline, mechanisms, contradictions, actors, and measurable factors until evidence saturation. Checkpoint every wave. If a host limit interrupts the run, publish an honest unsaturated handoff that can be resumed. Follow `references/adaptive-research-workflow.md`.
 2. After gateway preflight verifies the locked bundle and the required route capability, invoke D Research only through `<ALEPH_SKILL_ROOT>/scripts/research_gateway.py`, import its signed ledger with `<ALEPH_SKILL_ROOT>/scripts/import_research_ledger.py`, preserve the source ledger and HMAC sidecar, and bind a portable `component_binding` on the import receipt. For an investigative route whose interop contract exposes policy and plan entrypoints, initialize/check the scope through `research:policy` and bind it through `research:plan bind-policy` before dispatch. Import only `record_type=claim` from the `evidence` field; preserve `lead` separately from `process`/`blocker` audit rows. If the required capability is blocked, build the evidence map directly from opened host-native sources, retain explicit provenance, omit the D Research import receipt, and cap assurance at `limited`.
-3. Build typed nodes and admitted causal edges. Read `references/node-builder.md` and `references/causal-edge-protocol.md`.
-4. Compile and run the deterministic or Monte Carlo engine. Preserve config/model hashes, samples, invalid mass, traces, and replay material. Read `references/propagation-engine.md`.
+3. Build typed nodes and admitted causal edges. Read `references/node-builder.md` and `references/causal-edge-protocol.md`. The optional `<ALEPH_SKILL_ROOT>/scripts/auto_causal_inducer.py` (`propose` / `review` / `admit`) generates candidates and gaps, not verified causal truth. Supply per-node `node_measurements` (baseline, unit, observation time, stock retention when relevant). Default `review` is deterministic screening and exports only a draft. Execution requires explicit decisions for every node/edge and a named reviewer (`--reviewer ... --decisions ...`). Apply to a new workspace; never reuse an existing model or trace. See `references/upgrade-completion.md`.
+4. Compile and run the deterministic or Monte Carlo engine. Preserve config/model hashes, samples, invalid mass, traces, and replay material. Cyclic feedback systems support `scc_solver: linear_auto` (or Jacobi) with structured nonconvergence diagnostics and cycle analysis. Read `references/propagation-engine.md`.
 5. Cluster distinct scenario branches. Use `relative_weight` unless a declared calibration policy and hindcast gate authorize `calibrated_probability`. Read `references/branch-management.md` and `references/calibration-lineage.md`.
 6. Render the report using `references/reporting-contract.md`, validate, finalize atomically, then verify receipts.
 
@@ -47,9 +47,10 @@ Read `references/human-node-protocol.md` whenever a person can materially change
 2. Select `actor_basis: evidence|mixed|assumption`. Evidence and mixed actors use a dedicated research execution that must not roleplay. Assumption-only and fictional actors skip research and receive an explicit assumption packet.
 3. Freeze the dossier and build a temporal packet with `<ALEPH_SKILL_ROOT>/scripts/actor_packet.py`. Admit only claims available to and accessible by the actor at the decision cutoff. Excluded claim content never enters the packet.
 4. Use a distinct offline roleplay execution. It receives only the sealed packet and proposes at least two actions from the declared decision graph. Roleplay must never receive research root, HMAC key, raw ledger, browser, network tools, or the research gateway.
-5. Keep roleplay output labeled `simulation`. Creative motives and actions are allowed; sourced facts and likelihood remain owned by research and adjudication respectively.
-6. Let the main simulator adjudicate hypotheses against evidence. Only the adjudicator may assign `relative_weight`; it may assign `calibrated_probability` only after every calibration and validation gate passes.
-7. Record hashed inputs/outputs, execution/agent IDs, timestamps, policies, and an HMAC receipt chain in `human-track-ledger.jsonl`; require distinct research/roleplay executions only when a research track exists.
+5. For multi-actor multi-turn strategic interaction, the optional `<ALEPH_SKILL_ROOT>/scripts/interactive_roleplay.py` (`init`, `packet`, `commit`, `advance`, `finalize`, `replay`) binds model/config/spec identity, filters per-round observations, commits simultaneous actions, and checks deterministic replay. The host must separately enforce offline execution and the sealed human-track protocol; packet hashes are integrity checks, not signatures or process isolation.
+6. Keep roleplay output labeled `simulation`. Creative motives and actions are allowed; sourced facts and likelihood remain owned by research and adjudication respectively.
+7. Let the main simulator adjudicate hypotheses against evidence. Only the adjudicator may assign `relative_weight`; it may assign `calibrated_probability` only after every calibration and validation gate passes.
+8. Record hashed inputs/outputs, execution/agent IDs, timestamps, policies, and an HMAC receipt chain in `human-track-ledger.jsonl`; require distinct research/roleplay executions only when a research track exists.
 
 ## Hard gates
 
@@ -118,6 +119,9 @@ python "<ALEPH_SKILL_ROOT>/scripts/preflight.py" --json
 python "<ALEPH_SKILL_ROOT>/scripts/research_gateway.py" research:preflight
 python "<ALEPH_SKILL_ROOT>/scripts/init_simulation_workspace.py" ...
 python "<ALEPH_SKILL_ROOT>/scripts/import_research_ledger.py" ...
+python "<ALEPH_SKILL_ROOT>/scripts/auto_causal_inducer.py" propose --ledger <ledger.csv> --out <proposal.json>
+python "<ALEPH_SKILL_ROOT>/scripts/auto_causal_inducer.py" admit --proposal <proposal.json> --review <review.json> --workspace <run>
+python "<ALEPH_SKILL_ROOT>/scripts/interactive_roleplay.py" init --spec <roleplay-spec.json> --workspace <run>
 python "<ALEPH_SKILL_ROOT>/scripts/validate_simulation_artifacts.py" --workspace <run> --mode draft --write-report
 python "<ALEPH_SKILL_ROOT>/scripts/run_simulation.py" --workspace <run> ...
 python "<ALEPH_SKILL_ROOT>/scripts/replay_simulation.py" --workspace <run> ...

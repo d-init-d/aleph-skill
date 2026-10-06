@@ -57,6 +57,9 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     assurance_cap = "limited"
     if python_ready and d_research.get("status") == "available" and d_research.get("compatible") is True and packs.get("all_validated"):
         assurance_cap = "verified"  # capability ceiling, not automatic claim
+    if verification.provenance_mode == "local_candidate":
+        assurance_cap = "limited"
+        recommendations.append("Local candidate snapshot integrity verified; official upstream release attestation is unavailable.")
     if not numpy_ok:
         # scientific soft-degrade does not crash
         pass
@@ -91,6 +94,9 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "interop_contract": d_research.get("interop_contract"),
             "lock_ok": verification.ok,
             "lock_error": verification.error_code,
+            "provenance_mode": verification.provenance_mode,
+            "upstream_attested": verification.upstream_attested,
+            "candidate_snapshot_sha256": verification.candidate_snapshot_sha256,
         },
         "domain_packs": {
             "ok": packs.get("ok"),

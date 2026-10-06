@@ -159,7 +159,8 @@ class VigAcceptanceTests(unittest.TestCase):
         lock = json.loads(lock_path.read_text(encoding="utf-8"))
 
         entry = lock["components"]["d-research"]
-        self.assertRegex(entry["upstream_commit"], r"^[0-9a-f]{40}$")
+        from _component_policy import assert_component_provenance
+        assert_component_provenance(self, entry)
         self.assertEqual(entry["upstream_repo"], "repos/d-research-skill")
         self.assertEqual(entry["file_count"], lock["components"]["d-research"]["source_artifacts"]["runtime_profile"]["file_count"])
         self.assertEqual(len(entry["files"]), lock["components"]["d-research"]["source_artifacts"]["runtime_profile"]["file_count"])
@@ -210,7 +211,13 @@ class VigAcceptanceTests(unittest.TestCase):
 
         # Compare against upstream clone if present
         upstream_repo = (ROOT.parent / "d-research-skill").resolve()
-        if upstream_repo.is_dir() and (upstream_repo / ".git").exists():
+        candidate = lock["components"]["d-research"].get("provenance", {}).get("mode") == "local_candidate"
+        if candidate:
+            self.assertTrue(verify_component_lock(skill_root=ROOT).ok)
+            with self.assertRaisesRegex(ValueError, "LOCAL_CANDIDATE_NOT_UPSTREAM"):
+                lock_bundled_component.verify_upstream_snapshot(
+                    ROOT, ROOT, lock, component_id="d-research")
+        elif upstream_repo.is_dir() and (upstream_repo / ".git").exists():
             source_tag = lock["components"]["d-research"]["source_tag"]
             proc = subprocess.run(
                 ["git", "rev-parse", f"{source_tag}^{{}}"],
@@ -269,8 +276,9 @@ class VigAcceptanceTests(unittest.TestCase):
         binding = manifest["component_binding"]
         self.assertEqual(binding["component_uri"], COMPONENT_URI)
         self.assertEqual(binding["package_name"], "d-research-skill-tools")
-        self.assertEqual(binding["package_version"], "3.5.0")
-        self.assertEqual(binding["upstream_commit"], json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))["components"]["d-research"]["upstream_commit"])
+        locked_component = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))["components"]["d-research"]
+        self.assertEqual(binding["package_version"], locked_component["version"])
+        self.assertEqual(binding["upstream_commit"], locked_component["upstream_commit"])
         self.assertTrue(binding["component_lock_sha256"].startswith("sha256:"))
 
         self.assertIn("entrypoints", manifest)

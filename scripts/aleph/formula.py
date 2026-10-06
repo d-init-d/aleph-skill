@@ -68,6 +68,10 @@ def evaluate_output_effect(
     threshold_active: bool | None = None,
 ) -> tuple[float, bool | None]:
     """Evaluate one edge and return its output plus hysteresis latch state."""
+    if formula_version == "2.1":
+        formula_version = FORMULA_VERSION
+    elif formula_version == "2.0":
+        formula_version = LEGACY_FORMULA_VERSION
     if formula_version not in SUPPORTED_FORMULA_VERSIONS:
         raise ValueError(f"unsupported formula version {formula_version}")
     parameters = transform_parameters or {}

@@ -19,6 +19,7 @@ from aleph.component_registry import (
     LOCK_NAME,
     ComponentError,
     build_component_lock,
+    verify_component_lock,
 )
 from aleph.io import write_json_atomic
 
@@ -219,6 +220,9 @@ def verify_upstream_snapshot(
     repo = upstream_repo.resolve(strict=True)
     entry = rebuilt["components"][component_id]
 
+    if entry.get("provenance", {}).get("mode") == "local_candidate":
+        raise ValueError("LOCAL_CANDIDATE_NOT_UPSTREAM: use candidate snapshot verification")
+
     def git_text(*arguments: str) -> str:
         completed = subprocess.run(
             [git, "-C", str(repo), *arguments],
@@ -357,6 +361,7 @@ def main() -> None:
         type=Path,
         help="Directory containing the published workflow, full, and runtime release assets.",
     )
+    parser.add_argument("--require-upstream", action="store_true", help="Reject local candidates; require verified official upstream tag provenance.")
     args = parser.parse_args()
     if args.normalize_lf and not args.write:
         parser.error("--normalize-lf requires --write because it mutates the snapshot")
@@ -368,6 +373,11 @@ def main() -> None:
         if args.normalize_lf:
             changed = normalize_snapshot(root / "components" / args.component)
         rebuilt = build_component_lock(root, component_id=args.component)
+        mode = rebuilt["components"][args.component].get("provenance", {}).get("mode", "upstream_release")
+        if mode == "local_candidate" and (args.require_upstream or args.upstream_repo is not None):
+            raise ValueError("LOCAL_CANDIDATE_NOT_UPSTREAM: candidate integrity is not official upstream attestation")
+        if args.require_upstream and args.upstream_repo is None:
+            raise ValueError("--require-upstream requires --upstream-repo")
         if args.upstream_repo is not None:
             upstream = verify_upstream_snapshot(
                 root,
@@ -389,9 +399,19 @@ def main() -> None:
             upstream = None
         existing = _read_json(lock_path)
         matches = existing == rebuilt
+        if mode == "local_candidate" and args.write and not matches and args.release_assets_dir is None:
+            raise ValueError("Candidate lock changes require --release-assets-dir for byte-exact source verification")
+        if args.write:
+            proposed = verify_component_lock(skill_root=root, component_id=args.component, _unpublished_lock=rebuilt)
+            if not proposed.ok:
+                raise ValueError(proposed.message or "proposed component lock is invalid")
         if args.write and not matches:
             write_json_atomic(lock_path, rebuilt)
             matches = True
+        if matches:
+            verification = verify_component_lock(skill_root=root, component_id=args.component)
+            if not verification.ok:
+                raise ValueError(verification.message or "component integrity failed")
         result = {
             "status": "pass" if matches else "stale",
             "component": args.component,
@@ -400,7 +420,10 @@ def main() -> None:
             "written": bool(args.write and not existing == rebuilt),
             "file_count": rebuilt["components"][args.component]["file_count"],
             "tree_sha256": rebuilt["components"][args.component]["tree_sha256"],
-            "upstream_verification": upstream,
+            "upstream_verification": upstream if mode == "upstream_release" else None,
+            "provenance_mode": mode,
+            "upstream_attested": bool(mode == "upstream_release" and args.upstream_repo is not None),
+            "local_candidate_verification": upstream if mode == "local_candidate" else None,
         }
         print(json.dumps(result, indent=2, ensure_ascii=False))
         if not matches:

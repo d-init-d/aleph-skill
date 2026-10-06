@@ -287,14 +287,16 @@ class ReleasePackagingV201Tests(unittest.TestCase):
             ROOT / ".github" / "release-notes" / f"v{PACKAGE_VERSION}.md"
         ).read_text(encoding="utf-8")
         self.assertIn("sha256sum -c SHA256SUMS.txt", notes)
+        # Aleph's build attestation is independent of the bundled component policy.
         self.assertIn(f"gh attestation verify aleph-skill-v{PACKAGE_VERSION}.zip", notes)
         self.assertIn("--repo d-init-d/aleph-skill", notes)
         self.assertIn(
-            "--signer-workflow d-init-d/aleph-skill/.github/workflows/release.yml",
-            notes,
+            "--signer-workflow d-init-d/aleph-skill/.github/workflows/release.yml", notes,
         )
         self.assertIn(f"--source-ref refs/tags/v{PACKAGE_VERSION}", notes)
         self.assertIn("GitHub's attestation service", notes)
+        self.assertIn("release_flags=(--prerelease --latest=false)", workflow)
+
 
 
 if __name__ == "__main__":

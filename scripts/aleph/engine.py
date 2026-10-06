@@ -39,6 +39,7 @@ class EngineConfig:
     branch_mass_tol: float = 0.01
     max_invalid_fraction: float = 0.01
     workers: int = 1
+    scc_solver: str = "jacobi"
 
 
 @dataclass
@@ -82,6 +83,12 @@ class ComputationalModel:
     edges: list[ModelEdge] = field(default_factory=list)
     interventions: list[dict[str, Any]] = field(default_factory=list)
     formula_version: str = FORMULA_VERSION
+
+    def __post_init__(self) -> None:
+        if self.formula_version == "2.1":
+            self.formula_version = "2.1.0"
+        elif self.formula_version == "2.0":
+            self.formula_version = "2.0.0"
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -401,6 +408,9 @@ def compile_model(
         raw_lag = raw.get("lag_ticks", 0)
         lag = _representative_lag(lag_distribution) if lag_distribution else _duration_ticks(raw_lag)
         lag_unit = "days" if lag_distribution is not None or isinstance(raw_lag, str) else "ticks"
+        lag_unit = str(raw.get("lag_unit", lag_unit))
+        if lag_unit not in {"days", "ticks"}:
+            raise ValueError(f"edge {edge_id} lag_unit must be days or ticks")
         distribution = raw.get("effect_distribution")
         if distribution is None and isinstance(raw.get("effect_parameter"), dict):
             candidate = raw["effect_parameter"]
@@ -572,12 +582,16 @@ def model_hash(model: ComputationalModel) -> str:
 def config_payload(config: EngineConfig) -> dict[str, Any]:
     payload = asdict(config)
     payload.pop("workers", None)
+    if payload.get("scc_solver") == "jacobi":
+        payload.pop("scc_solver", None)
     return payload
+
 
 
 def semantic_result_payload(result: dict[str, Any]) -> dict[str, Any]:
     """Remove executor-only metadata before comparing reproducible semantics."""
     normalised = dict(result)
+    normalised.pop("scc_diagnostics", None)
     payload = normalised.get("payload")
     if isinstance(payload, dict):
         normalised["payload"] = {key: value for key, value in payload.items() if key != "workers"}
@@ -585,6 +599,7 @@ def semantic_result_payload(result: dict[str, Any]) -> dict[str, Any]:
     if isinstance(summary, dict):
         normalised["summary"] = {key: value for key, value in summary.items() if key != "workers"}
     return normalised
+
 
 
 def _diagnostic_hash(value: Any) -> str:
@@ -685,7 +700,17 @@ def _config_errors(config: EngineConfig) -> list[Issue]:
             problems.append(issue("RANGE", pointer=f"/config/{name}", actual=value, message="must be in [0,1]"))
     if isinstance(config.min_runs, int) and isinstance(config.max_runs, int) and config.max_runs < config.min_runs:
         problems.append(issue("RANGE", pointer="/config/max_runs", actual=config.max_runs, expected=config.min_runs, message="must be at least min_runs"))
+    if getattr(config, "scc_solver", "jacobi") not in {"jacobi", "linear_auto"}:
+        problems.append(
+            issue(
+                "ENUM",
+                pointer="/config/scc_solver",
+                actual=getattr(config, "scc_solver", None),
+                expected=["jacobi", "linear_auto"],
+            )
+        )
     return problems
+
 
 
 def _sample_distribution(
@@ -997,7 +1022,247 @@ def _invalid_run_result(
     }
 
 
+
+def _solve_linear_system_gaussian(
+
+    A: list[list[float]],
+    b: list[float],
+    *,
+    pivot_tol: float = 1e-12,
+) -> tuple[list[float] | None, str | None]:
+    """Solve A x = b using Gaussian elimination with partial pivoting in pure stdlib Python."""
+    n = len(A)
+    M = [A[i][:] + [b[i]] for i in range(n)]
+    for k in range(n):
+        max_val = abs(M[k][k])
+        max_row = k
+        for r in range(k + 1, n):
+            val = abs(M[r][k])
+            if val > max_val:
+                max_val = val
+                max_row = r
+        if max_val < pivot_tol or not math.isfinite(max_val):
+            return None, f"singular matrix or pivot too small ({max_val} < {pivot_tol})"
+        if max_row != k:
+            M[k], M[max_row] = M[max_row], M[k]
+        pivot = M[k][k]
+        for r in range(k + 1, n):
+            factor = M[r][k] / pivot
+            M[r][k] = 0.0
+            for c in range(k + 1, n + 1):
+                M[r][c] -= factor * M[k][c]
+    x = [0.0] * n
+    for i in range(n - 1, -1, -1):
+        pivot = M[i][i]
+        if abs(pivot) < pivot_tol or not math.isfinite(pivot):
+            return None, f"zero or non-finite diagonal element at index {i}"
+        sum_known = sum(M[i][j] * x[j] for j in range(i + 1, n))
+        x[i] = (M[i][n] - sum_known) / pivot
+        if not math.isfinite(x[i]):
+            return None, f"non-finite solution value at index {i}"
+    return x, None
+
+
+def _is_affine_eligible(
+    component: list[str],
+    internal: list[ModelEdge],
+    model: ComputationalModel,
+) -> tuple[bool, str]:
+    """Check whether a zero-lag SCC satisfies v1 affine direct solve criteria."""
+    for node in component:
+        var = model.variables.get(node)
+        if var is None:
+            return False, f"node {node} missing from model variables"
+        if var.scale != "level":
+            return False, f"node {node} scale '{var.scale}' is not 'level'"
+        if var.datatype != "continuous":
+            return False, f"node {node} datatype '{var.datatype}' is not 'continuous'"
+        if var.bounds != (None, None):
+            return False, f"node {node} has finite bounds {var.bounds}"
+    for edge in internal:
+        if edge.transform not in {"linear", "identity"}:
+            return False, f"edge {edge.id} has non-linear transform '{edge.transform}'"
+        if edge.saturation is not None:
+            return False, f"edge {edge.id} has finite saturation {edge.saturation}"
+    return True, "affine_eligible"
+
+
+def _solve_scc(
+    component: list[str],
+    internal: list[ModelEdge],
+    component_base: dict[str, float],
+    current: dict[str, float],
+    strengths: dict[str, float],
+    model: ComputationalModel,
+    config: EngineConfig,
+    active_formula: str,
+    gate_before: dict[str, bool],
+    *,
+    tick: int = 0,
+    sample_id: int | str = 0,
+) -> tuple[dict[str, float], bool, list[Issue], dict[str, Any]]:
+    """Unified zero-lag SCC solver supporting Jacobi iteration and direct linear solve."""
+    cyclic = len(component) > 1 or any(edge.source == edge.target for edge in internal)
+    if not cyclic:
+        node = component[0]
+        val = component_base[node]
+        return {node: val}, True, [], {
+            "tick": tick,
+            "sample_id": sample_id,
+            "component": component,
+            "solver": "direct",
+            "converged": True,
+            "iterations": 0,
+        }
+
+    x = {node: current[node] for node in component}
+    converged = False
+    issues: list[Issue] = []
+    final_residual = 0.0
+    scale_val = 1.0
+    iterations_used = 0
+
+    # 1. Primary method: Jacobi iteration
+    for _iteration in range(max(1, config.jacobi_max_iter)):
+        iterations_used = _iteration + 1
+        candidate = dict(component_base)
+        try:
+            for edge in internal:
+                output, _ = _edge_effect(
+                    edge,
+                    strengths[edge.id],
+                    x[edge.source],
+                    formula_version=active_formula,
+                    threshold_active=gate_before.get(edge.id),
+                )
+                candidate[edge.target] += _integrate_edge_output(model, edge, output, config)
+        except (OverflowError, ValueError):
+            break
+
+        residual = max((abs(candidate[node] - x[node]) for node in component), default=0.0)
+        final_residual = residual
+        scale_val = max(1.0, *(abs(val) for val in x.values()), *(abs(val) for val in candidate.values()))
+        if residual <= config.jacobi_abs_tol + config.jacobi_rel_tol * scale_val:
+            x = candidate
+            converged = True
+            break
+        for node in component:
+            x[node] = (1.0 - config.jacobi_relax) * x[node] + config.jacobi_relax * candidate[node]
+
+    if converged:
+        return x, True, [], {
+            "tick": tick,
+            "sample_id": sample_id,
+            "component": component,
+            "internal_edges": [e.id for e in internal],
+            "solver": "jacobi",
+            "iterations": iterations_used,
+            "residual": final_residual,
+            "tolerance": config.jacobi_abs_tol + config.jacobi_rel_tol * scale_val,
+            "converged": True,
+        }
+
+    # 2. If Jacobi failed and linear_auto is configured, attempt direct affine solve
+    if getattr(config, "scc_solver", "jacobi") == "linear_auto":
+        eligible, reason = _is_affine_eligible(component, internal, model)
+        if eligible:
+            n = len(component)
+            idx_map = {node: i for i, node in enumerate(component)}
+            W = [[0.0] * n for _ in range(n)]
+            b = [component_base[node] for node in component]
+            for edge in internal:
+                src_idx = idx_map[edge.source]
+                tgt_idx = idx_map[edge.target]
+                s = strengths[edge.id]
+                coeff = 1.0 if edge.transform == "identity" else s
+                factor = float(edge.sign) * float(coeff) * float(edge.context_multiplier)
+                W[tgt_idx][src_idx] += factor
+
+            A = [[0.0] * n for _ in range(n)]
+            for i in range(n):
+                for j in range(n):
+                    A[i][j] = (1.0 - W[i][j]) if i == j else -W[i][j]
+
+            x_direct, err_msg = _solve_linear_system_gaussian(A, b, pivot_tol=1e-12)
+            if x_direct is not None:
+                residuals = []
+                for i in range(n):
+                    calc_i = b[i] + sum(W[i][j] * x_direct[j] for j in range(n))
+                    residuals.append(abs(x_direct[i] - calc_i))
+                direct_residual = max(residuals, default=0.0)
+                d_scale = max(
+                    1.0,
+                    *(abs(v) for v in x_direct),
+                    *(abs(b[i] + sum(W[i][j] * x_direct[j] for j in range(n))) for i in range(n)),
+                )
+                tol = config.jacobi_abs_tol + config.jacobi_rel_tol * d_scale
+                if direct_residual <= tol and all(math.isfinite(v) for v in x_direct):
+                    sol_dict = {component[i]: x_direct[i] for i in range(n)}
+                    return sol_dict, True, [], {
+                        "tick": tick,
+                        "sample_id": sample_id,
+                        "component": component,
+                        "internal_edges": [e.id for e in internal],
+                        "solver": "linear_auto",
+                        "method": "linear_direct",
+                        "iterations": 1,
+                        "residual": direct_residual,
+                        "tolerance": tol,
+                        "converged": True,
+                    }
+                else:
+                    err_msg = f"direct solve residual too large ({direct_residual} > {tol})"
+
+            err_code = "SINGULAR" if "singular" in str(err_msg) else "NONCONVERGENCE"
+            issues.append(
+                issue("NONCONVERGENCE", actual=component, message=f"linear_auto direct solve failed: {err_msg}")
+            )
+            return x, False, issues, {
+                "tick": tick,
+                "sample_id": sample_id,
+                "component": component,
+                "internal_edges": [e.id for e in internal],
+                "solver": "linear_auto",
+                "converged": False,
+                "error": err_code,
+                "detail": err_msg,
+            }
+        else:
+            issues.append(
+                issue(
+                    "NONCONVERGENCE",
+                    actual=component,
+                    message=f"linear_auto ineligible for nonlinear SCC: {reason}",
+                )
+            )
+            return x, False, issues, {
+                "tick": tick,
+                "sample_id": sample_id,
+                "component": component,
+                "internal_edges": [e.id for e in internal],
+                "solver": "linear_auto",
+                "converged": False,
+                "error": "UNSUPPORTED_TRANSFORM",
+                "reason": reason,
+            }
+
+    # Standard Jacobi non-convergence
+    issues.append(issue("NONCONVERGENCE", actual=component, message="zero-lag SCC did not converge"))
+    return x, False, issues, {
+        "tick": tick,
+        "sample_id": sample_id,
+        "component": component,
+        "internal_edges": [e.id for e in internal],
+        "solver": "jacobi",
+        "iterations": iterations_used,
+        "residual": final_residual,
+        "converged": False,
+        "error": "ITERATION_LIMIT_EXCEEDED",
+    }
+
+
 def run_deterministic(
+
     model: ComputationalModel,
     config: EngineConfig,
     *,
@@ -1017,7 +1282,9 @@ def run_deterministic(
     events = 0
     unresolved = False
     event_storm = False
+    scc_diagnostics: list[dict[str, Any]] = []
     edges: list[tuple[ModelEdge, float]] = []
+
     retention_factors: dict[str, float] = {}
     edge_gate_state: dict[str, bool] = {}
     try:
@@ -1125,47 +1392,27 @@ def run_deterministic(
                 except (OverflowError, ValueError) as exc:
                     unresolved = True
                     issues.append(issue("NONCONVERGENCE", pointer=edge.id, message=str(exc)))
-            cyclic = len(component) > 1 or any(edge.source == edge.target for edge in internal)
-            if cyclic:
-                x = {node: current[node] for node in component}
-                converged = False
-                for _iteration in range(max(1, config.jacobi_max_iter)):
-                    candidate = dict(component_base)
-                    try:
-                        for edge in internal:
-                            output, _ = _edge_effect(
-                                edge,
-                                strengths[edge.id],
-                                x[edge.source],
-                                formula_version=model.formula_version,
-                                threshold_active=gate_before.get(edge.id),
-                            )
-                            candidate[edge.target] += _integrate_edge_output(model, edge, output, config)
-                    except (OverflowError, ValueError):
-                        break
-                    residual = max(
-                        (abs(candidate[node] - x[node]) for node in component),
-                        default=0.0,
-                    )
-                    scale = max(
-                        1.0,
-                        *(abs(value) for value in x.values()),
-                        *(abs(value) for value in candidate.values()),
-                    )
-                    if residual <= config.jacobi_abs_tol + config.jacobi_rel_tol * scale:
-                        x = candidate
-                        converged = True
-                        break
-                    for node in component:
-                        relaxed = (1.0 - config.jacobi_relax) * x[node] + config.jacobi_relax * candidate[node]
-                        x[node] = relaxed
-                if not converged:
-                    unresolved = True
-                    issues.append(issue("NONCONVERGENCE", actual=component, message="zero-lag SCC did not converge"))
-                for node in component:
-                    current[node] = x[node]
-            else:
-                current[component[0]] = component_base[component[0]]
+            comp_sol, comp_ok, comp_issues, comp_diag = _solve_scc(
+                component=component,
+                internal=internal,
+                component_base=component_base,
+                current=current,
+                strengths=strengths,
+                model=model,
+                config=config,
+                active_formula=model.formula_version,
+                gate_before=gate_before,
+                tick=tick,
+                sample_id=run_id,
+            )
+            if not comp_ok:
+                unresolved = True
+            issues.extend(comp_issues)
+            for node, val in comp_sol.items():
+                current[node] = val
+            if comp_diag.get("solver") != "direct":
+                scc_diagnostics.append(comp_diag)
+
 
         for intervention in active:
             if intervention["op"] == "set":
@@ -1265,6 +1512,10 @@ def run_deterministic(
         "issues": [value.to_dict() for value in issues],
         "exit_code": 4 if unresolved or event_storm else 0,
     }
+    if scc_diagnostics:
+        response["scc_diagnostics"] = scc_diagnostics
+
+
     if model.formula_version != LEGACY_FORMULA_VERSION:
         response["dynamics_history"] = dynamics_history
     return response
@@ -1690,39 +1941,25 @@ def generate_numerical_execution_trace(
                 except (OverflowError, ValueError) as exc:
                     unresolved = True
                     issues.append(issue("NONCONVERGENCE", pointer=edge.id, message=str(exc)))
-            cyclic = len(component) > 1 or any(edge.source == edge.target for edge in internal)
-            if cyclic:
-                x = {node: current[node] for node in component}
-                converged = False
-                for _iteration in range(max(1, config.jacobi_max_iter)):
-                    candidate = dict(component_base)
-                    try:
-                        for edge in internal:
-                            output, _ = _edge_effect(
-                                edge,
-                                edge_strengths[edge.id],
-                                x[edge.source],
-                                formula_version=active_formula,
-                                threshold_active=gate_before.get(edge.id),
-                            )
-                            candidate[edge.target] += _integrate_edge_output(model, edge, output, config)
-                    except (OverflowError, ValueError):
-                        break
-                    residual = max((abs(candidate[node] - x[node]) for node in component), default=0.0)
-                    scale = max(1.0, *(abs(val) for val in x.values()), *(abs(val) for val in candidate.values()))
-                    if residual <= config.jacobi_abs_tol + config.jacobi_rel_tol * scale:
-                        x = candidate
-                        converged = True
-                        break
-                    for node in component:
-                        x[node] = (1.0 - config.jacobi_relax) * x[node] + config.jacobi_relax * candidate[node]
-                if not converged:
-                    unresolved = True
-                    issues.append(issue("NONCONVERGENCE", actual=component, message="zero-lag SCC did not converge"))
-                for node in component:
-                    current[node] = x[node]
-            else:
-                current[component[0]] = component_base[component[0]]
+            comp_sol, comp_ok, comp_issues, _ = _solve_scc(
+                component=component,
+                internal=internal,
+                component_base=component_base,
+                current=current,
+                strengths=edge_strengths,
+                model=model,
+                config=config,
+                active_formula=active_formula,
+                gate_before=gate_before,
+                tick=tick,
+                sample_id="trace",
+            )
+            if not comp_ok:
+                unresolved = True
+            issues.extend(comp_issues)
+            for node, val in comp_sol.items():
+                current[node] = val
+
 
         for intervention in active:
             if intervention["op"] == "set":
@@ -1935,5 +2172,4 @@ def stream_numerical_execution_trace(
         "steps_per_second": (len(trace["steps"]) / (elapsed_ms / 1000.0)) if elapsed_ms > 0 else 0.0,
     }
     return trace
-
 
