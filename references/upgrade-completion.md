@@ -1,10 +1,10 @@
-# Candidate upgrade contract
+# Upgrade workflow contract
 
-This `2.5.0-rc.1` prerelease pins the published D Research `3.6.0-rc.2`
+This `2.5.0` stable release pins the published D Research `3.6.0`
 runtime profile to its immutable annotated tag, source commit, Git tree,
 reproducible source archive and full/runtime artifact digests. CI verifies the
-projection against upstream Git objects. Published prerelease provenance does
-not establish stable-promotion readiness or live-provider availability.
+projection against upstream Git objects. Stable release provenance establishes the locked source identity; it does
+not establish empirical calibration or live-provider availability.
 
 Development snapshots can still use `provenance.mode = local_candidate`.
 That policy verifies artifact/recipe/snapshot integrity without asserting an

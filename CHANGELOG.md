@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.5.0 - 2026-10-07
+
+Official stable release of reviewed causal drafting, eligible linear feedback
+solutions, and reproducible multi-round strategic scenarios. Runtime algorithms
+remain unchanged from the verified 2.5.0-rc.1 candidate.
+
+- Pin the signed, published D Research 3.6.0 runtime and exact upstream artifacts.
+- Synchronize package, validator, adapters and distribution metadata to 2.5.0.
+- Preserve explicit evidence gaps, review requirements and numerical failures.
+- Publish deterministic full/runtime ZIPs with checksums and GitHub attestations.
+
+See [release notes](.github/release-notes/v2.5.0.md) for compatibility, upgrade
+instructions, provenance and operating limits.
+
 ## 2.5.0-rc.1 - 2026-10-06 (prerelease)
 
 - Add reviewed causal drafts and atomic disk-verified model publication.
