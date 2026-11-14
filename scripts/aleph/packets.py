@@ -569,18 +569,55 @@ def adjudicate(
     sample_count: int | None = None,
     interval: list[float] | None = None,
     calibration_policy_ref: str | None = None,
+    evidence_scores: dict[str, list[dict[str, float]]] | None = None,
+    prior_weights: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Convert roleplay hypotheses into adjudicator-owned likelihood outputs."""
+    weighted_mode = evidence_scores is not None or prior_weights is not None
     results = []
-    for hypothesis in hypotheses:
+    raw_composites: list[tuple[str, float]] = []
+
+    for idx, hypothesis in enumerate(hypotheses):
+        hid = hypothesis.get("id")
+        action = hypothesis.get("action")
+        key_candidates = [k for k in (hid, action, f"h{idx}") if isinstance(k, str) and k]
+        ev_items: list[dict[str, float]] = []
+        if evidence_scores:
+            for k in key_candidates:
+                if k in evidence_scores:
+                    ev_items = evidence_scores[k]
+                    break
+
         entry = {
-            "action": hypothesis.get("action"),
+            "action": action,
             "method": method,
             "evidence_refs": evidence_refs or [],
             "base_rate_refs": base_rate_refs or [],
-            "hypothesis_ref": hypothesis.get("id"),
+            "hypothesis_ref": hid,
         }
-        weight = hypothesis.get("adjudicated_weight", hypothesis.get("relative_weight", 0.0))
+        base_weight = float(hypothesis.get("adjudicated_weight", hypothesis.get("relative_weight", 0.0)))
+        prior_mult = 1.0
+        if prior_weights:
+            for k in key_candidates:
+                if k in prior_weights:
+                    prior_mult = float(prior_weights[k])
+                    break
+
+        ev_contribution = 0.0
+        for ev in ev_items:
+            if not isinstance(ev, dict):
+                continue
+            rel = float(ev.get("reliability", 1.0))
+            relv = float(ev.get("relevance", 1.0))
+            corr = float(ev.get("corroboration", 1.0))
+            contra = float(ev.get("contradiction_penalty", 0.0))
+            ev_contribution += (rel * relv * corr) - contra
+
+        composite = max(0.0, (base_weight * prior_mult) + ev_contribution) if weighted_mode else base_weight
+        comp_key = str(hid or action or f"hypothesis_{idx}")
+        raw_composites.append((comp_key, composite))
+
+        weight = composite if weighted_mode else base_weight
         if calibrated:
             entry.update(
                 {
@@ -593,8 +630,28 @@ def adjudicate(
             )
         else:
             entry.update({"relative_weight": weight, "probability": None, "likelihood_mode": "relative_weight"})
+        if weighted_mode:
+            entry["evidence_score"] = round(ev_contribution, 6)
+            entry["prior_weight"] = round(prior_mult, 6)
         results.append(entry)
-    return {"calibrated": calibrated, "results": results, "method": method}
+
+    out: dict[str, Any] = {"calibrated": calibrated, "results": results, "method": method}
+    if weighted_mode:
+        total = sum(val for _, val in raw_composites)
+        if total > 0.0:
+            posterior_confidence = {k: round(val / total, 6) for k, val in raw_composites}
+        elif raw_composites:
+            uniform = round(1.0 / len(raw_composites), 6)
+            posterior_confidence = {k: uniform for k, _ in raw_composites}
+        else:
+            posterior_confidence = {}
+        ranked = sorted(raw_composites, key=lambda item: (-item[1], item[0]))
+        out["posterior_confidence"] = posterior_confidence
+        out["ranked_hypothesis_ids"] = [k for k, _ in ranked]
+        out["winning_hypothesis_id"] = ranked[0][0] if ranked else None
+        for entry, (comp_key, _) in zip(results, raw_composites, strict=True):
+            entry["posterior_confidence"] = posterior_confidence.get(comp_key, 0.0)
+    return out
 
 
 def build_receipt(

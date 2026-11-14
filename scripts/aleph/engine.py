@@ -75,6 +75,8 @@ class ModelEdge:
     context_multiplier: float = 1.0
     saturation: float | None = None
     integration: str = "impulse"
+    shock_group: str | None = None
+    shock_correlation: float = 0.0
 
 
 @dataclass
@@ -445,6 +447,15 @@ def compile_model(
             raise ValueError(f"edge {edge_id} integration must be rate or impulse")
         if integration == "rate" and model.variables[target].scale != "stock":
             raise ValueError(f"edge {edge_id} rate integration requires a stock target")
+        raw_shock_group = raw.get("shock_group")
+        shock_group = (
+            str(raw_shock_group).strip()
+            if isinstance(raw_shock_group, str) and raw_shock_group.strip()
+            else None
+        )
+        shock_correlation = _finite_number(raw.get("shock_correlation", 0.0), 0.0)
+        if not -1.0 <= shock_correlation <= 1.0:
+            raise ValueError(f"edge {edge_id} shock_correlation must be in [-1, 1]")
         model.edges.append(
             ModelEdge(
                 id=edge_id,
@@ -462,6 +473,8 @@ def compile_model(
                 context_multiplier=context_multiplier,
                 saturation=saturation,
                 integration=integration,
+                shock_group=shock_group,
+                shock_correlation=shock_correlation,
             )
         )
 
@@ -559,6 +572,10 @@ def model_payload(model: ComputationalModel) -> dict[str, Any]:
             payload["transform_parameters"] = edge.transform_parameters
         if model.formula_version != LEGACY_FORMULA_VERSION and model.variables[edge.target].scale == "stock":
             payload["integration"] = edge.integration
+        if edge.shock_group is not None:
+            payload["shock_group"] = edge.shock_group
+        if edge.shock_correlation != 0.0:
+            payload["shock_correlation"] = edge.shock_correlation
         edges.append(payload)
 
     interventions_payload: list[dict[str, Any]] = []
@@ -700,13 +717,13 @@ def _config_errors(config: EngineConfig) -> list[Issue]:
             problems.append(issue("RANGE", pointer=f"/config/{name}", actual=value, message="must be in [0,1]"))
     if isinstance(config.min_runs, int) and isinstance(config.max_runs, int) and config.max_runs < config.min_runs:
         problems.append(issue("RANGE", pointer="/config/max_runs", actual=config.max_runs, expected=config.min_runs, message="must be at least min_runs"))
-    if getattr(config, "scc_solver", "jacobi") not in {"jacobi", "linear_auto"}:
+    if getattr(config, "scc_solver", "jacobi") not in {"jacobi", "linear_auto", "bounded_affine"}:
         problems.append(
             issue(
                 "ENUM",
                 pointer="/config/scc_solver",
                 actual=getattr(config, "scc_solver", None),
-                expected=["jacobi", "linear_auto"],
+                expected=["jacobi", "linear_auto", "bounded_affine"],
             )
         )
     return problems
@@ -751,12 +768,49 @@ def _sample_distribution(
     raise ValueError(f"unsupported scalar distribution: {kind}")
 
 
+def _normal_cdf(z: float) -> float:
+    """Standard normal cumulative distribution function using stdlib math.erf."""
+    return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+
+
+def _inverse_triangular_cdf(u: float, low: float, mode: float, high: float) -> float:
+    """Evaluate inverse CDF of a triangular distribution on [low, high] at quantile u."""
+    if high <= low:
+        return low
+    u_clamped = min(1.0 - 1e-15, max(0.0, u))
+    split = (mode - low) / (high - low)
+    if u_clamped < split:
+        return low + math.sqrt(u_clamped * (high - low) * (mode - low))
+    return high - math.sqrt((1.0 - u_clamped) * (high - low) * (high - mode))
+
+
 def _sample_strength(edge: ModelEdge, config: EngineConfig, run_id: int) -> float:
     # ``base_strength`` is the deterministic estimate in both formula
     # generations. Effect distributions describe Monte Carlo uncertainty and
     # must not silently replace that estimate during deterministic replay.
     if config.mode != "monte_carlo" or not edge.effect_distribution:
         return edge.strength
+    if edge.shock_group and abs(edge.shock_correlation) > 0.0:
+        rho = max(-1.0, min(1.0, float(edge.shock_correlation)))
+        z_group = normal01(config.seed, run_id, "shock_group", edge.shock_group)
+        z_edge = normal01(config.seed, run_id, edge.id, "effect")
+        z_corr = rho * z_group + math.sqrt(max(0.0, 1.0 - rho * rho)) * z_edge
+        dist = edge.effect_distribution
+        kind = str(dist.get("distribution", dist.get("type", "fixed"))).lower()
+        if kind == "normal":
+            return float(dist["mean"]) + float(dist["sd"]) * z_corr
+        if kind == "uniform":
+            u = _normal_cdf(z_corr)
+            return float(dist["min"]) + (float(dist["max"]) - float(dist["min"])) * u
+        if kind == "triangular":
+            return _inverse_triangular_cdf(
+                _normal_cdf(z_corr),
+                float(dist["min"]),
+                float(dist["mode"]),
+                float(dist["max"]),
+            )
+        if kind == "fixed":
+            return float(dist["value"])
     return _sample_distribution(edge.effect_distribution, config, run_id, edge.id, "effect")
 
 
@@ -1067,8 +1121,10 @@ def _is_affine_eligible(
     component: list[str],
     internal: list[ModelEdge],
     model: ComputationalModel,
+    *,
+    allow_bounds: bool = False,
 ) -> tuple[bool, str]:
-    """Check whether a zero-lag SCC satisfies v1 affine direct solve criteria."""
+    """Check whether a zero-lag SCC satisfies affine or bounded-affine solve criteria."""
     for node in component:
         var = model.variables.get(node)
         if var is None:
@@ -1077,7 +1133,7 @@ def _is_affine_eligible(
             return False, f"node {node} scale '{var.scale}' is not 'level'"
         if var.datatype != "continuous":
             return False, f"node {node} datatype '{var.datatype}' is not 'continuous'"
-        if var.bounds != (None, None):
+        if not allow_bounds and var.bounds != (None, None):
             return False, f"node {node} has finite bounds {var.bounds}"
     for edge in internal:
         if edge.transform not in {"linear", "identity"}:
@@ -1085,6 +1141,134 @@ def _is_affine_eligible(
         if edge.saturation is not None:
             return False, f"edge {edge.id} has finite saturation {edge.saturation}"
     return True, "affine_eligible"
+
+
+def _build_affine_scc_system(
+    component: list[str],
+    internal: list[ModelEdge],
+    component_base: dict[str, float],
+    strengths: dict[str, float],
+) -> tuple[list[list[float]], list[float]]:
+    """Build linear system matrix W and RHS b for x = b + W x within an SCC."""
+    n = len(component)
+    idx_map = {node: i for i, node in enumerate(component)}
+    W = [[0.0] * n for _ in range(n)]
+    b = [component_base[node] for node in component]
+    for edge in internal:
+        src_idx = idx_map[edge.source]
+        tgt_idx = idx_map[edge.target]
+        coeff = 1.0 if edge.transform == "identity" else strengths[edge.id]
+        W[tgt_idx][src_idx] += float(edge.sign) * float(coeff) * float(edge.context_multiplier)
+    return W, b
+
+
+def _solve_scc_bounded_affine(
+    component: list[str],
+    internal: list[ModelEdge],
+    component_base: dict[str, float],
+    current: dict[str, float],
+    strengths: dict[str, float],
+    model: ComputationalModel,
+    config: EngineConfig,
+    *,
+    tick: int,
+    sample_id: int | str,
+) -> tuple[dict[str, float], bool, list[Issue], dict[str, Any]]:
+    """Solve box-constrained linear zero-lag SCC via active-set Newton + damped projection."""
+    W, b = _build_affine_scc_system(component, internal, component_base, strengths)
+    n = len(component)
+
+    def clamp_idx(idx: int, val: float) -> float:
+        return _apply_bounds(model.variables[component[idx]], val)
+
+    def eval_residual(vec: list[float]) -> tuple[list[float], list[float], float, float]:
+        raw = [b[i] + sum(W[i][j] * vec[j] for j in range(n)) for i in range(n)]
+        proj = [clamp_idx(i, raw[i]) for i in range(n)]
+        res = max((abs(vec[i] - proj[i]) for i in range(n)), default=0.0)
+        d_scale = max(1.0, *(abs(v) for v in vec), *(abs(v) for v in proj))
+        tol = config.jacobi_abs_tol + config.jacobi_rel_tol * d_scale
+        return raw, proj, res, tol
+
+    active: dict[int, float] = {}
+    last_err = "bounded active-set did not converge"
+    for switch_iter in range(24):
+        free = [i for i in range(n) if i not in active]
+        cand = [0.0] * n
+        for idx, bound_val in active.items():
+            cand[idx] = bound_val
+        if free:
+            A_f = [[(1.0 - W[i][j]) if i == j else -W[i][j] for j in free] for i in free]
+            rhs_f = [b[i] + sum(W[i][j] * active[j] for j in active) for i in free]
+            sol_f, err_msg = _solve_linear_system_gaussian(A_f, rhs_f, pivot_tol=1e-12)
+            if sol_f is None or any(not math.isfinite(v) for v in sol_f):
+                last_err = err_msg or "singular bounded subsystem"
+                break
+            for pos, i in enumerate(free):
+                cand[i] = sol_f[pos]
+        raw, proj, res, tol = eval_residual(cand)
+        if res <= tol and all(math.isfinite(v) for v in proj):
+            return {component[i]: proj[i] for i in range(n)}, True, [], {
+                "tick": tick,
+                "sample_id": sample_id,
+                "component": component,
+                "internal_edges": [e.id for e in internal],
+                "solver": "bounded_affine",
+                "method": "bounded_active_set",
+                "iterations": switch_iter + 1,
+                "residual": res,
+                "tolerance": tol,
+                "converged": True,
+            }
+        next_active: dict[int, float] = {}
+        for i in range(n):
+            low, high = model.variables[component[i]].bounds
+            if low is not None and raw[i] < low:
+                next_active[i] = float(low)
+            elif high is not None and raw[i] > high:
+                next_active[i] = float(high)
+        if next_active == active:
+            break
+        active = next_active
+
+    max_proj_iters = max(200, config.jacobi_max_iter)
+    best_res = float("inf")
+    for alpha in (0.5, 0.25, 0.1):
+        vec = [clamp_idx(i, current[component[i]]) for i in range(n)]
+        for it in range(max_proj_iters):
+            raw, proj, res, tol = eval_residual(vec)
+            best_res = res
+            if res <= tol and all(math.isfinite(v) for v in proj):
+                return {component[i]: proj[i] for i in range(n)}, True, [], {
+                    "tick": tick,
+                    "sample_id": sample_id,
+                    "component": component,
+                    "internal_edges": [e.id for e in internal],
+                    "solver": "bounded_affine",
+                    "method": "bounded_damped_projection",
+                    "iterations": it + 1,
+                    "residual": res,
+                    "tolerance": tol,
+                    "converged": True,
+                }
+            vec = [clamp_idx(i, (1.0 - alpha) * vec[i] + alpha * raw[i]) for i in range(n)]
+
+    issues_out = [
+        issue(
+            "NONCONVERGENCE",
+            actual=component,
+            message=f"bounded_affine solve failed: {last_err} (residual={best_res})",
+        )
+    ]
+    return {node: clamp_idx(i, current[node]) for i, node in enumerate(component)}, False, issues_out, {
+        "tick": tick,
+        "sample_id": sample_id,
+        "component": component,
+        "internal_edges": [e.id for e in internal],
+        "solver": "bounded_affine",
+        "converged": False,
+        "error": "NONCONVERGENCE",
+        "residual": best_res,
+    }
 
 
 def _solve_scc(
@@ -1162,22 +1346,13 @@ def _solve_scc(
             "converged": True,
         }
 
-    # 2. If Jacobi failed and linear_auto is configured, attempt direct affine solve
-    if getattr(config, "scc_solver", "jacobi") == "linear_auto":
-        eligible, reason = _is_affine_eligible(component, internal, model)
-        if eligible:
+    # 2. If Jacobi failed and linear_auto / bounded_affine is configured, attempt affine solve
+    solver_choice = getattr(config, "scc_solver", "jacobi")
+    if solver_choice in {"linear_auto", "bounded_affine"}:
+        eligible_unbounded, reason = _is_affine_eligible(component, internal, model, allow_bounds=False)
+        if solver_choice == "linear_auto" and eligible_unbounded:
+            W, b = _build_affine_scc_system(component, internal, component_base, strengths)
             n = len(component)
-            idx_map = {node: i for i, node in enumerate(component)}
-            W = [[0.0] * n for _ in range(n)]
-            b = [component_base[node] for node in component]
-            for edge in internal:
-                src_idx = idx_map[edge.source]
-                tgt_idx = idx_map[edge.target]
-                s = strengths[edge.id]
-                coeff = 1.0 if edge.transform == "identity" else s
-                factor = float(edge.sign) * float(coeff) * float(edge.context_multiplier)
-                W[tgt_idx][src_idx] += factor
-
             A = [[0.0] * n for _ in range(n)]
             for i in range(n):
                 for j in range(n):
@@ -1227,24 +1402,38 @@ def _solve_scc(
                 "error": err_code,
                 "detail": err_msg,
             }
-        else:
-            issues.append(
-                issue(
-                    "NONCONVERGENCE",
-                    actual=component,
-                    message=f"linear_auto ineligible for nonlinear SCC: {reason}",
-                )
+
+        eligible_bounded, bounded_reason = _is_affine_eligible(component, internal, model, allow_bounds=True)
+        if eligible_bounded:
+            return _solve_scc_bounded_affine(
+                component,
+                internal,
+                component_base,
+                current,
+                strengths,
+                model,
+                config,
+                tick=tick,
+                sample_id=sample_id,
             )
-            return x, False, issues, {
-                "tick": tick,
-                "sample_id": sample_id,
-                "component": component,
-                "internal_edges": [e.id for e in internal],
-                "solver": "linear_auto",
-                "converged": False,
-                "error": "UNSUPPORTED_TRANSFORM",
-                "reason": reason,
-            }
+
+        issues.append(
+            issue(
+                "NONCONVERGENCE",
+                actual=component,
+                message=f"{solver_choice} ineligible for nonlinear SCC: {bounded_reason or reason}",
+            )
+        )
+        return x, False, issues, {
+            "tick": tick,
+            "sample_id": sample_id,
+            "component": component,
+            "internal_edges": [e.id for e in internal],
+            "solver": solver_choice,
+            "converged": False,
+            "error": "UNSUPPORTED_TRANSFORM",
+            "reason": bounded_reason or reason,
+        }
 
     # Standard Jacobi non-convergence
     issues.append(issue("NONCONVERGENCE", actual=component, message="zero-lag SCC did not converge"))
@@ -1745,6 +1934,69 @@ def hand_calc_three_node_chain() -> dict[str, Any]:
     return {"model": model, "expected": {"factor:A": 1.0, "factor:B": 0.5, "factor:C": 0.2}}
 
 
+VALID_TRACE_TRANSFORM_MODES = frozenset(
+    {
+        "linear",
+        "threshold",
+        "logistic",
+        "elasticity",
+        "identity",
+        "saturation",
+        "above",
+        "below",
+        "deadband",
+        "hysteresis",
+    }
+)
+
+
+def _populate_trace_step_details(
+    step_dict: dict[str, Any],
+    *,
+    model: ComputationalModel,
+    edge: ModelEdge,
+    output: float,
+    target_state_before: float,
+    target_state_after: float,
+    retention_factors: dict[str, float],
+    config: EngineConfig,
+    gate_before_step: bool,
+    gate_after_step: bool,
+) -> None:
+    """Attach stock-flow integration metrics and transform mode metadata to a trace step."""
+    if edge.target in model.variables and model.variables[edge.target].scale == "stock":
+        ret_factor = float(retention_factors.get(edge.target, 1.0))
+        explicit_decay = model.variables[edge.target].decay_rate
+        if explicit_decay is not None:
+            decay_val = float(explicit_decay)
+        elif 0.0 < ret_factor < 1.0:
+            decay_val = round(1.0 - ret_factor, 6)
+        else:
+            decay_val = 0.0
+        outflow_rate = target_state_before * (1.0 - ret_factor) / float(config.timestep)
+        step_dict["stock_flow_integrations"] = {
+            "stock_variable": edge.target,
+            "inflow_rate": output,
+            "outflow_rate": outflow_rate,
+            "retention_factor": ret_factor,
+            "decay_constant": decay_val,
+            "dt": float(config.timestep),
+            "integrated_level": target_state_after,
+        }
+    if edge.transform in VALID_TRACE_TRANSFORM_MODES - {"linear", "identity"}:
+        raw_mode = (
+            str(edge.transform_parameters.get("mode", edge.transform))
+            if edge.transform == "threshold"
+            else str(edge.transform)
+        )
+        mode = raw_mode if raw_mode in VALID_TRACE_TRANSFORM_MODES else "linear"
+        step_dict["transform_applied"] = {
+            "mode": mode,
+            "threshold_active_before": bool(gate_before_step),
+            "threshold_active_after": bool(gate_after_step),
+        }
+
+
 def generate_numerical_execution_trace(
     model: ComputationalModel,
     config: EngineConfig,
@@ -1885,28 +2137,18 @@ def generate_numerical_execution_trace(
                     "intervention_type": interv_type,
                 },
             }
-            if target in model.variables and model.variables[target].scale == "stock":
-                ret_factor = retention_factors.get(target, 1.0)
-                decay_rate = model.variables[target].decay_rate or 0.0
-                outflow_rate = target_state_before * (1.0 - ret_factor) / float(config.timestep)
-                step_dict["stock_flow_integrations"] = {
-                    "stock_variable": target,
-                    "inflow_rate": output,
-                    "outflow_rate": outflow_rate,
-                    "retention_factor": ret_factor,
-                    "decay_constant": decay_rate,
-                    "dt": float(config.timestep),
-                    "integrated_level": target_state_after,
-                }
-            if edge.transform in {"threshold", "logistic", "hysteresis", "saturation"}:
-                mode = edge.transform_parameters.get("mode", edge.transform) if edge.transform == "threshold" else edge.transform
-                if mode not in {"linear", "logistic", "hysteresis", "saturation"}:
-                    mode = "linear"
-                step_dict["transform_applied"] = {
-                    "mode": mode,
-                    "threshold_active_before": bool(gate_before_step),
-                    "threshold_active_after": bool(gate_after_step),
-                }
+            _populate_trace_step_details(
+                step_dict,
+                model=model,
+                edge=edge,
+                output=output,
+                target_state_before=target_state_before,
+                target_state_after=target_state_after,
+                retention_factors=retention_factors,
+                config=config,
+                gate_before_step=gate_before_step,
+                gate_after_step=gate_after_step,
+            )
             steps.append(step_dict)
             step_counter += 1
 
@@ -2034,28 +2276,18 @@ def generate_numerical_execution_trace(
                     "intervention_type": interv_type,
                 },
             }
-            if edge.target in model.variables and model.variables[edge.target].scale == "stock":
-                ret_factor = retention_factors.get(edge.target, 1.0)
-                decay_rate = model.variables[edge.target].decay_rate or 0.0
-                outflow_rate = target_state_before * (1.0 - ret_factor) / float(config.timestep)
-                step_dict["stock_flow_integrations"] = {
-                    "stock_variable": edge.target,
-                    "inflow_rate": output,
-                    "outflow_rate": outflow_rate,
-                    "retention_factor": ret_factor,
-                    "decay_constant": decay_rate,
-                    "dt": float(config.timestep),
-                    "integrated_level": target_state_after,
-                }
-            if edge.transform in {"threshold", "logistic", "hysteresis", "saturation"}:
-                mode = edge.transform_parameters.get("mode", edge.transform) if edge.transform == "threshold" else edge.transform
-                if mode not in {"linear", "logistic", "hysteresis", "saturation"}:
-                    mode = "linear"
-                step_dict["transform_applied"] = {
-                    "mode": mode,
-                    "threshold_active_before": bool(gate_before.get(edge.id, False)),
-                    "threshold_active_after": bool(edge_gate_state.get(edge.id, False)),
-                }
+            _populate_trace_step_details(
+                step_dict,
+                model=model,
+                edge=edge,
+                output=output,
+                target_state_before=target_state_before,
+                target_state_after=target_state_after,
+                retention_factors=retention_factors,
+                config=config,
+                gate_before_step=bool(gate_before.get(edge.id, False)),
+                gate_after_step=bool(edge_gate_state.get(edge.id, False)),
+            )
             steps.append(step_dict)
             step_counter += 1
 

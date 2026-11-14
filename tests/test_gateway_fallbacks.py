@@ -37,15 +37,19 @@ class GatewayFallbacksAcceptanceTests(unittest.TestCase):
 
         import research_gateway
 
-        # 1. Without external backend, preflight degrades cleanly without crashing
-        with mock.patch("research_gateway._filter_research_env", return_value={}):
+        # 1. Without external backend or local browser runtime, preflight degrades cleanly without crashing
+        with (
+            mock.patch("research_gateway._filter_research_env", return_value={}),
+            mock.patch("research_gateway.shutil.which", return_value=None),
+        ):
             preflight = research_gateway.build_preflight(
                 skill_root=ROOT,
-                capability_assertions={"fetch": False, "search": False},
+                capability_assertions={"host_browser": False, "fetch": False, "search": False},
             )
             self.assertEqual(preflight["selected_route"], "structured-blocker")
             self.assertTrue(len(preflight["blockers"]) > 0)
 
+        with mock.patch("research_gateway._filter_research_env", return_value={}):
             # 2. Invoking network route without backend yields structured delegation/blocker, not unhandled crash
             with tempfile.TemporaryDirectory() as temp_dir:
                 res = research_gateway.run_command(

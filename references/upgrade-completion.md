@@ -1,6 +1,6 @@
 # Upgrade workflow contract
 
-This `2.5.0` stable release pins the published D Research `3.6.0`
+This `2.6.0` stable release pins the published D Research `3.7.0`
 runtime profile to its immutable annotated tag, source commit, Git tree,
 reproducible source archive and full/runtime artifact digests. CI verifies the
 projection against upstream Git objects. Stable release provenance establishes the locked source identity; it does

@@ -47,7 +47,7 @@ EN_POSITIVE_RE = re.compile(
     re.IGNORECASE,
 )
 EN_NEGATIVE_RE = re.compile(
-    r"\b(?:decreases?|reduces?|lowers?|inhibits?|dampens?|cuts?|suppresses?|leads? to lower|causes? lower|results? in lower)\b",
+    r"\b(?:decreases?|reduces?|lowers?|inhibits?|dampens?|cuts?|suppresses?|erodes?|undermines?|curbs?|slows?(?:\s+down)?|leads? to lower|causes? lower|results? in lower)\b",
     re.IGNORECASE,
 )
 EN_CORRELATION_RE = re.compile(
@@ -55,17 +55,17 @@ EN_CORRELATION_RE = re.compile(
     re.IGNORECASE,
 )
 EN_NEUTRAL_CAUSAL_RE = re.compile(
-    r"\b(?:causes?|triggers?|affects?|impacts?|influences?)\b",
+    r"\b(?:causes?|triggers?|affects?|impacts?|influences?|results? in|contributes? to|leads? to|shapes?)\b",
     re.IGNORECASE,
 )
 
 # Vietnamese causal verbs / phrases
 VI_POSITIVE_RE = re.compile(
-    r"(?:làm tăng|thúc đẩy|nâng cao|kích thích|dẫn đến tăng|tăng cường|khuếch đại|đẩy mạnh)",
+    r"(?:làm tăng|thúc đẩy|nâng cao|kích thích|dẫn đến tăng|tăng cường|khuếch đại|đẩy mạnh|tạo đà cho|gia tăng|củng cố)",
     re.IGNORECASE,
 )
 VI_NEGATIVE_RE = re.compile(
-    r"(?:làm giảm|kìm hãm|kiềm chế|hạ thấp|cắt giảm|hạn chế|kéo tụt|làm suy yếu)",
+    r"(?:làm giảm|làm suy giảm|suy giảm|kìm hãm|kìm chế|kiềm chế|hạ thấp|cắt giảm|hạn chế|kéo tụt|làm suy yếu|bào mòn|thu hẹp)",
     re.IGNORECASE,
 )
 VI_CORRELATION_RE = re.compile(
@@ -73,7 +73,7 @@ VI_CORRELATION_RE = re.compile(
     re.IGNORECASE,
 )
 VI_NEUTRAL_CAUSAL_RE = re.compile(
-    r"(?:tác động đến|ảnh hưởng đến|gây ra|dẫn tới|chi phối)",
+    r"(?:tác động đến|ảnh hưởng đến|gây ra|dẫn tới|dẫn đến|khiến cho|kéo theo|góp phần làm|góp phần|chi phối)",
     re.IGNORECASE,
 )
 
@@ -272,6 +272,57 @@ def _extract_entities_and_relation(claim_text: str) -> tuple[str, str, int | Non
     return "source-factor", "target-factor", sign, relation, is_correlation
 
 
+def _extract_structured_or_text_claim(
+    row: dict[str, Any], claim_text: str
+) -> tuple[str, str, int | None, str, bool]:
+    """Prefer structured claim entity/polarity metadata when provided, else parse bilingual text."""
+    raw_source = (
+        row.get("source_factor")
+        or row.get("subject")
+        or row.get("cause")
+        or row.get("source")
+    )
+    raw_target = (
+        row.get("target_factor")
+        or row.get("object")
+        or row.get("effect")
+        or row.get("target")
+    )
+    if isinstance(raw_source, str) and raw_source.strip() and isinstance(raw_target, str) and raw_target.strip():
+        source_name = raw_source.strip()
+        target_name = raw_target.strip()
+        _, _, text_sign, text_relation, text_corr = _extract_entities_and_relation(claim_text)
+        raw_corr = row.get("is_correlation")
+        is_correlation = bool(raw_corr) if raw_corr is not None else text_corr
+        raw_pol = row.get("sign", row.get("polarity"))
+        sign: int | None
+        if raw_pol in (-1, 1) and not isinstance(raw_pol, bool):
+            sign = int(raw_pol)
+        elif isinstance(raw_pol, str):
+            norm_pol = raw_pol.strip().lower()
+            if norm_pol in {"+", "pos", "positive", "increase", "increases", "up"}:
+                sign = 1
+            elif norm_pol in {"-", "neg", "negative", "decrease", "decreases", "down"}:
+                sign = -1
+            else:
+                sign = text_sign if text_sign is not None else 1
+        else:
+            sign = text_sign if text_sign is not None else 1
+        raw_relation = row.get("relation")
+        if isinstance(raw_relation, str) and raw_relation.strip():
+            relation = raw_relation.strip().lower()
+        elif is_correlation:
+            relation = "correlation"
+        elif sign == -1:
+            relation = "decreases"
+        elif text_relation != "causes":
+            relation = text_relation
+        else:
+            relation = "increases" if sign == 1 else "causes"
+        return source_name, target_name, sign, relation, is_correlation
+    return _extract_entities_and_relation(claim_text)
+
+
 
 # --- Core Pipeline Functions ---
 
@@ -336,7 +387,7 @@ def propose_model(
         combined_text = f"{claim_text}. {quote_text}".strip()
         confidence = _parse_confidence(row.get("confidence"))
 
-        source_name, target_name, sign, relation, is_corr = _extract_entities_and_relation(claim_text)
+        source_name, target_name, sign, relation, is_corr = _extract_structured_or_text_claim(row, claim_text)
         source_slug = _slugify(source_name)
         target_slug = _slugify(target_name)
 
@@ -420,23 +471,35 @@ def propose_model(
                 if evidence_id not in nodes_by_id[node_id]["evidence_ids"]:
                     nodes_by_id[node_id]["evidence_ids"].append(evidence_id)
 
-        # Mechanism extraction
+        # Mechanism extraction (structured field preferred over text regex)
         mechanism: str | None = None
-        mech_match = MECHANISM_EN_RE.search(combined_text) or MECHANISM_VI_RE.search(combined_text)
-        if mech_match:
-            mechanism = mech_match.group(1).strip()
+        raw_mech = row.get("mechanism")
+        if isinstance(raw_mech, str) and raw_mech.strip():
+            mechanism = raw_mech.strip()
+        else:
+            mech_match = MECHANISM_EN_RE.search(combined_text) or MECHANISM_VI_RE.search(combined_text)
+            if mech_match:
+                mechanism = mech_match.group(1).strip()
 
-        # Lag extraction
+        # Lag extraction (structured field preferred over text regex)
         lag_ticks: int | None = None
-        lag_match = LAG_EN_RE.search(combined_text) or LAG_VI_RE.search(combined_text)
-        if lag_match:
-            lag_ticks = _parse_lag_ticks(lag_match)
+        raw_lag = row.get("lag_ticks")
+        if isinstance(raw_lag, int) and not isinstance(raw_lag, bool) and raw_lag >= 0:
+            lag_ticks = int(raw_lag)
+        else:
+            lag_match = LAG_EN_RE.search(combined_text) or LAG_VI_RE.search(combined_text)
+            if lag_match:
+                lag_ticks = _parse_lag_ticks(lag_match)
 
-        # Effect size extraction
+        # Effect size extraction (structured field preferred over text regex)
         effect_size: float | None = None
-        eff_match = EFFECT_SIZE_EN_RE.search(combined_text) or EFFECT_SIZE_VI_RE.search(combined_text)
-        if eff_match:
-            effect_size = _parse_effect_size(eff_match.group(1))
+        raw_eff = row.get("effect_size")
+        if isinstance(raw_eff, (int, float)) and not isinstance(raw_eff, bool) and math.isfinite(float(raw_eff)):
+            effect_size = float(raw_eff)
+        else:
+            eff_match = EFFECT_SIZE_EN_RE.search(combined_text) or EFFECT_SIZE_VI_RE.search(combined_text)
+            if eff_match:
+                effect_size = _parse_effect_size(eff_match.group(1))
 
         # Check gaps for this edge
         edge_gap_refs: list[str] = []

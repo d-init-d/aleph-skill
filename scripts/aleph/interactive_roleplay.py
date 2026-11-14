@@ -45,12 +45,18 @@ def _verify_execution_identity(
 def validate_session_spec(
     spec: dict[str, Any],
     model: ComputationalModel | None = None,
+    *,
+    allow_extended_effects: bool = False,
+    allow_parameterized_payoffs: bool = False,
 ) -> tuple[bool, list[str]]:
     """Validate a roleplay session specification according to P6.A rules."""
     errors: list[str] = []
 
     if not isinstance(spec, dict):
         return False, ["Session spec must be an object"]
+
+    ext_effects = bool(allow_extended_effects or spec.get("allow_extended_effects", False))
+    param_payoffs = bool(allow_parameterized_payoffs or spec.get("allow_parameterized_payoffs", False))
 
     if spec.get("schema_version") != ROLEPLAY_SPEC_SCHEMA_VERSION:
         errors.append(f"schema_version must be '{ROLEPLAY_SPEC_SCHEMA_VERSION}', got {spec.get('schema_version')}")
@@ -135,8 +141,12 @@ def validate_session_spec(
                 lag = eff.get("lag", 0)
                 if not isinstance(lag, int) or isinstance(lag, bool) or lag < 0:
                     errors.append(f"Effect lag in {key} must be non-negative integer")
-                if eff.get("op", "add") != "add":
-                    errors.append(f"Effect op in {key} must be 'add' (additive intervention in v1)")
+                allowed_ops = {"add", "set", "multiply"} if ext_effects else {"add"}
+                if eff.get("op", "add") not in allowed_ops:
+                    if ext_effects:
+                        errors.append(f"Effect op in {key} must be one of add, set, multiply")
+                    else:
+                        errors.append(f"Effect op in {key} must be 'add' (additive intervention in v1)")
 
     # Validate payoffs
     payoffs = spec.get("payoffs")
@@ -162,7 +172,30 @@ def validate_session_spec(
                     if model and n not in model.variables:
                         errors.append(f"state_weight node '{n}' in actor '{actor}' not in model variables")
             util_table = p_conf.get("utility_table")
-            if not isinstance(util_table, dict):
+            has_param_fields = param_payoffs and (
+                "default_utility" in p_conf or "action_weights" in p_conf
+            )
+            if has_param_fields:
+                if "default_utility" in p_conf:
+                    du = p_conf["default_utility"]
+                    if not isinstance(du, (int, float)) or isinstance(du, bool) or not math.isfinite(du):
+                        errors.append(f"Actor '{actor}' default_utility must be finite number")
+                if "action_weights" in p_conf:
+                    aw = p_conf["action_weights"]
+                    if not isinstance(aw, dict):
+                        errors.append(f"Actor '{actor}' action_weights must be an object")
+                    else:
+                        for wk, wv in aw.items():
+                            if not isinstance(wv, (int, float)) or isinstance(wv, bool) or not math.isfinite(wv):
+                                errors.append(f"action_weight for {wk} in actor '{actor}' must be finite number")
+                if util_table is not None:
+                    if not isinstance(util_table, dict):
+                        errors.append(f"Actor '{actor}' utility_table must be an object when provided")
+                    else:
+                        for uk, uv in util_table.items():
+                            if not isinstance(uv, (int, float)) or isinstance(uv, bool) or not math.isfinite(uv):
+                                errors.append(f"Utility value for profile {uk} must be finite number")
+            elif not isinstance(util_table, dict):
                 errors.append(f"Actor '{actor}' payoff missing utility_table object")
             else:
                 # P6.A09: Verify utility_table completeness for all profiles
@@ -370,15 +403,88 @@ def commit_actor_action(
 
 def _derive_round_interventions(spec: dict[str, Any], profile: dict[str, str], round_index: int, tick: int) -> list[dict[str, Any]]:
     deltas: dict[tuple[str, int], float] = {}
+    extended: list[dict[str, Any]] = []
     for actor, action in profile.items():
         effects = spec["action_effects"].get(f"{actor}:{action}") or spec["action_effects"].get(action) or []
-        for effect in effects:
-            key = (effect["target"], effect.get("lag", 0))
-            deltas[key] = deltas.get(key, 0.0) + float(effect["magnitude"])
-    return [{"id": f"int_r{round_index}_{target}_lag{lag}", "target": target,
-             "op": "add", "value": magnitude, "start_tick": tick + lag,
-             "end_tick": None, "release_policy": "retain"}
-            for (target, lag), magnitude in sorted(deltas.items())]
+        for idx, effect in enumerate(effects):
+            op = str(effect.get("op", "add"))
+            lag = int(effect.get("lag", 0))
+            target = str(effect["target"])
+            mag = float(effect["magnitude"])
+            if op == "add":
+                key = (target, lag)
+                deltas[key] = deltas.get(key, 0.0) + mag
+            else:
+                extended.append(
+                    {
+                        "id": f"int_r{round_index}_{op}_{actor}_{idx}_{target}_lag{lag}",
+                        "target": target,
+                        "op": op,
+                        "value": mag,
+                        "start_tick": tick + lag,
+                        "end_tick": None,
+                        "release_policy": str(effect.get("release_policy", "retain")),
+                    }
+                )
+    interventions = [
+        {
+            "id": f"int_r{round_index}_{target}_lag{lag}",
+            "target": target,
+            "op": "add",
+            "value": magnitude,
+            "start_tick": tick + lag,
+            "end_tick": None,
+            "release_policy": "retain",
+        }
+        for (target, lag), magnitude in sorted(deltas.items())
+    ]
+    interventions.extend(extended)
+    return interventions
+
+
+def _actor_action_costs(spec: dict[str, Any], committed_profile: dict[str, str], actors: list[str]) -> dict[str, float]:
+    """Resolve committed action costs per actor."""
+    costs: dict[str, float] = {}
+    for actor in actors:
+        chosen_id = committed_profile[actor]
+        for act in spec["allowed_actions"][actor]:
+            if act["id"] == chosen_id:
+                costs[actor] = float(act.get("cost", 0.0))
+                break
+    return costs
+
+
+def evaluate_actor_utility(
+    payoff_conf: dict[str, Any],
+    committed_profile: dict[str, str],
+    actors: list[str],
+    state: dict[str, float],
+    actor_cost: float = 0.0,
+    *,
+    actor_id: str | None = None,
+) -> float:
+    """Compute scalar round payoff from state weights, utility table or parameterized weights, and action cost."""
+    state_component = sum(
+        float(state.get(node, 0.0)) * float(weight)
+        for node, weight in (payoff_conf.get("state_weights") or {}).items()
+    )
+    profile_plain = ",".join(committed_profile[a] for a in actors)
+    profile_tagged = ",".join(f"{a}:{committed_profile[a]}" for a in actors)
+    util_table = payoff_conf.get("utility_table") or {}
+    if profile_plain in util_table or profile_tagged in util_table:
+        util_val = float(util_table.get(profile_plain, util_table.get(profile_tagged, 0.0)))
+    else:
+        util_val = float(payoff_conf.get("default_utility", 0.0))
+        action_weights = payoff_conf.get("action_weights") or {}
+        if isinstance(action_weights, dict):
+            for key, weight in action_weights.items():
+                if ":" in key:
+                    k_actor, k_action = key.split(":", 1)
+                    if committed_profile.get(k_actor) == k_action:
+                        util_val += float(weight)
+                elif actor_id is not None and committed_profile.get(actor_id) == key:
+                    util_val += float(weight)
+    return round(state_component + util_val - float(actor_cost), 6)
 
 
 def advance_roleplay_round(
@@ -459,29 +565,18 @@ def advance_roleplay_round(
     round_state = sim_res["payload"]["final_state"]
 
     # Calculate payoffs (P6.A08, P6.C05)
-    # payoff = state_weights + utility - cost
-    profile_plain = ",".join(committed_profile[a] for a in actors)
-    profile_tagged = ",".join(f"{a}:{committed_profile[a]}" for a in actors)
-
-    actor_costs = {}
-    for a in actors:
-        chosen_id = committed_profile[a]
-        for act in spec["allowed_actions"][a]:
-            if act["id"] == chosen_id:
-                actor_costs[a] = float(act.get("cost", 0.0))
-                break
-
-    round_payoffs: dict[str, float] = {}
-    for a in actors:
-        p_conf = spec["payoffs"][a]
-        state_component = sum(
-            round_state.get(node, 0.0) * float(weight)
-            for node, weight in p_conf["state_weights"].items()
+    actor_costs = _actor_action_costs(spec, committed_profile, actors)
+    round_payoffs: dict[str, float] = {
+        a: evaluate_actor_utility(
+            spec["payoffs"][a],
+            committed_profile,
+            actors,
+            round_state,
+            actor_costs.get(a, 0.0),
+            actor_id=a,
         )
-        util_table = p_conf["utility_table"]
-        util_val = float(util_table.get(profile_plain, util_table.get(profile_tagged, 0.0)))
-        cost_val = actor_costs.get(a, 0.0)
-        round_payoffs[a] = round(state_component + util_val - cost_val, 6)
+        for a in actors
+    }
 
     round_record = {
         "round_index": round_idx,
@@ -599,28 +694,18 @@ def replay_roleplay_session(
         replayed_state = sim_res["payload"]["final_state"]
 
         committed_profile = r["committed_actions"]
-        profile_plain = ",".join(committed_profile[a] for a in actors)
-        profile_tagged = ",".join(f"{a}:{committed_profile[a]}" for a in actors)
-
-        actor_costs = {}
-        for a in actors:
-            chosen_id = committed_profile[a]
-            for act in spec["allowed_actions"][a]:
-                if act["id"] == chosen_id:
-                    actor_costs[a] = float(act.get("cost", 0.0))
-                    break
-
-        replayed_payoffs: dict[str, float] = {}
-        for a in actors:
-            p_conf = spec["payoffs"][a]
-            state_val = sum(
-                replayed_state.get(node, 0.0) * float(weight)
-                for node, weight in p_conf["state_weights"].items()
+        actor_costs = _actor_action_costs(spec, committed_profile, actors)
+        replayed_payoffs: dict[str, float] = {
+            a: evaluate_actor_utility(
+                spec["payoffs"][a],
+                committed_profile,
+                actors,
+                replayed_state,
+                actor_costs.get(a, 0.0),
+                actor_id=a,
             )
-            util_table = p_conf["utility_table"]
-            util_val = float(util_table.get(profile_plain, util_table.get(profile_tagged, 0.0)))
-            cost_val = actor_costs.get(a, 0.0)
-            replayed_payoffs[a] = round(state_val + util_val - cost_val, 6)
+            for a in actors
+        }
 
         # Bit-for-bit check
         if replayed_payoffs != r["payoffs"]:
@@ -708,4 +793,109 @@ def replay_roleplay_session(
         "match": True,
         "replayed_rounds_count": len(replayed_rounds),
         "details": replayed_rounds,
+    }
+
+
+def suggest_round_commitments(
+    session: dict[str, Any],
+    initial_model: ComputationalModel,
+    config: EngineConfig | None = None,
+    *,
+    max_profiles: int = 256,
+) -> dict[str, Any]:
+    """Recommend best-response and joint-payoff-optimal action commitments for the current active round."""
+    if session.get("status") not in ("initialized", "active"):
+        raise ValueError("Session is not initialized or active; cannot suggest round commitments")
+    spec = session["spec"]
+    actors = spec["actors"]
+    round_idx = session["current_round"]
+    decision_tick = spec["decision_ticks"][round_idx]
+    eval_tick = (
+        spec["decision_ticks"][round_idx + 1]
+        if round_idx + 1 < len(spec["decision_ticks"])
+        else decision_tick + 10
+    )
+    cfg = config or EngineConfig(seed="42")
+    _verify_execution_identity(session, initial_model, cfg)
+
+    past_interventions: list[dict[str, Any]] = []
+    for past_round in session.get("rounds", []):
+        past_interventions.extend(past_round.get("interventions", []))
+
+    round_str = str(round_idx)
+    issued_dict = session.get("issued_packets", {})
+    issued_for_round = issued_dict.get(round_str) if round_str in issued_dict else issued_dict.get(round_idx, {})
+
+    action_lists = [[act["id"] for act in spec["allowed_actions"][a]] for a in actors]
+    all_profiles = list(itertools.product(*action_lists))[:max(1, int(max_profiles))]
+
+    per_action_scores: dict[str, dict[str, list[float]]] = {
+        a: {aid: [] for aid in action_lists[idx]} for idx, a in enumerate(actors)
+    }
+    best_joint_welfare = float("-inf")
+    best_joint_profile: dict[str, str] = {}
+    best_joint_payoffs: dict[str, float] = {}
+
+    for combo in all_profiles:
+        profile = dict(zip(actors, combo, strict=True))
+        round_intervs = _derive_round_interventions(spec, profile, round_idx, decision_tick)
+        run_model = copy.deepcopy(initial_model)
+        run_model.interventions = copy.deepcopy(initial_model.interventions) + past_interventions + round_intervs
+        sim_res = run_deterministic(run_model, config=cfg, ticks=eval_tick)
+        if not sim_res.get("ok"):
+            continue
+        state = sim_res["payload"]["final_state"]
+        costs = _actor_action_costs(spec, profile, actors)
+        payoffs = {
+            a: evaluate_actor_utility(
+                spec["payoffs"][a],
+                profile,
+                actors,
+                state,
+                costs.get(a, 0.0),
+                actor_id=a,
+            )
+            for a in actors
+        }
+        welfare = sum(payoffs.values())
+        if welfare > best_joint_welfare:
+            best_joint_welfare = welfare
+            best_joint_profile = profile
+            best_joint_payoffs = payoffs
+        for a in actors:
+            per_action_scores[a][profile[a]].append(payoffs[a])
+
+    recommendations: dict[str, dict[str, Any]] = {}
+    for a in actors:
+        best_act = None
+        best_avg = float("-inf")
+        for aid, vals in per_action_scores[a].items():
+            avg_val = (sum(vals) / len(vals)) if vals else float("-inf")
+            if avg_val > best_avg:
+                best_avg = avg_val
+                best_act = aid
+        if best_act is None:
+            best_act = spec["allowed_actions"][a][0]["id"]
+            best_avg = 0.0
+        pkt_hash = issued_for_round.get(a)
+        recommendations[a] = {
+            "actor_id": a,
+            "action_id": best_act,
+            "expected_payoff": round(best_avg, 6),
+            "packet_hash": pkt_hash,
+            "commit_payload": {
+                "actor_id": a,
+                "action_id": best_act,
+                "packet_hash": pkt_hash,
+            },
+        }
+
+    return {
+        "round_index": round_idx,
+        "decision_tick": decision_tick,
+        "eval_tick": eval_tick,
+        "profiles_evaluated": len(all_profiles),
+        "best_joint_profile": best_joint_profile,
+        "best_joint_payoffs": best_joint_payoffs,
+        "recommendations": recommendations,
     }

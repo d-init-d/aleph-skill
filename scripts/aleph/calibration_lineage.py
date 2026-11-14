@@ -6,9 +6,12 @@ explicit scope can authorize an empirical probability-calibration claim.
 """
 from __future__ import annotations
 
+import argparse
 import csv
+import json
 import math
 import os
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -262,3 +265,406 @@ def verify_lineage(workspace: Path, cases: list[dict[str, Any]], policy: dict[st
     return {"execution_verified": execution_ok, "verified_case_count": len(verified),
             "historical_provenance_verified": trusted, "attestation_type": "host_trust_receipt" if trusted else "unattested",
             "trust_reason": trust_reason, "causal_validity": "not_established"}
+
+
+def _sigmoid(z: float) -> float:
+    """Numerically stable logistic sigmoid."""
+    if z >= 0.0:
+        exp_neg = math.exp(-min(z, 60.0))
+        return 1.0 / (1.0 + exp_neg)
+    exp_pos = math.exp(max(z, -60.0))
+    return exp_pos / (1.0 + exp_pos)
+
+
+def _validate_scores_and_outcomes(
+    scores: Sequence[int | float], outcomes: Sequence[int | float | bool]
+) -> tuple[list[float], list[float]]:
+    if not scores or len(scores) != len(outcomes):
+        raise ValueError("scores and outcomes must be non-empty lists of equal length")
+    clean_scores = [number(s) for s in scores]
+    clean_outcomes: list[float] = []
+    for raw_y in outcomes:
+        if isinstance(raw_y, bool):
+            clean_outcomes.append(1.0 if raw_y else 0.0)
+        else:
+            y_val = number(raw_y)
+            if not 0.0 <= y_val <= 1.0:
+                raise ValueError("outcomes must lie in [0, 1]")
+            clean_outcomes.append(y_val)
+    return clean_scores, clean_outcomes
+
+
+def compute_calibration_diagnostics(
+    probs: Sequence[int | float],
+    outcomes: Sequence[int | float | bool],
+    *,
+    bins: int = 10,
+) -> dict[str, Any]:
+    """Compute Brier score, log-loss, Expected Calibration Error (ECE), and reliability bins."""
+    clean_probs, clean_outcomes = _validate_scores_and_outcomes(probs, outcomes)
+    for p in clean_probs:
+        if not 0.0 <= p <= 1.0:
+            raise ValueError(f"probability must lie in [0, 1], got {p}")
+    n = len(clean_probs)
+    brier = sum((p - y) ** 2 for p, y in zip(clean_probs, clean_outcomes, strict=True)) / n
+    eps = 1e-15
+    log_loss_sum = 0.0
+    for p, y in zip(clean_probs, clean_outcomes, strict=True):
+        pc = min(1.0 - eps, max(eps, p))
+        log_loss_sum -= y * math.log(pc) + (1.0 - y) * math.log(1.0 - pc)
+    log_loss = log_loss_sum / n
+
+    num_bins = max(1, int(bins))
+    buckets: list[list[tuple[float, float]]] = [[] for _ in range(num_bins)]
+    for p, y in zip(clean_probs, clean_outcomes, strict=True):
+        idx = min(num_bins - 1, max(0, int(p * num_bins)))
+        buckets[idx].append((p, y))
+
+    reliability_bins: list[dict[str, Any]] = []
+    ece = 0.0
+    for idx, bucket in enumerate(buckets):
+        if not bucket:
+            continue
+        cnt = len(bucket)
+        avg_conf = sum(p for p, _ in bucket) / cnt
+        emp_freq = sum(y for _, y in bucket) / cnt
+        gap = abs(avg_conf - emp_freq)
+        ece += (cnt / n) * gap
+        reliability_bins.append(
+            {
+                "bin_index": idx,
+                "lower": round(idx / num_bins, 4),
+                "upper": round((idx + 1) / num_bins, 4),
+                "count": cnt,
+                "avg_confidence": round(avg_conf, 6),
+                "empirical_frequency": round(emp_freq, 6),
+                "abs_gap": round(gap, 6),
+            }
+        )
+
+    return {
+        "count": n,
+        "brier_score": round(brier, 6),
+        "log_loss": round(log_loss, 6),
+        "ece": round(ece, 6),
+        "reliability_bins": reliability_bins,
+    }
+
+
+def fit_platt_scaling(
+    raw_scores: Sequence[int | float],
+    outcomes: Sequence[int | float | bool],
+    *,
+    max_iter: int = 200,
+    lr: float = 0.1,
+    l2: float = 1e-4,
+) -> dict[str, Any]:
+    """Fit Platt logistic scaling p = sigmoid(a * score + b) via regularized Newton-Raphson."""
+    scores, y_raw = _validate_scores_and_outcomes(raw_scores, outcomes)
+    is_binary = all(y in (0.0, 1.0) for y in y_raw)
+    if is_binary:
+        n_pos = sum(y_raw)
+        n_neg = len(y_raw) - n_pos
+        t_pos = (n_pos + 1.0) / (n_pos + 2.0)
+        t_neg = 1.0 / (n_neg + 2.0)
+        targets = [t_pos if y == 1.0 else t_neg for y in y_raw]
+    else:
+        targets = list(y_raw)
+
+    a = 0.0
+    b = 0.0
+    reg = max(1e-8, float(l2))
+
+    def obj(curr_a: float, curr_b: float) -> float:
+        total = 0.5 * reg * (curr_a * curr_a + curr_b * curr_b)
+        for s, t in zip(scores, targets, strict=True):
+            p = min(1.0 - 1e-15, max(1e-15, _sigmoid(curr_a * s + curr_b)))
+            total -= t * math.log(p) + (1.0 - t) * math.log(1.0 - p)
+        return total
+
+    current_loss = obj(a, b)
+    for _ in range(max(10, int(max_iter))):
+        g_a = reg * a
+        g_b = reg * b
+        h_aa = reg
+        h_ab = 0.0
+        h_bb = reg
+        for s, t in zip(scores, targets, strict=True):
+            p = _sigmoid(a * s + b)
+            diff = p - t
+            w = max(1e-12, p * (1.0 - p))
+            g_a += diff * s
+            g_b += diff
+            h_aa += w * s * s
+            h_ab += w * s
+            h_bb += w
+        det = h_aa * h_bb - h_ab * h_ab
+        if abs(det) < 1e-18:
+            step_a = -lr * g_a
+            step_b = -lr * g_b
+        else:
+            step_a = -(h_bb * g_a - h_ab * g_b) / det
+            step_b = -(-h_ab * g_a + h_aa * g_b) / det
+
+        if max(abs(step_a), abs(step_b)) < 1e-10:
+            break
+
+        scale = 1.0
+        accepted = False
+        while scale >= 1e-6:
+            cand_a = a + scale * step_a
+            cand_b = b + scale * step_b
+            cand_loss = obj(cand_a, cand_b)
+            if cand_loss <= current_loss + 1e-12:
+                a, b, current_loss = cand_a, cand_b, cand_loss
+                accepted = True
+                break
+            scale *= 0.5
+        if not accepted:
+            break
+
+    calibrated = [round(_sigmoid(a * s + b), 6) for s in scores]
+    diagnostics = compute_calibration_diagnostics(calibrated, y_raw)
+    return {
+        "method": "platt_scaling",
+        "a": round(a, 8),
+        "b": round(b, 8),
+        "calibrated_probs": calibrated,
+        "diagnostics": diagnostics,
+    }
+
+
+def fit_isotonic_or_binned_calibration(
+    raw_scores: Sequence[int | float],
+    outcomes: Sequence[int | float | bool],
+    *,
+    method: str = "isotonic",
+    bins: int = 10,
+) -> dict[str, Any]:
+    """Fit non-parametric PAVA isotonic regression or empirical histogram binning."""
+    scores, y_vals = _validate_scores_and_outcomes(raw_scores, outcomes)
+    norm_method = method.strip().lower()
+    if norm_method not in {"isotonic", "binned", "histogram_binning"}:
+        raise ValueError(f"unsupported calibration method: {method}")
+
+    if norm_method == "isotonic":
+        indexed = sorted(
+            zip(scores, y_vals, range(len(scores)), strict=True),
+            key=lambda item: (item[0], item[2]),
+        )
+        # Merge exact score ties before running Pool-Adjacent-Violators Algorithm
+        blocks: list[list[Any]] = []
+        for s_val, y_val, orig_idx in indexed:
+            if blocks and blocks[-1][3] == s_val:
+                blocks[-1][0] += y_val
+                blocks[-1][1] += 1
+                blocks[-1][4].append(orig_idx)
+            else:
+                blocks.append([y_val, 1, s_val, s_val, [orig_idx]])
+
+        pava: list[list[Any]] = []
+        for blk in blocks:
+            pava.append(blk)
+            while len(pava) >= 2:
+                prev_mean = pava[-2][0] / pava[-2][1]
+                curr_mean = pava[-1][0] / pava[-1][1]
+                if prev_mean <= curr_mean:
+                    break
+                right = pava.pop()
+                left = pava[-1]
+                left[0] += right[0]
+                left[1] += right[1]
+                left[3] = right[3]
+                left[4].extend(right[4])
+
+        calibrated = [0.0] * len(scores)
+        intervals: list[dict[str, Any]] = []
+        for sum_y, cnt, min_s, max_s, indices in pava:
+            prob = round(min(1.0, max(0.0, sum_y / cnt)), 6)
+            for idx in indices:
+                calibrated[idx] = prob
+            intervals.append(
+                {
+                    "min_score": min_s,
+                    "max_score": max_s,
+                    "count": cnt,
+                    "probability": prob,
+                }
+            )
+        return {
+            "method": "isotonic",
+            "intervals": intervals,
+            "calibrated_probs": calibrated,
+            "diagnostics": compute_calibration_diagnostics(calibrated, y_vals, bins=bins),
+        }
+
+    num_bins = max(1, int(bins))
+    min_s = min(scores)
+    max_s = max(scores)
+    span = max_s - min_s
+    bin_sums = [0.0] * num_bins
+    bin_counts = [0] * num_bins
+    assigned_bins: list[int] = []
+    for s_val, y_val in zip(scores, y_vals, strict=True):
+        if span <= 0.0:
+            b_idx = 0
+        else:
+            b_idx = min(num_bins - 1, max(0, int(((s_val - min_s) / span) * num_bins)))
+        bin_sums[b_idx] += y_val
+        bin_counts[b_idx] += 1
+        assigned_bins.append(b_idx)
+
+    global_prior = sum(y_vals) / len(y_vals)
+    bin_probs = [
+        round((bin_sums[i] + global_prior) / (bin_counts[i] + 1.0), 6) if bin_counts[i] > 0 else round(global_prior, 6)
+        for i in range(num_bins)
+    ]
+    calibrated = [bin_probs[b_idx] for b_idx in assigned_bins]
+    bin_table = [
+        {
+            "bin_index": i,
+            "lower": round(min_s + (span * i / num_bins), 6),
+            "upper": round(min_s + (span * (i + 1) / num_bins), 6),
+            "count": bin_counts[i],
+            "probability": bin_probs[i],
+        }
+        for i in range(num_bins)
+    ]
+    return {
+        "method": "histogram_binning",
+        "bins": bin_table,
+        "calibrated_probs": calibrated,
+        "diagnostics": compute_calibration_diagnostics(calibrated, y_vals, bins=num_bins),
+    }
+
+
+def bayesian_update_branches(
+    priors: dict[str, float],
+    likelihoods: dict[str, float] | list[dict[str, float]],
+) -> dict[str, Any]:
+    """Perform exact single-step or sequential Bayesian posterior updating across scenario branches."""
+    if not isinstance(priors, dict) or not priors:
+        raise ValueError("priors must be a non-empty mapping of branch_id -> prior weight")
+    branches = sorted(priors.keys())
+    clean_priors: dict[str, float] = {}
+    for branch in branches:
+        val = number(priors[branch])
+        if val < 0.0:
+            raise ValueError(f"prior for branch '{branch}' must be non-negative")
+        clean_priors[branch] = val
+    prior_total = sum(clean_priors.values())
+    if prior_total <= 0.0:
+        raise ValueError("prior total weight must be positive")
+    prior_norm = {b: v / prior_total for b, v in clean_priors.items()}
+
+    waves = [likelihoods] if isinstance(likelihoods, dict) else list(likelihoods)
+    if not waves:
+        raise ValueError("likelihoods must be a dict or non-empty list of dicts")
+
+    current = dict(prior_norm)
+    cum_likelihood = {b: 1.0 for b in branches}
+    for wave_idx, wave in enumerate(waves):
+        if not isinstance(wave, dict):
+            raise ValueError(f"likelihood wave {wave_idx} must be a dict")
+        unnormalized: dict[str, float] = {}
+        for b in branches:
+            lk = number(wave.get(b, 1.0))
+            if lk < 0.0:
+                raise ValueError(f"likelihood for branch '{b}' in wave {wave_idx} must be non-negative")
+            cum_likelihood[b] *= lk
+            unnormalized[b] = current[b] * lk
+        wave_total = sum(unnormalized.values())
+        if wave_total <= 0.0:
+            raise ValueError(f"Zero-mass collapse in Bayesian update wave {wave_idx}: all branch likelihoods zero")
+        current = {b: v / wave_total for b, v in unnormalized.items()}
+
+    log_bayes_factors: dict[str, float] = {}
+    for b in branches:
+        l_b = cum_likelihood[b]
+        other_mass = sum(prior_norm[o] for o in branches if o != b)
+        if other_mass > 0.0:
+            l_not_b = sum(prior_norm[o] * cum_likelihood[o] for o in branches if o != b) / other_mass
+        else:
+            l_not_b = l_b
+        if l_b > 0.0 and l_not_b > 0.0:
+            log_bayes_factors[b] = round(math.log(l_b / l_not_b), 6)
+        elif l_b == 0.0:
+            log_bayes_factors[b] = float("-inf")
+        else:
+            log_bayes_factors[b] = float("inf")
+
+    posteriors_rounded = {b: round(v, 6) for b, v in current.items()}
+    map_branch = max(branches, key=lambda b: (current[b], b))
+    return {
+        "priors": {b: round(v, 6) for b, v in prior_norm.items()},
+        "posteriors": posteriors_rounded,
+        "log_bayes_factors": {
+            b: (v if math.isfinite(v) else str(v)) for b, v in log_bayes_factors.items()
+        },
+        "map_branch": map_branch,
+        "waves_applied": len(waves),
+    }
+
+
+def _calibration_self_test() -> dict[str, Any]:
+    scores = [0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.9]
+    outcomes = [0, 0, 0, 0, 1, 1, 1, 1]
+    platt = fit_platt_scaling(scores, outcomes)
+    assert platt["a"] > 0.0
+    assert platt["diagnostics"]["brier_score"] < 0.15
+    iso = fit_isotonic_or_binned_calibration(scores, outcomes, method="isotonic")
+    assert all(
+        iso["calibrated_probs"][i] <= iso["calibrated_probs"][i + 1]
+        for i in range(len(iso["calibrated_probs"]) - 1)
+    )
+    bayes = bayesian_update_branches(
+        {"bull": 0.4, "base": 0.4, "bear": 0.2},
+        [{"bull": 0.7, "base": 0.3, "bear": 0.1}, {"bull": 0.6, "base": 0.2, "bear": 0.1}],
+    )
+    assert bayes["map_branch"] == "bull"
+    assert abs(sum(bayes["posteriors"].values()) - 1.0) < 1e-4
+    return {"ok": True, "platt_a": platt["a"], "ece": platt["diagnostics"]["ece"], "map_branch": bayes["map_branch"]}
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Aleph Calibration & Bayesian Posterior CLI")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p_fit = sub.add_parser("fit-calibration", help="Fit Platt or isotonic/binned calibration")
+    p_fit.add_argument("--input", required=True, help="JSON file with scores and outcomes arrays")
+    p_fit.add_argument("--method", choices=["platt", "isotonic", "binned"], default="platt")
+    p_fit.add_argument("--bins", type=int, default=10)
+
+    p_diag = sub.add_parser("diagnostics", help="Compute Brier, log-loss, and ECE metrics")
+    p_diag.add_argument("--input", required=True, help="JSON file with probs and outcomes arrays")
+    p_diag.add_argument("--bins", type=int, default=10)
+
+    p_bayes = sub.add_parser("update-posteriors", help="Bayesian branch posterior updating")
+    p_bayes.add_argument("--input", required=True, help="JSON file with priors and likelihoods")
+
+    sub.add_parser("self-test", help="Run built-in calibration self-test")
+
+    args = parser.parse_args(argv)
+    if args.cmd == "self-test":
+        print(json.dumps(_calibration_self_test(), indent=2))
+        return 0
+    payload, _ = load_json_secure(Path(args.input))
+    if not isinstance(payload, dict):
+        raise ValueError("calibration input JSON must be an object")
+    if args.cmd == "fit-calibration":
+        if args.method == "platt":
+            out = fit_platt_scaling(payload["scores"], payload["outcomes"])
+        else:
+            out = fit_isotonic_or_binned_calibration(
+                payload["scores"], payload["outcomes"], method=args.method, bins=args.bins
+            )
+    elif args.cmd == "diagnostics":
+        out = compute_calibration_diagnostics(payload["probs"], payload["outcomes"], bins=args.bins)
+    else:
+        out = bayesian_update_branches(payload["priors"], payload["likelihoods"])
+    print(json.dumps(out, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

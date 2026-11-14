@@ -1,5 +1,44 @@
 # Changelog
 
+## 2.6.0 - 2026-11-14
+
+Official stable release delivering correlated Monte Carlo shocks, a
+bounded-affine instantaneous feedback solver, expanded bilingual auto-causal
+extraction, expressive multi-round strategic roleplay with commitment advice,
+evidence-weighted hypothesis adjudication with post-hoc calibration tools, and
+the bundled D Research 3.7.0 runtime.
+
+- **Correlated shocks & bounded-affine SCC solver (`scripts/aleph/engine.py`)**:
+  add `ModelEdge.shock_group` and `ModelEdge.shock_correlation` hashed into the
+  model contract, add box-constrained active-set fixed-point solving
+  (`scc_solver="bounded_affine"` / `linear_auto`), and emit per-step
+  `transform_applied` and `stock_flow_integrations.decay_constant` trace
+  diagnostics.
+- **Structured/bilingual causal induction (`scripts/aleph/auto_causal.py`)**:
+  add `_extract_structured_or_text_claim` for structured factor/polarity/lag/
+  effect rows and expand EN/VI positive, negative, and neutral causal matchers.
+- **Extended roleplay actions, payoffs & advisor (`scripts/aleph/interactive_roleplay.py`)**:
+  add opt-in `allow_extended_effects` (`add`/`set`/`multiply`), opt-in
+  `allow_parameterized_payoffs` (`default_utility`, `action_weights`,
+  `state_weights`), `_actor_action_costs`, and joint-profile advisor
+  `suggest_round_commitments()`.
+- **Evidence-weighted adjudication & calibration lineage (`scripts/aleph/packets.py`,
+  `scripts/aleph/calibration_lineage.py`)**: extend `adjudicate()` with
+  `evidence_scores` and `prior_weights` posterior normalization, and add
+  `compute_calibration_diagnostics()`, `fit_platt_scaling()`,
+  `fit_isotonic_or_binned_calibration()`, `bayesian_update_branches()`, plus
+  calibration CLI subcommands (`fit-calibration`, `diagnostics`,
+  `update-posteriors`, `self-test`).
+- **Pin bundled D Research `3.7.0` (`components/d-research/`, `component-lock.json`,
+  `scripts/research_gateway.py`)**: upgrade to the signed, upstream-attested
+  `v3.7.0` runtime (flexible 3-tier Browser-First routing, DRS-1.1 host-browser
+  evidence logging, federated completeness-first search, capture-driven term
+  harvesting, equalized Round-1 budgets, expanded EN/VI reconciliation) and
+  reconcile `3.7.*` component acceptance via `research_gateway.py`.
+
+See [release notes](.github/release-notes/v2.6.0.md) for compatibility, upgrade
+instructions, provenance and operating limits.
+
 ## 2.5.0 - 2026-10-07
 
 Official stable release of reviewed causal drafting, eligible linear feedback
