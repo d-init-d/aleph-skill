@@ -46,7 +46,9 @@ Agent đọc `SKILL.md` làm điểm vào, sau đó chỉ tải các reference v
 
 Từ **2.1.0**, [D Research](https://github.com/d-init-d/d-research-skill) được nhúng thành component nội bộ có khóa digest tại `aleph-component://d-research`. Host chỉ cần cài và nạp `aleph-skill`; mọi lời gọi nghiên cứu đi qua `scripts/research_gateway.py`, không cần cài skill D Research thứ hai. Aleph không đóng gói `node_modules`, Chromium hoặc thông tin xác thực và không tự cài chúng. Khi thiếu capability, gateway hạ cấp theo chuỗi browser → host browser → fetch → search → structured blocker; fallback dùng công cụ hợp pháp của host bị giới hạn ở assurance `limited` và không được giả lập ledger có chữ ký hoặc import receipt.
 
-Aleph khóa D Research 3.4.1 (route điều tra có scope, import ledger 37 cột có policy, tách chặt `lead` khỏi evidence, interop contract máy kiểm chứng được, phân trang API theo config, HTTP method theo intent tường minh, capability discovery read-only-by-default chính xác và social snapshot self-test hermetic). Mọi thao tác điều tra vẫn bị giới hạn trong workspace và đi qua cùng gateway đã khóa.
+Aleph khóa D Research 3.7.0 trong `component-lock.json` (route điều tra có scope, import ledger 37 cột có policy, tách chặt `lead` khỏi evidence, interop contract máy kiểm chứng được, phân trang API theo config, HTTP method theo intent tường minh, capability discovery read-only-by-default chính xác và social snapshot self-test hermetic). Mọi thao tác điều tra vẫn bị giới hạn trong workspace và đi qua cùng gateway đã khóa.
+
+Aleph **2.8.0** bổ sung tách biệt `initial_value` khỏi `baseline` cân bằng, khối điều kiện `gate` trên cạnh (`all`/`any`/`veto`) kèm `gate_multiplier` replay binding, cờ chốt hoàn tất nguyên tử `finalize_simulation.py --complete`, hash hợp đồng mô hình cho manifest chống kẹt `STALE_ARTIFACT`, mở rộng chuẩn hóa alias LLM trong `repair_model_schema.py`, gom nhóm nhánh Monte Carlo (`<= 12` nhánh bảo toàn đúng xác suất đuôi), tinh chỉnh quality gate (`downstream_frozen`, đối chiếu tường thuật tiếng Việt, `MISSING_MATERIAL_ACTORS`, siết nguồn trực tiếp), nạp chuỗi thời gian CSV dạng rộng & trích xuất điều kiện EN/VI / khí hậu / HUMINT trong `auto_causal.py`, và làm giàu `mechanisms.json` cho cả 7 domain pack — trên nền `formula_version: "2.2.0"` của `2.7.0`.
 
 Profile cho CLI ngoài chỉ mô tả probe phiên bản, bootstrap, ranh giới capability, yêu cầu cô lập và receipt. Việc cài profile không tự tạo subagent, tool isolation hay orchestration; host hoặc wrapper phải triển khai và xác nhận các kiểm soát đó.
 
@@ -58,7 +60,7 @@ Profile cho CLI ngoài chỉ mô tả probe phiên bản, bootstrap, ranh giới
 | 1. Research | Dựng baseline, source map, evidence map, contradiction notes và uncertainty register. | `evidence-map.csv` |
 | 2. Construct | Tạo entity, event, factor, context, indicator, claim, source và actor nodes. | `timeline-node.json`, `actor-dossier.json` |
 | 3. Link | Chỉ nhận cạnh nhân quả có cơ chế, độ trễ, bối cảnh, chứng cứ, strength và confidence. | `causal-edge.json` |
-| 4. Propagate | Lan truyền tác động qua transform phi tuyến, stock decay bất biến theo timestep và tích phân flow dạng rate/impulse theo formula 2.1. | `propagation-trace.jsonl` |
+| 4. Propagate | Lan truyền tác động qua transform phi tuyến, đầu vào `deviation`/`log_ratio`, stock decay bất biến theo timestep (`per_day`/`per_tick`) và tích phân flow dạng rate/impulse theo formula 2.2 (giữ nguyên replay `2.0`/`2.1`). | `execution-trace.json`, `propagation-trace.jsonl` |
 | 5. Branch | Tạo timeline khác biệt bằng relative weight; chỉ dùng xác suất khi calibration gate cho phép. | `branch-ledger.json` |
 | 6. Human decisions | Tách research của actor evidence/mixed khỏi roleplay; actor assumption-only bỏ qua research. | `human-track-ledger.jsonl` |
 | 7. Report & audit | Render báo cáo chuyên nghiệp và validate trước khi bàn giao. | `validation-report.json`, final Markdown report |
@@ -148,7 +150,7 @@ Các vị trí cài đặt được hỗ trợ:
 
 ## Kiểm tra
 
-Khi nâng một workspace 2.0.0 hiện có, hãy giữ nguyên một bản sao lưu và chạy validation ở chế độ draft trước. Aleph 2.6.0 vẫn dùng `schema_version: 2.0.0` làm mặc định ghi, cung cấp schema `2.1.0` qua thao tác nâng cấp sibling-only tường minh, ghi `formula_version: 2.1.0` cho workspace mới và vẫn replay được artifact công thức 2.0.0. Receipt gắn version cho numerical model, component, likelihood, provenance, research import và sealed roleplay có thể cần được tạo lại trước khi final validation đạt. Với workspace còn lưu đường dẫn D Research tuyệt đối, chạy `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, xem báo cáo tương thích byte, rồi chạy lại không có `--check`. Không dùng migrator 1.x hoặc sửa hash hay formula identifier bằng tay.
+Khi nâng một workspace 2.0.0 hiện có, hãy giữ nguyên một bản sao lưu và chạy validation ở chế độ draft trước. Aleph 2.8.0 vẫn dùng `schema_version: 2.0.0` làm mặc định ghi, cung cấp schema `2.1.0` qua thao tác nâng cấp sibling-only tường minh, ghi `formula_version: 2.2.0` cho workspace số mới và vẫn replay nguyên vẹn artifact công thức `2.1.0` và `2.0.0`. Receipt gắn version cho numerical model, component, likelihood, provenance, research import và sealed roleplay có thể cần được tạo lại trước khi final validation đạt. Với workspace còn lưu đường dẫn D Research tuyệt đối, chạy `python3 "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <workspace> --bind-bundled-d-research --check`, xem báo cáo tương thích byte, rồi chạy lại không có `--check`. Không dùng migrator 1.x hoặc sửa hash hay formula identifier bằng tay.
 
 ```powershell
 python "$env:ALEPH_SKILL_ROOT\scripts\validate_skill_package.py" "$env:ALEPH_SKILL_ROOT"

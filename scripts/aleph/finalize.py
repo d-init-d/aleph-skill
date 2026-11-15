@@ -18,6 +18,7 @@ from .io import (
     write_json_atomic,
 )
 from .quality import evaluate
+from .schema import CHECKPOINT_FIELDS
 from .validator import artifact_integrity_hash, manifest_integrity_payload, validate_workspace
 
 
@@ -41,7 +42,7 @@ def _media(relative: str) -> str:
     return "application/octet-stream"
 
 
-def _artifact_paths(manifest: dict[str, Any]) -> list[str]:
+def _artifact_paths(manifest: dict[str, Any], workspace: Path | None = None) -> list[str]:
     raw_declared = manifest.get("artifact_paths")
     declared: dict[str, Any] = raw_declared if isinstance(raw_declared, dict) else {}
     excluded = {"validation_report", "quality_report"}
@@ -49,6 +50,11 @@ def _artifact_paths(manifest: dict[str, Any]) -> list[str]:
     for key, relative in declared.items():
         if key not in excluded and isinstance(relative, str):
             paths.append(relative.replace("\\", "/"))
+    if workspace is not None:
+        if "interventions" not in declared and (workspace / "interventions.json").is_file():
+            paths.append("interventions.json")
+        if "execution_trace" not in declared and "propagation_trace" not in declared and (workspace / "execution-trace.json").is_file():
+            paths.append("execution-trace.json")
     return list(dict.fromkeys(paths))
 
 
@@ -116,8 +122,29 @@ def _restore(backups: dict[Path, bytes | None]) -> None:
             write_bytes_atomic(path, content)
 
 
-def finalize_workspace(workspace: Path, *, require_report: bool = True) -> dict[str, Any]:
+def finalize_workspace(
+    workspace: Path,
+    *,
+    require_report: bool = True,
+    complete: bool = False,
+) -> dict[str, Any]:
     workspace = workspace.resolve()
+    manifest_path = workspace / "simulation-manifest.json"
+    pre_complete_backup: bytes | None = None
+    if complete and manifest_path.is_file():
+        pre_manifest, pre_issues = load_json_secure(manifest_path)
+        if not pre_issues and isinstance(pre_manifest, dict):
+            pre_complete_backup = manifest_path.read_bytes()
+            pre_manifest["status"] = "completed"
+            execution = pre_manifest.get("execution")
+            if isinstance(execution, dict):
+                raw_checkpoints = execution.get("checkpoints")
+                checkpoints = dict(raw_checkpoints) if isinstance(raw_checkpoints, dict) else {}
+                for cp_name in CHECKPOINT_FIELDS:
+                    checkpoints[cp_name] = True
+                execution["checkpoints"] = checkpoints
+            write_bytes_atomic(manifest_path, _json_bytes(pre_manifest))
+
     validation = validate_workspace(
         workspace,
         mode="final",
@@ -125,9 +152,10 @@ def finalize_workspace(workspace: Path, *, require_report: bool = True) -> dict[
         verify_integrity=False,
     )
     if validation.get("status") != "pass":
+        if pre_complete_backup is not None:
+            write_bytes_atomic(manifest_path, pre_complete_backup)
         return {"ok": False, "exit_code": 1, "validation": validation, "finalized": False}
 
-    manifest_path = workspace / "simulation-manifest.json"
     manifest, manifest_issues = load_json_secure(manifest_path)
     if manifest_issues or not isinstance(manifest, dict):
         details = "; ".join(value.legacy_string() for value in manifest_issues)
@@ -148,13 +176,18 @@ def finalize_workspace(workspace: Path, *, require_report: bool = True) -> dict[
     transaction_id = f"finalize:{uuid.uuid4()}"
     committed_at = _utc()
     quality = evaluate(workspace, validation=validation, final_receipt_verified=True)
-    manifest["assurance_tier"] = quality.get("assurance_tier")
+    assurance_tier = quality.get("assurance_tier")
+    raw_exec = manifest.get("execution")
+    raw_rc = raw_exec.get("research_control") if isinstance(raw_exec, dict) else None
+    if isinstance(raw_rc, dict) and raw_rc.get("offline_provisional") is True and assurance_tier in {"verified", "calibrated"}:
+        assurance_tier = "limited"
+    manifest["assurance_tier"] = assurance_tier
     manifest["finalization"] = {
         "status": "committed",
         "committed_at": committed_at,
         "transaction_id": transaction_id,
     }
-    paths = _artifact_paths(manifest)
+    paths = _artifact_paths(manifest, workspace)
     index = _stable_manifest_index(workspace, manifest, paths)
     manifest["artifact_index"] = index
     artifact_hashes = {entry["path"]: entry["sha256"] for entry in index}
@@ -241,6 +274,8 @@ def finalize_workspace(workspace: Path, *, require_report: bool = True) -> dict[
         )
         if post_validation.get("status") != "pass":
             _restore(backups)
+            if pre_complete_backup is not None:
+                write_bytes_atomic(manifest_path, pre_complete_backup)
             return {
                 "ok": False,
                 "exit_code": 3,
@@ -253,6 +288,8 @@ def finalize_workspace(workspace: Path, *, require_report: bool = True) -> dict[
         write_json_atomic(workspace / "quality-report.json", post_quality)
     except (OSError, ValueError, TypeError) as exc:
         _restore(backups)
+        if pre_complete_backup is not None:
+            write_bytes_atomic(manifest_path, pre_complete_backup)
         return {
             "ok": False,
             "exit_code": 3,

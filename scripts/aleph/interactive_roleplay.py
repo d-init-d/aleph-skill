@@ -224,12 +224,9 @@ def init_roleplay_session(
     """Initialize a multi-actor roleplay session state."""
     model_obj: ComputationalModel
     if isinstance(initial_model, dict):
-        from .engine import ComputationalModel, ModelEdge, Variable
-        variables = {k: Variable(**v) if isinstance(v, dict) else v for k, v in initial_model.get("variables", {}).items()}
-        edges = [ModelEdge(**e) if isinstance(e, dict) else e for e in initial_model.get("edges", [])]
-        interventions = copy.deepcopy(initial_model.get("interventions", []))
-        model_obj = ComputationalModel(variables=variables, edges=edges, interventions=interventions,
-                                       formula_version=initial_model.get("formula_version", "2.0.0"))
+        from .engine import model_from_dict
+
+        model_obj = model_from_dict(initial_model, formula_version=str(initial_model.get("formula_version") or "2.0.0"))
     else:
         model_obj = initial_model
 
@@ -296,7 +293,22 @@ def generate_actor_packets(
         raise ValueError(
             f"Simulation engine failed during packet generation at tick {decision_tick}: {issue_codes}"
         )
-    current_state = sim_res["payload"]["final_state"]
+    current_state = dict(sim_res["payload"]["final_state"])
+    if decision_tick == 0 and run_model.interventions:
+        from .engine import _active_interventions, _apply_bounds
+
+        for iv in sorted(_active_interventions(run_model, 0), key=lambda value: str(value.get("id", ""))):
+            target = str(iv.get("target", ""))
+            if target not in run_model.variables or target not in current_state:
+                continue
+            val = float(iv["value"])
+            if iv.get("op") == "set":
+                current_state[target] = val
+            elif iv.get("op") == "add":
+                current_state[target] += val
+            elif iv.get("op") == "multiply":
+                current_state[target] *= val
+            current_state[target] = _apply_bounds(run_model.variables[target], current_state[target])
 
     packets: dict[str, dict[str, Any]] = {}
     visibility_spec = spec.get("visibility", {})

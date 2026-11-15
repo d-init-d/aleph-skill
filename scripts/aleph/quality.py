@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import re
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +22,7 @@ from .packets import (
     verify_receipt_chain,
 )
 from .paths import resolve_in_workspace
+from .schema import parse_duration_seconds, parse_timestep_seconds
 from .validator import validate_workspace
 
 SECTION_WEIGHTS = {
@@ -368,6 +371,621 @@ def _roleplay_tier(
     return "C"
 
 
+_DIMENSIONLESS_UNITS = {
+    "",
+    "dimensionless",
+    "unitless",
+    "index",
+    "score",
+    "normalized",
+    "ratio",
+    "points",
+}
+_MONETARY_UNIT_TOKENS = (
+    "$",
+    "usd",
+    "eur",
+    "gbp",
+    "vnd",
+    "dollar",
+    "euro",
+    "billion",
+    "million",
+    "trillion",
+    "currency",
+    "bbl",
+)
+_PCT_UNIT_TOKENS = ("%", "percent", "pct", "bps", "basis", "rate", "yield")
+_PROBABILITY_PREFIX_RE = re.compile(
+    r"(?:probabilit|posterior|likelihood|confidence|coverage|weight|credible|interval|level|chance|odds)\b",
+    re.I,
+)
+
+
+def _load_optional_json_any(workspace: Path, relative: Any) -> Any:
+    if not isinstance(relative, str):
+        return None
+    path, path_issues = resolve_in_workspace(workspace, relative, must_exist=True, require_file=True)
+    if path_issues or path is None:
+        return None
+    data, load_issues = load_json_secure(path)
+    return data if not load_issues else None
+
+
+def _extract_nodes_and_edges(
+    workspace: Path,
+    paths: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    cm_doc = _load_optional_json(
+        workspace,
+        paths.get("computational_model") or paths.get("model_ir") or "simulation-model.json",
+    )
+    nodes_raw = _load_optional_json_any(workspace, paths.get("nodes") or "nodes.json")
+    edges_raw = _load_optional_json_any(workspace, paths.get("edges") or paths.get("causal_edges") or "edges.json")
+
+    if isinstance(nodes_raw, list):
+        nodes = [n for n in nodes_raw if isinstance(n, dict)]
+    elif isinstance(nodes_raw, dict) and isinstance(nodes_raw.get("nodes"), list):
+        nodes = [n for n in nodes_raw["nodes"] if isinstance(n, dict)]
+    elif isinstance(cm_doc, dict) and isinstance(cm_doc.get("variables"), list):
+        nodes = [n for n in cm_doc["variables"] if isinstance(n, dict)]
+    elif isinstance(cm_doc, dict) and isinstance(cm_doc.get("nodes"), list):
+        nodes = [n for n in cm_doc["nodes"] if isinstance(n, dict)]
+    else:
+        nodes = []
+
+    if isinstance(cm_doc, dict) and isinstance(cm_doc.get("edges"), list):
+        edges = [e for e in cm_doc["edges"] if isinstance(e, dict)]
+    elif isinstance(edges_raw, list):
+        edges = [e for e in edges_raw if isinstance(e, dict)]
+    elif isinstance(edges_raw, dict) and isinstance(edges_raw.get("edges"), list):
+        edges = [e for e in edges_raw["edges"] if isinstance(e, dict)]
+    else:
+        edges = []
+
+    interventions = (
+        [i for i in cm_doc["interventions"] if isinstance(i, dict)]
+        if isinstance(cm_doc, dict) and isinstance(cm_doc.get("interventions"), list)
+        else []
+    )
+    return nodes, edges, interventions
+
+
+def _run_history(result: Any, payload: Any) -> list[Any]:
+    result_history = result.get("history") if isinstance(result, dict) else None
+    if isinstance(result_history, list):
+        return result_history
+    payload_history = payload.get("history") if isinstance(payload, dict) else None
+    return payload_history if isinstance(payload_history, list) else []
+
+
+def _detect_engine_frozen(
+    workspace: Path,
+    manifest: dict[str, Any],
+    paths: dict[str, Any],
+) -> dict[str, Any] | None:
+    if manifest.get("simulation_mode") == "qualitative":
+        return None
+    run_ledger = _load_optional_json(workspace, paths.get("run_ledger") or "simulation-run.json")
+    if not isinstance(run_ledger, dict):
+        return None
+    ticks = run_ledger.get("ticks")
+    if isinstance(ticks, bool) or not isinstance(ticks, int) or ticks < 1:
+        return None
+    result = run_ledger.get("result")
+    payload = result.get("payload") if isinstance(result, dict) else None
+    final_state = payload.get("final_state") if isinstance(payload, dict) else None
+    history = _run_history(result, payload)
+
+    nodes, edges, cm_interventions = _extract_nodes_and_edges(workspace, paths)
+    run_interventions = run_ledger.get("interventions")
+    interventions = run_interventions if isinstance(run_interventions, list) else cm_interventions
+    if not edges or not isinstance(final_state, dict):
+        return None
+
+    baselines: dict[str, float] = {}
+    initials: dict[str, float] = {}
+    for n in nodes:
+        nid = str(n.get("id") or "")
+        if not nid:
+            continue
+        base_v = n.get("baseline")
+        if base_v is None and isinstance(n.get("state_before"), dict):
+            base_v = n["state_before"].get("value")
+        if base_v is None:
+            base_v = n.get("initial_value", 0.0)
+        init_v = n.get("initial_value", base_v)
+        if not isinstance(base_v, bool) and isinstance(base_v, (int, float)):
+            baselines[nid] = float(base_v)
+        if not isinstance(init_v, bool) and isinstance(init_v, (int, float)):
+            initials[nid] = float(init_v)
+
+    run_warnings = run_ledger.get("warnings")
+    if isinstance(run_warnings, list) and any(
+        isinstance(w, dict) and w.get("code") == "ENGINE_FROZEN"
+        for w in run_warnings
+    ):
+        return {
+            "severity": "warning",
+            "code": "ENGINE_FROZEN",
+            "message": "Numerical simulation shows zero state propagation on downstream targets despite edges/interventions.",
+            "pointer": str(paths.get("run_ledger") or "simulation-run.json"),
+        }
+
+    timestep_days = 1.0
+    run_cfg = run_ledger.get("config")
+    if isinstance(run_cfg, dict):
+        raw_step = run_cfg.get("timestep")
+        if not isinstance(raw_step, bool) and isinstance(raw_step, (int, float)) and float(raw_step) > 0:
+            timestep_days = float(raw_step)
+    elif isinstance(manifest.get("temporal_frame"), dict) and manifest["temporal_frame"].get("timestep"):
+        sec = parse_timestep_seconds(str(manifest["temporal_frame"]["timestep"]))
+        if sec is not None and sec > 0:
+            timestep_days = sec / 86400.0
+
+    def _effective_lag_ticks(edge: dict[str, Any]) -> int:
+        raw_lag = edge.get("lag_ticks")
+        lag_unit = str(edge.get("lag_unit") or "ticks").strip().lower()
+        if isinstance(raw_lag, (int, float)) and not isinstance(raw_lag, bool):
+            val = float(raw_lag)
+            if lag_unit == "days":
+                return max(0, int(math.ceil(val / max(1e-9, timestep_days))))
+            return max(0, int(round(val)))
+        lag_dist = edge.get("lag_distribution")
+        if isinstance(lag_dist, dict) and lag_dist.get("type") == "fixed":
+            fixed = lag_dist.get("fixed")
+            if isinstance(fixed, (int, float)) and not isinstance(fixed, bool):
+                val = float(fixed)
+                if lag_unit == "days":
+                    return max(0, int(math.ceil(val / max(1e-9, timestep_days))))
+                return max(0, int(round(val)))
+            if isinstance(fixed, str):
+                sec = parse_duration_seconds(fixed)
+                if sec is not None:
+                    return max(0, int(math.ceil((sec / 86400.0) / max(1e-9, timestep_days))))
+        return 0
+
+    has_perturbation = bool(interventions) or any(
+        abs(initials.get(nid, 0.0) - baselines.get(nid, 0.0)) > 1e-9 for nid in baselines
+    )
+    active_edges = [
+        e for e in edges
+        if abs(float(e.get("strength", e.get("base_strength", 0.0)) or 0.0)) > 1e-12
+    ]
+    if not active_edges:
+        return None
+
+    lag_exceeds = all(_effective_lag_ticks(e) >= ticks for e in active_edges)
+    target_ids = {str(e.get("target") or e.get("to") or "") for e in active_edges} - {""}
+    present_targets = [tid for tid in target_ids if tid in final_state]
+    targets_unchanged = bool(present_targets) and all(
+        abs(float(final_state[tid]) - baselines.get(tid, 0.0)) <= 1e-12
+        for tid in present_targets
+    )
+    targets_moved_in_history = any(
+        isinstance(h, dict)
+        and any(
+            tid in h
+            and isinstance(h[tid], (int, float))
+            and not isinstance(h[tid], bool)
+            and abs(float(h[tid]) - baselines.get(tid, 0.0)) > 1e-12
+            for tid in present_targets
+        )
+        for h in history
+    )
+    history_constant = (
+        len(history) >= 2
+        and all(h == history[0] for h in history[1:])
+    )
+    intervened_ids = {
+        str(iv.get("target") or iv.get("target_node_id") or "")
+        for iv in interventions
+        if isinstance(iv, dict)
+    } - {""}
+    moved_nodes = {
+        nid
+        for nid in baselines
+        if (
+            nid in final_state
+            and not isinstance(final_state[nid], bool)
+            and isinstance(final_state[nid], (int, float))
+            and abs(float(final_state[nid]) - baselines[nid]) > 1e-12
+        )
+        or any(
+            isinstance(h, dict)
+            and nid in h
+            and not isinstance(h[nid], bool)
+            and isinstance(h[nid], (int, float))
+            and abs(float(h[nid]) - baselines[nid]) > 1e-12
+            for h in history
+        )
+    }
+    gated_targets = {
+        str(e.get("target") or e.get("to") or "")
+        for e in active_edges
+        if e.get("gate") is not None
+    } - {""}
+    pure_downstream_targets = [
+        str(e.get("target") or e.get("to") or "")
+        for e in active_edges
+        if e.get("gate") is None
+        and str(e.get("source") or e.get("from") or "") in moved_nodes
+        and str(e.get("target") or e.get("to") or "") in final_state
+        and str(e.get("target") or e.get("to") or "") not in intervened_ids
+        and str(e.get("target") or e.get("to") or "") not in gated_targets
+    ]
+    downstream_frozen = bool(pure_downstream_targets) and ticks >= 2 and all(
+        abs(float(final_state[tid]) - baselines.get(tid, 0.0)) <= 1e-12
+        and not any(
+            isinstance(h, dict)
+            and tid in h
+            and isinstance(h[tid], (int, float))
+            and not isinstance(h[tid], bool)
+            and abs(float(h[tid]) - baselines.get(tid, 0.0)) > 1e-12
+            for h in history
+        )
+        for tid in pure_downstream_targets
+    )
+    if (
+        (lag_exceeds and has_perturbation and targets_unchanged and not targets_moved_in_history)
+        or (has_perturbation and targets_unchanged and not targets_moved_in_history and ticks >= 2)
+        or (history_constant and targets_unchanged and not targets_moved_in_history and ticks >= 2)
+        or downstream_frozen
+    ):
+        return {
+            "severity": "warning",
+            "code": "ENGINE_FROZEN",
+            "message": "Numerical simulation shows zero state propagation on downstream targets despite edges/interventions.",
+            "pointer": str(paths.get("run_ledger") or "simulation-run.json"),
+        }
+    return None
+
+
+def _detect_narrative_unit_mismatch(
+    workspace: Path,
+    paths: dict[str, Any],
+) -> dict[str, Any] | None:
+    report_rel = paths.get("final_report") or paths.get("report") or "REPORT.md"
+    report_path, report_issues = resolve_in_workspace(workspace, report_rel, must_exist=True, require_file=True)
+    if report_issues or report_path is None:
+        return None
+    nodes, _, _ = _extract_nodes_and_edges(workspace, paths)
+    if not nodes:
+        return None
+
+    node_units = {
+        str(n.get("unit") or n.get("units") or "").strip().lower()
+        for n in nodes
+    }
+    all_dimensionless = bool(node_units) and node_units.issubset(_DIMENSIONLESS_UNITS)
+    has_monetary_unit = any(any(tok in u for tok in _MONETARY_UNIT_TOKENS) for u in node_units)
+    has_pct_unit = any(any(tok in u for tok in _PCT_UNIT_TOKENS) for u in node_units)
+    if not all_dimensionless and has_monetary_unit and has_pct_unit:
+        return None
+
+    try:
+        text = report_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+    mismatch_reasons: list[str] = []
+    if not has_monetary_unit and re.search(
+        r"(?:\$[0-9][0-9,.]*(?:\s*(?:billion|million|trillion|thousand|bn|mn|b|m|t))?\b|\bUSD\s*[0-9][0-9,.]*|\b[0-9][0-9,.]*\s*(?:billion|million|trillion)\s*(?:USD|dollars)?\b)",
+        text,
+        re.I,
+    ):
+        mismatch_reasons.append("monetary amounts cited without monetary node units")
+    if not has_pct_unit and re.search(r"\b[+-]?[0-9]+(?:\.[0-9]+)?\s*(?:bps|basis points)\b", text, re.I):
+        mismatch_reasons.append("basis-point claims cited without rate/bps node units")
+    if mismatch_reasons:
+        return {
+            "severity": "warning",
+            "code": "NARRATIVE_UNIT_MISMATCH",
+            "message": "Narrative report asserts calibrated/real-world units inconsistent with model node units: " + "; ".join(mismatch_reasons),
+            "pointer": str(report_rel),
+        }
+    return None
+
+
+def _detect_model_narrative_fidelity(
+    workspace: Path,
+    manifest: dict[str, Any],
+    paths: dict[str, Any],
+) -> dict[str, Any] | None:
+    if manifest.get("simulation_mode") == "qualitative":
+        return None
+    report_rel = paths.get("final_report") or paths.get("report") or "REPORT.md"
+    report_path, report_issues = resolve_in_workspace(workspace, report_rel, must_exist=True, require_file=True)
+    if report_issues or report_path is None:
+        return None
+    run_ledger = _load_optional_json(workspace, paths.get("run_ledger") or "simulation-run.json")
+    if not isinstance(run_ledger, dict):
+        return None
+    result = run_ledger.get("result")
+    if not isinstance(result, dict):
+        return None
+    payload = result.get("payload")
+    final_state = payload.get("final_state") if isinstance(payload, dict) else None
+    raw_summary = result.get("summary")
+    summary = raw_summary if isinstance(raw_summary, dict) else {}
+    history = _run_history(result, payload)
+    if not isinstance(final_state, dict) or not final_state:
+        return None
+    try:
+        text = report_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    text_lower = text.lower()
+    nodes, edges, interventions = _extract_nodes_and_edges(workspace, paths)
+
+    baselines: dict[str, float] = {}
+    names: dict[str, str] = {}
+    for n in nodes:
+        nid = str(n.get("id") or "")
+        if not nid:
+            continue
+        if isinstance(n.get("name"), str) and n["name"].strip():
+            names[nid] = n["name"].strip()
+        base_v = n.get("baseline")
+        if base_v is None and isinstance(n.get("state_before"), dict):
+            base_v = n["state_before"].get("value")
+        if base_v is None:
+            base_v = n.get("initial_value", 0.0)
+        if not isinstance(base_v, bool) and isinstance(base_v, (int, float)) and math.isfinite(float(base_v)):
+            baselines[nid] = float(base_v)
+
+    ignored_inputs: set[float] = set()
+    cp = manifest.get("change_point")
+    if isinstance(cp, dict) and not isinstance(cp.get("magnitude"), bool) and isinstance(cp.get("magnitude"), (int, float)):
+        ignored_inputs.add(float(cp["magnitude"]))
+    for iv in interventions:
+        if isinstance(iv, dict):
+            for k in ("value", "magnitude"):
+                v = iv.get(k)
+                if not isinstance(v, bool) and isinstance(v, (int, float)) and math.isfinite(float(v)):
+                    ignored_inputs.add(float(v))
+
+    mismatches: list[str] = []
+
+    # 1. Undisclosed numerical divergence / non-convergence
+    issues_list = [i for i in (result.get("issues") or []) if isinstance(i, dict)]
+    warn_list = [w for w in (run_ledger.get("warnings") or []) if isinstance(w, dict)]
+    has_divergence_signal = (
+        result.get("status") in {"failed", "error", "diverged"}
+        or summary.get("diverged") is True
+        or summary.get("converged") is False
+        or any(
+            item.get("code") in {"STATE_DIVERGENCE", "NONCONVERGENCE", "ITERATION_LIMIT_EXCEEDED", "EVENT_STORM"}
+            for item in (*issues_list, *warn_list)
+        )
+        or any(
+            isinstance(val, (int, float))
+            and not isinstance(val, bool)
+            and (not math.isfinite(float(val)) or abs(float(val)) >= 1e12)
+            for val in final_state.values()
+        )
+    )
+    if has_divergence_signal:
+        disclosure_tokens = (
+            "diverg",
+            "unstable",
+            "non-converg",
+            "nonconverg",
+            "convergence fail",
+            "failed to converge",
+            "blow-up",
+            "blowup",
+            "explod",
+            "overflow",
+            "state_divergence",
+            "nonconvergence",
+            "iteration_limit_exceeded",
+            "limit exceeded",
+            "phân kỳ",
+            "bất ổn",
+            "mất ổn định",
+            "không ổn định",
+            "không hội tụ",
+            "vượt giới hạn",
+            "tràn số",
+        )
+        if not any(tok in text_lower for tok in disclosure_tokens):
+            mismatches.append("undisclosed numerical divergence or non-convergence in REPORT.md")
+
+    # 2. Flat-baseline contradiction
+    comparable_ids = [
+        nid
+        for nid, fval in final_state.items()
+        if nid in baselines and isinstance(fval, (int, float)) and not isinstance(fval, bool) and math.isfinite(float(fval))
+    ]
+    all_final_flat = bool(comparable_ids) and all(
+        abs(float(final_state[nid]) - baselines[nid]) <= 1e-9 for nid in comparable_ids
+    )
+    any_history_moved = any(
+        isinstance(h, dict)
+        and any(
+            nid in h
+            and isinstance(h[nid], (int, float))
+            and not isinstance(h[nid], bool)
+            and abs(float(h[nid]) - baselines[nid]) > 1e-9
+            for nid in comparable_ids
+        )
+        for h in history
+    )
+    if all_final_flat and not any_history_moved and edges:
+        claims_movement = bool(
+            re.search(
+                r"(?<!\w)(?:rose|fell|increased|decreased|declined|grew|dropped|surged|spiked|jumped|soared|collapsed|plummeted|shifted|tăng|giảm|sụt\s+giảm|suy\s+giảm|leo\s+thang|bùng\s+phát|lao\s+dốc)\s+(?:sharply|significantly|substantially|markedly|dramatically|steeply|rapidly|mạnh|nhanh|vọt|sâu|đáng\s+kể|rõ\s+rệt|đột\s+biến|by\s+[+-]?\d|(?:tới|lên|xuống|bằng)\s+[+-]?\d|[+-]?\d+(?:\.\d+)?\s*%)",
+                text_lower,
+            )
+        )
+        disclaims_flat = any(
+            tok in text_lower
+            for tok in (
+                "unchanged",
+                "zero propagation",
+                "no change",
+                "remained at baseline",
+                "flat",
+                "engine_frozen",
+                "không đổi",
+                "giữ nguyên",
+                "không lan truyền",
+                "đóng băng",
+                "đi ngang",
+            )
+        )
+        if claims_movement and not disclaims_flat:
+            mismatches.append("narrative claims significant modeled movement although all simulated states remained flat at baseline")
+
+    # 3. Explicit variable numeric or directional mismatches
+    lines = text.splitlines()
+    for nid in comparable_ids:
+        final_val = float(final_state[nid])
+        base_val = baselines[nid]
+        net_delta = final_val - base_val
+        idents = [nid]
+        short_id = nid.split(":", 1)[1] if ":" in nid else ""
+        if len(short_id) >= 4 and not short_id.isdigit():
+            idents.append(short_id.replace("-", " "))
+            idents.append(short_id)
+        if nid in names and len(names[nid]) >= 4:
+            idents.append(names[nid])
+        # Deduplicate while preserving order
+        seen_id: set[str] = set()
+        unique_idents: list[str] = []
+        for ident in idents:
+            low = ident.lower()
+            if low not in seen_id:
+                seen_id.add(low)
+                unique_idents.append(ident)
+        ident_pat = "|".join(re.escape(i) for i in unique_idents)
+        num_re = re.compile(
+            rf"`?(?<!\w)(?:{ident_pat})(?!\w)`?(?:\s*\([^)]{{1,40}}\))?(?:\s+(?:đã|sẽ|vẫn|cũng|tiếp\s+tục|(?:tăng|giảm)(?:\s+(?:mạnh|vọt|nhanh|sâu))?\s+và))?\s*(?:=|final(?:_state)?(?:\s+value)?\s*(?:is|was|=|of)|ended\s+at|reached|rose\s+to|fell\s+to|dropped\s+to|settled\s+at|is\s+projected\s+to\s+reach|đạt(?:\s+mức|\s+tới|\s+ngưỡng)?|lên(?:\s+mức|\s+tới)|tăng\s+(?:lên|tới)|giảm\s+(?:xuống|về)|xuống(?:\s+mức|\s+tới)?|về\s+mức|chạm(?:\s+mức|\s+ngưỡng)?|ở\s+(?:mức|ngưỡng)|kết\s+thúc\s+(?:tại|ở)|dự\s+báo\s+(?:đạt|lên|xuống))\s*([+-]?\d+(?:\.\d+)?)",
+            re.IGNORECASE,
+        )
+        up_re = re.compile(
+            rf"`?(?<!\w)(?:{ident_pat})(?!\w)`?[^.\n]{{0,50}}(?<!not )(?<!không )(?<!chưa )(?<!\w)(?:increased|rose|grew|surged|spiked|jumped|soared|expanded|climbed|tăng|tăng\s+mạnh|tăng\s+vọt|tăng\s+trưởng|bật\s+tăng|đi\s+lên|leo\s+thang|bùng\s+phát|mở\s+rộng|vượt\s+mức|dâng\s+cao)(?!\w)",
+            re.IGNORECASE,
+        )
+        down_re = re.compile(
+            rf"`?(?<!\w)(?:{ident_pat})(?!\w)`?[^.\n]{{0,50}}(?<!not )(?<!không )(?<!chưa )(?<!\w)(?:decreased|fell|declined|dropped|collapsed|plummeted|contracted|shrank|giảm|giảm\s+mạnh|giảm\s+sâu|sụt\s+giảm|suy\s+giảm|suy\s+thoái|đi\s+xuống|tụt\s+dốc|lao\s+dốc|thu\s+hẹp|đổ\s+vỡ|hạ\s+nhiệt)(?!\w)",
+            re.IGNORECASE,
+        )
+        recorded_for_node = False
+        for line in lines:
+            l_low = line.lower()
+            if any(skip in l_low for skip in ("baseline", "change point", "counterfactual", "disconfirm", "branch", "alternative", "if ", "could ", "might ")):
+                continue
+            for m in num_re.finditer(line):
+                try:
+                    claimed = float(m.group(1))
+                except ValueError:
+                    continue
+                if any(abs(claimed - ig) <= 1e-6 * max(1.0, abs(ig)) for ig in ignored_inputs):
+                    continue
+                if abs(claimed - base_val) <= max(0.1, 0.05 * max(1.0, abs(base_val))):
+                    continue
+                if abs(claimed - final_val) > max(0.5, 0.25 * max(1.0, abs(final_val))):
+                    mismatches.append(f"{nid} reported {claimed} vs simulated final_state {round(final_val, 4)}")
+                    recorded_for_node = True
+                    break
+            if recorded_for_node:
+                break
+            if abs(net_delta) > 1e-6 * max(1.0, abs(base_val)):
+                has_up = bool(up_re.search(line))
+                has_down = bool(down_re.search(line))
+                if has_up and not has_down and net_delta < 0:
+                    mismatches.append(f"{nid} described as increasing despite negative simulated delta ({net_delta:+.4g})")
+                    break
+                if has_down and not has_up and net_delta > 0:
+                    mismatches.append(f"{nid} described as decreasing despite positive simulated delta ({net_delta:+.4g})")
+                    break
+
+    if mismatches:
+        return {
+            "severity": "warning",
+            "code": "MODEL_NARRATIVE_FIDELITY",
+            "message": "Narrative report contradicts simulated execution results: " + "; ".join(mismatches[:5]),
+            "pointer": str(report_rel),
+        }
+    return None
+
+
+_STRATEGIC_ENTITY_TYPES = frozenset(
+    {"person", "leader", "government", "faction", "military", "state", "party", "organization"}
+)
+_STRATEGIC_DOMAIN_TOKENS = (
+    "history",
+    "geopolitic",
+    "conflict",
+    "war",
+    "military",
+    "crisis",
+    "regime",
+    "policy",
+    "diploma",
+    "protest",
+    "security",
+)
+
+
+def _detect_missing_material_actors(
+    workspace: Path,
+    manifest: dict[str, Any],
+    paths: dict[str, Any],
+    material_actors: int,
+) -> dict[str, Any] | None:
+    if material_actors > 0:
+        return None
+    nodes, _, _ = _extract_nodes_and_edges(workspace, paths)
+    actors_data = _load_optional_json_any(workspace, paths.get("actors") or "actors.json")
+    non_example_entities = [
+        node
+        for node in nodes
+        if isinstance(node, dict)
+        and node.get("type") == "entity"
+        and str(node.get("id") or "") not in {"", "entity:example"}
+    ]
+    strategic_typed = [
+        node
+        for node in non_example_entities
+        if isinstance(node.get("details"), dict)
+        and str(node["details"].get("entity_type") or "").lower() in _STRATEGIC_ENTITY_TYPES
+    ]
+    raw_scope = manifest.get("scope")
+    scope = raw_scope if isinstance(raw_scope, dict) else {}
+    domain_text = " ".join(
+        str(part)
+        for part in (
+            manifest.get("domain"),
+            scope.get("domain"),
+            scope.get("topic"),
+            scope.get("question"),
+        )
+        if isinstance(part, str)
+    ).lower()
+    strategic_domain = any(tok in domain_text for tok in _STRATEGIC_DOMAIN_TOKENS)
+    all_actors_demoted = (
+        isinstance(actors_data, list)
+        and len(actors_data) > 0
+        and any(isinstance(a, dict) and a.get("materiality") == "non_material" for a in actors_data)
+        and (bool(non_example_entities) or strategic_domain)
+    )
+    if strategic_typed or (strategic_domain and non_example_entities) or all_actors_demoted:
+        sample_ids = [str(n.get("id")) for n in (strategic_typed or non_example_entities)[:4]]
+        return {
+            "severity": "warning",
+            "code": "MISSING_MATERIAL_ACTORS",
+            "message": (
+                "Strategic/human decision-making entities are present in the causal graph without any material actors "
+                f"or roleplay tracks (entities={sample_ids or 'declared'})."
+            ),
+            "pointer": str(paths.get("actors") or "actors.json"),
+        }
+    return None
+
+
 def evaluate(
     workspace: Path,
     *,
@@ -387,8 +1005,10 @@ def evaluate(
 
     actor_metrics = (check_results.get("actor_protocol") or {}).get("metrics") or {}
     material_actors = int(actor_metrics.get("material_actors", 0) or 0)
+    missing_actors_issue = _detect_missing_material_actors(workspace, manifest, paths, material_actors)
+    missing_strategic_actors = missing_actors_issue is not None
     applicable = dict(SECTION_WEIGHTS)
-    if material_actors == 0:
+    if material_actors == 0 and not missing_strategic_actors:
         applicable.pop("actor_roleplay_discipline", None)
 
     scores: dict[str, float] = {}
@@ -484,6 +1104,58 @@ def evaluate(
         and numerical_metrics.get("beats_baseline") is True
         and cal_hash_ok
     )
+    raw_execution = manifest.get("execution")
+    execution_cfg: dict[str, Any] = raw_execution if isinstance(raw_execution, dict) else {}
+    raw_rc = execution_cfg.get("research_control")
+    offline_provisional = bool(raw_rc.get("offline_provisional")) if isinstance(raw_rc, dict) else False
+
+    validation_issues = [dict(item) for item in (validation.get("issues") or []) if isinstance(item, dict)]
+    existing_codes = {str(item.get("code") or "") for item in validation_issues}
+    extra_warnings: list[dict[str, Any]] = []
+    if "ENGINE_FROZEN" not in existing_codes:
+        frozen_issue = _detect_engine_frozen(workspace, manifest, paths)
+        if frozen_issue is not None:
+            extra_warnings.append(frozen_issue)
+            validation_issues.append(frozen_issue)
+    if "NARRATIVE_UNIT_MISMATCH" not in existing_codes:
+        unit_issue = _detect_narrative_unit_mismatch(workspace, paths)
+        if unit_issue is not None:
+            extra_warnings.append(unit_issue)
+            validation_issues.append(unit_issue)
+    if "MODEL_NARRATIVE_FIDELITY" not in existing_codes:
+        fidelity_issue = _detect_model_narrative_fidelity(workspace, manifest, paths)
+        if fidelity_issue is not None:
+            extra_warnings.append(fidelity_issue)
+            validation_issues.append(fidelity_issue)
+    if missing_actors_issue is not None and "MISSING_MATERIAL_ACTORS" not in existing_codes:
+        extra_warnings.append(missing_actors_issue)
+        validation_issues.append(missing_actors_issue)
+        existing_codes.add("MISSING_MATERIAL_ACTORS")
+    if "ZERO_INTERVENTION_DRIFT" not in existing_codes:
+        run_ledger_doc = _load_optional_json(workspace, paths.get("run_ledger") or "simulation-run.json")
+        if isinstance(run_ledger_doc, dict):
+            for rw in run_ledger_doc.get("warnings") or []:
+                if isinstance(rw, dict) and rw.get("code") == "ZERO_INTERVENTION_DRIFT":
+                    drift_issue = {
+                        "severity": "warning",
+                        "code": "ZERO_INTERVENTION_DRIFT",
+                        "message": str(rw.get("message") or "non-intervention run drifted from declared baselines under Formula 2.2.0"),
+                        "pointer": str(rw.get("pointer") or paths.get("run_ledger") or "simulation-run.json"),
+                    }
+                    extra_warnings.append(drift_issue)
+                    validation_issues.append(drift_issue)
+                    existing_codes.add("ZERO_INTERVENTION_DRIFT")
+                    break
+
+    errors_detail = [item for item in validation_issues if item.get("severity") == "error"]
+    warnings_detail = [item for item in validation_issues if item.get("severity") == "warning"]
+    errors_text = list(validation.get("errors", []))
+    warnings_text = list(validation.get("warnings", []))
+    for item in extra_warnings:
+        pointer = item.get("pointer")
+        loc = f" ({pointer})" if pointer else ""
+        warnings_text.append(f"[{item.get('code')}] {item.get('message')}{loc}")
+
     high_severity_warning = bool(
         near_duplicates
         or error_codes
@@ -502,7 +1174,7 @@ def evaluate(
         "receipt_verified": receipt_verified,
         "d_research_verified": d_research_verified,
         "semantic_replay_passed": trace_ok and edge_ok and temporal_ok and numerical_replay_ok,
-        "roleplay_tier_sufficient": material_actors == 0 or roleplay_tier == "A",
+        "roleplay_tier_sufficient": (material_actors == 0 and not missing_strategic_actors) or roleplay_tier == "A",
         "sensitivity_passed": sensitivity_passed,
         "no_high_severity_warning": not high_severity_warning,
     }
@@ -536,6 +1208,10 @@ def evaluate(
         tier = "experimental"
         assurance = "experimental"
 
+    if offline_provisional and tier in {"verified", "calibrated"}:
+        tier = "limited"
+        assurance = "limited"
+
     grade = (
         "fail" if hard_fail
         else "excellent" if diagnostic_score >= 90 and tier in {"verified", "calibrated"}
@@ -546,6 +1222,7 @@ def evaluate(
         **verified_requirements,
         "hard_gates_passed": not hard_fail,
         "near_duplicate_ok": not near_duplicates,
+        "offline_provisional": offline_provisional,
         "score_is_diagnostic_only": True,
     }
     return {
@@ -562,8 +1239,10 @@ def evaluate(
         "section_weights": applicable,
         "validation_status": validation.get("status"),
         "error_codes": sorted(error_codes),
-        "errors": validation.get("errors", []),
-        "warnings": validation.get("warnings", []),
+        "errors": errors_text,
+        "warnings": warnings_text,
+        "errors_detail": errors_detail,
+        "warnings_detail": warnings_detail,
         "metrics": validation.get("metrics", {}),
         "release_claim": tier in {"verified", "calibrated"},
         "note": "diagnostic score cannot override hard gates; excellent is a display grade only",

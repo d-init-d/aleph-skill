@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 from .issues import Issue, issue
 
@@ -384,3 +385,55 @@ def is_distribution_path(rel_posix: str) -> bool:
     if under_component and name in COMPONENT_ALLOWED_DOTFILES:
         return True
     return suffix in ALLOWLIST_SUFFIXES or name in ALLOWLIST_NAMES
+
+
+def resolve_trace_artifact(
+    manifest: dict[str, Any] | None,
+    formula_version: str | None = None,
+) -> tuple[str, str]:
+    """Resolve the active trace relative path and kind ('json' or 'jsonl')."""
+    artifact_paths = manifest.get("artifact_paths") if isinstance(manifest, dict) else None
+    if isinstance(artifact_paths, dict):
+        exec_rel = artifact_paths.get("execution_trace")
+        if isinstance(exec_rel, str) and exec_rel.strip():
+            norm = exec_rel.strip().replace("\\", "/")
+            kind = "jsonl" if norm.lower().endswith(".jsonl") else "json"
+            return norm, kind
+        prop_rel = artifact_paths.get("propagation_trace")
+        if isinstance(prop_rel, str) and prop_rel.strip():
+            norm = prop_rel.strip().replace("\\", "/")
+            kind = "json" if norm.lower().endswith(".json") else "jsonl"
+            return norm, kind
+    sim_mode = manifest.get("simulation_mode") if isinstance(manifest, dict) else None
+    if formula_version in {"2.1.0", "2.2.0"} or sim_mode in {"deterministic", "monte_carlo"}:
+        return "execution-trace.json", "json"
+    return "propagation-trace.jsonl", "jsonl"
+
+
+def load_trace_rows(path: Path, kind: str | None = None) -> list[dict[str, Any]]:
+    """Load step/propagation rows from either a JSON execution trace or JSONL trace."""
+    import json
+
+    resolved_kind = kind or ("jsonl" if path.suffix.lower() == ".jsonl" else "json")
+    raw = path.read_text(encoding="utf-8")
+    if resolved_kind == "json":
+        payload = json.loads(raw)
+        if isinstance(payload, dict):
+            rows = payload.get("steps", [])
+        elif isinstance(payload, list):
+            rows = payload
+        else:
+            raise ValueError(f"trace payload in {path.name} must be an object or array")
+        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+            raise ValueError(f"trace rows in {path.name} must be objects")
+        return [dict(row) for row in rows]
+    rows_out: list[dict[str, Any]] = []
+    for line_no, line in enumerate(raw.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        item = json.loads(stripped)
+        if not isinstance(item, dict):
+            raise ValueError(f"trace row {line_no} in {path.name} must be an object")
+        rows_out.append(item)
+    return rows_out

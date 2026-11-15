@@ -4,7 +4,48 @@
       "id": "mech:economics:pass_through",
       "relation": "increases",
       "sign": 1,
-      "description": "Core economics transmission mechanism template for validated packs."
+      "transform": "linear",
+      "lag_ticks": 1,
+      "typical_strength": 0.40,
+      "description": "Direct cost and expectation pass-through across production inputs, headline consumer prices, and nominal wage demands."
+    },
+    {
+      "id": "mech:economics:monetary_tightening_demand_lag",
+      "relation": "decreases",
+      "sign": -1,
+      "transform": "linear",
+      "saturation": 1.0,
+      "lag_ticks": 3,
+      "typical_strength": 0.35,
+      "description": "Policy rate hikes tighten bank credit standards and debt-service burdens, cooling investment and core inflation after multi-quarter lag."
+    },
+    {
+      "id": "mech:economics:supply_shock_cost_push",
+      "relation": "increases",
+      "sign": 1,
+      "transform": "linear",
+      "lag_ticks": 1,
+      "typical_strength": 0.50,
+      "description": "Energy, shipping, and tariff shocks raise import landed costs and propagate into core goods inflation and margin compression."
+    },
+    {
+      "id": "mech:economics:zlb_fiscal_multiplier_gate",
+      "relation": "increases",
+      "sign": 1,
+      "transform": "linear",
+      "lag_ticks": 1,
+      "typical_strength": 0.60,
+      "gate_pattern": "any(slack > 0 OR monetary_constraint == active)",
+      "description": "Fiscal stimulus expands aggregate demand more strongly when economic slack or binding monetary constraints prevent crowding out."
+    },
+    {
+      "id": "mech:economics:inflation_expectation_unanchoring",
+      "relation": "increases",
+      "sign": 1,
+      "transform": "threshold",
+      "lag_ticks": 2,
+      "typical_strength": 0.55,
+      "description": "Persistent above-target headline inflation crosses salience thresholds, shifting long-run wage-price setting into a high-inflation regime."
     }
   ]
 }

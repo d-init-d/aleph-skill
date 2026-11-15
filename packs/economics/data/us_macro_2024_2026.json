@@ -1,0 +1,68 @@
+{
+  "metadata": {
+    "description": "Retrospective US macro sample (2024-01 to 2026-10) for reproducible demonstrations. Historical publication timestamps and point-in-time vintages are not supplied.",
+    "sources": [
+      "BLS CPI-U All Items NSA (1982-84=100) and BLS U-3 Unemployment SA",
+      "Federal Reserve Board H.15 / FRED FEDFUNDS monthly average (%)",
+      "EIA via FRED, Europe Brent monthly spot price (MCOILBRENTEU): https://fred.stlouisfed.org/series/MCOILBRENTEU",
+      "BEA NIPA Table 1.1.1 Real GDP QoQ SAAR (%)",
+      "FOMC Press Releases, U.S. Supreme Court Learning Resources v. Trump (Feb 2026), EIA STEO Nov 2026"
+    ],
+    "notes": {
+      "2025-10": "October 2025 CPI-U and household employment surveys disrupted/omitted due to US federal government shutdown lapse in appropriations; BLS October 2026 CPI-U was 337.511 NSA: https://www.bls.gov/news.release/archives/cpi_11102026.htm"
+    }
+  },
+  "monthly": [
+    {"ym": "2024-01", "cpi_u": 308.417, "fedfunds": 5.33, "brent": 80.04, "unemployment": 3.7},
+    {"ym": "2024-02", "cpi_u": 310.326, "fedfunds": 5.33, "brent": 81.10, "unemployment": 3.9},
+    {"ym": "2024-03", "cpi_u": 312.332, "fedfunds": 5.33, "brent": 85.47, "unemployment": 3.9},
+    {"ym": "2024-04", "cpi_u": 313.548, "fedfunds": 5.33, "brent": 89.94, "unemployment": 3.9},
+    {"ym": "2024-05", "cpi_u": 314.069, "fedfunds": 5.33, "brent": 81.75, "unemployment": 3.9},
+    {"ym": "2024-06", "cpi_u": 314.175, "fedfunds": 5.33, "brent": 82.25, "unemployment": 4.1},
+    {"ym": "2024-07", "cpi_u": 314.540, "fedfunds": 5.33, "brent": 85.15, "unemployment": 4.2},
+    {"ym": "2024-08", "cpi_u": 314.796, "fedfunds": 5.33, "brent": 80.36, "unemployment": 4.2},
+    {"ym": "2024-09", "cpi_u": 315.301, "fedfunds": 5.13, "brent": 74.02, "unemployment": 4.1},
+    {"ym": "2024-10", "cpi_u": 315.664, "fedfunds": 4.83, "brent": 75.63, "unemployment": 4.1},
+    {"ym": "2024-11", "cpi_u": 315.493, "fedfunds": 4.64, "brent": 74.35, "unemployment": 4.2},
+    {"ym": "2024-12", "cpi_u": 315.605, "fedfunds": 4.48, "brent": 73.86, "unemployment": 4.1},
+    {"ym": "2025-01", "cpi_u": 317.671, "fedfunds": 4.33, "brent": 79.27, "unemployment": 4.0},
+    {"ym": "2025-02", "cpi_u": 319.082, "fedfunds": 4.33, "brent": 75.44, "unemployment": 4.2},
+    {"ym": "2025-03", "cpi_u": 319.799, "fedfunds": 4.33, "brent": 72.73, "unemployment": 4.2},
+    {"ym": "2025-04", "cpi_u": 320.795, "fedfunds": 4.33, "brent": 68.13, "unemployment": 4.2},
+    {"ym": "2025-05", "cpi_u": 321.465, "fedfunds": 4.33, "brent": 64.45, "unemployment": 4.3},
+    {"ym": "2025-06", "cpi_u": 322.561, "fedfunds": 4.33, "brent": 71.44, "unemployment": 4.1},
+    {"ym": "2025-07", "cpi_u": 323.048, "fedfunds": 4.33, "brent": 71.04, "unemployment": 4.3},
+    {"ym": "2025-08", "cpi_u": 323.976, "fedfunds": 4.33, "brent": 67.87, "unemployment": 4.3},
+    {"ym": "2025-09", "cpi_u": 324.800, "fedfunds": 4.22, "brent": 67.99, "unemployment": 4.4},
+    {"ym": "2025-10", "cpi_u": null,    "fedfunds": 4.09, "brent": 64.54, "unemployment": null},
+    {"ym": "2025-11", "cpi_u": 324.122, "fedfunds": 3.88, "brent": 63.80, "unemployment": 4.5},
+    {"ym": "2025-12", "cpi_u": 324.054, "fedfunds": 3.72, "brent": 62.54, "unemployment": 4.4},
+    {"ym": "2026-01", "cpi_u": 325.252, "fedfunds": 3.64, "brent": 66.60, "unemployment": 4.3},
+    {"ym": "2026-02", "cpi_u": 326.785, "fedfunds": 3.64, "brent": 70.89, "unemployment": 4.4},
+    {"ym": "2026-03", "cpi_u": 330.213, "fedfunds": 3.64, "brent": 103.13, "unemployment": 4.3},
+    {"ym": "2026-04", "cpi_u": 333.020, "fedfunds": 3.64, "brent": 117.29, "unemployment": 4.3},
+    {"ym": "2026-05", "cpi_u": 335.123, "fedfunds": 3.63, "brent": 107.14, "unemployment": 4.3},
+    {"ym": "2026-06", "cpi_u": 333.952, "fedfunds": 3.63, "brent": 85.40, "unemployment": 4.2},
+    {"ym": "2026-07", "cpi_u": 333.918, "fedfunds": 3.63, "brent": 83.76, "unemployment": 4.1},
+    {"ym": "2026-08", "cpi_u": 334.980, "fedfunds": 3.63, "brent": 91.08, "unemployment": 4.1},
+    {"ym": "2026-09", "cpi_u": 336.940, "fedfunds": 3.75, "brent": 114.16, "unemployment": 4.2},
+    {"ym": "2026-10", "cpi_u": 337.511, "fedfunds": 3.88, "brent": 123.93, "unemployment": 4.1}
+  ],
+  "quarterly_gdp_saar_pct": {
+    "2024-Q1": 1.4, "2024-Q2": 3.6, "2024-Q3": 3.2, "2024-Q4": 2.4,
+    "2025-Q1": 0.1, "2025-Q2": 4.0, "2025-Q3": 3.9, "2025-Q4": 0.2,
+    "2026-Q1": 2.5, "2026-Q2": 2.2, "2026-Q3": 3.4
+  },
+  "milestone_events": [
+    {"date": "2025-03", "event": "US 25% duties on global steel, aluminum, and auto imports"},
+    {"date": "2025-04-02", "event": "US IEEPA Liberation Day tariffs: 10% universal baseline + country-specific reciprocal duties; retaliation from China & Canada; 90-day pause on non-retaliators"},
+    {"date": "2025-09-17", "event": "FOMC cuts target range -25bps to 4.00-4.25%"},
+    {"date": "2025-10-29", "event": "FOMC cuts -25bps to 3.75-4.00%; US federal shutdown cancels Oct 2025 CPI report"},
+    {"date": "2025-12-10", "event": "FOMC cuts -25bps to 3.50-3.75%"},
+    {"date": "2026-02-20", "event": "US Supreme Court strikes down IEEPA emergency tariffs in Learning Resources, Inc. v. Trump"},
+    {"date": "2026-03..2026-05", "event": "Strait of Hormuz shipping/conflict crisis; Middle East crude shut-ins peak at 10.9M bpd in May 2026; Brent surges from $70.89 (Feb) to $103.13 (Mar), $117.29 (Apr), $107.14 (May)"},
+    {"date": "2026-07..2026-08", "event": "US administration pivots to Section 301 and Section 338 tariff authorities (25-50% targeted duties e.g. Brazil, Canada), triggering new retaliation"},
+    {"date": "2026-09-16", "event": "FOMC reverses easing cycle and HIKES +25bps to 3.75-4.00% (first hike since 2023) due to sticky 3.7% inflation and energy rebound; Brent rebounds to $114.16 (Sep) and $123.93 (Oct 2026)"},
+    {"date": "2026-10-28", "event": "FOMC holds 3.75-4.00% (10-2 vote, 2 hawkish dissents for another +25bps hike)"}
+  ]
+}

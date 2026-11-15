@@ -4,7 +4,48 @@
       "id": "mech:geopolitics:pass_through",
       "relation": "increases",
       "sign": 1,
-      "description": "Core geopolitics transmission mechanism template for validated packs."
+      "transform": "linear",
+      "lag_ticks": 1,
+      "typical_strength": 0.45,
+      "description": "Direct diplomatic, trade, or military tension transmission from flashpoint shocks into allied posture and market risk premia."
+    },
+    {
+      "id": "mech:geopolitics:sanctions_chokepoint_rerouting",
+      "relation": "decreases",
+      "sign": -1,
+      "transform": "linear",
+      "saturation": 1.0,
+      "lag_ticks": 1,
+      "typical_strength": 0.55,
+      "description": "Maritime chokepoint closure or export controls constrain physical throughput initially before alternative legal energy supply routes buffer the impact."
+    },
+    {
+      "id": "mech:geopolitics:escalation_spiral_deterrence_failure",
+      "relation": "increases",
+      "sign": 1,
+      "transform": "threshold",
+      "lag_ticks": 1,
+      "typical_strength": 0.70,
+      "gate_pattern": "veto(diplomatic_backchannel > threshold)",
+      "description": "Reciprocal mobilization crosses adversary redlines when diplomatic off-ramps fall silent, triggering rapid conflict escalation."
+    },
+    {
+      "id": "mech:geopolitics:humanitarian_supply_disruption",
+      "relation": "decreases",
+      "sign": -1,
+      "transform": "logistic",
+      "lag_ticks": 2,
+      "typical_strength": 0.60,
+      "description": "Prolonged disruption to cross-border trade reduces the availability of staple goods and medical supplies."
+    },
+    {
+      "id": "mech:geopolitics:domestic_war_fatigue_restraint",
+      "relation": "inhibits",
+      "sign": -1,
+      "transform": "threshold",
+      "lag_ticks": 3,
+      "typical_strength": 0.50,
+      "description": "Rising fiscal strain, casualties, and home-front protest reduce political leaders' tolerance for sustained expeditionary escalation."
     }
   ]
 }

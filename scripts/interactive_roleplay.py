@@ -15,7 +15,7 @@ from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from aleph.engine import ComputationalModel, EngineConfig, ModelEdge, Variable
+from aleph.engine import ComputationalModel, EngineConfig, model_from_dict
 from aleph.interactive_roleplay import (
     advance_roleplay_round,
     commit_actor_action,
@@ -43,29 +43,7 @@ def _session_config(session: dict[str, Any]) -> EngineConfig:
 
 def _load_model(path: str | Path) -> ComputationalModel:
     data = _load_object(path)
-    variables = {}
-    for k, v in data.get("variables", {}).items():
-        if isinstance(v, dict):
-            v_copy = dict(v)
-            v_copy.setdefault("role", "endogenous")
-            variables[k] = Variable(**v_copy)
-        else:
-            variables[k] = v
-    edges = []
-    for e in data.get("edges", []):
-        if isinstance(e, dict):
-            e_copy = dict(e)
-            edges.append(ModelEdge(**e_copy))
-        else:
-            edges.append(e)
-    interventions = data.get("interventions", [])
-    formula_version = data.get("formula_version", "2.1")
-    return ComputationalModel(
-        variables=variables,
-        edges=edges,
-        interventions=interventions,
-        formula_version=formula_version,
-    )
+    return model_from_dict(data, formula_version=str(data.get("formula_version") or "2.1"))
 
 
 def _resolve_model(args: argparse.Namespace) -> ComputationalModel:

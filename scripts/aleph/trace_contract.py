@@ -7,8 +7,10 @@ import re
 from pathlib import Path
 from typing import Any
 
+from . import SUPPORTED_FORMULA_VERSIONS
 from .io import canonical_hash, canonical_json_bytes, load_workspace_artifact
 from .issues import Issue, issue
+from .schema import INPUT_MODES
 from .validator import validate_trace
 
 RUN_ID_RE = re.compile(r"^run:[0-9a-zA-Z_-]+$")
@@ -70,6 +72,9 @@ ALLOWED_STEP_KEYS = frozenset({
     "state_transitions",
     "stock_flow_integrations",
     "transform_applied",
+    "input_mode",
+    "input_effect",
+    "source_baseline",
     "evidence_refs",
     "hash_chain",
 })
@@ -160,8 +165,8 @@ def validate_execution_trace_data(
         formula = trace["formula_version"]
         if not isinstance(formula, str):
             issues.append(issue("TYPE", pointer="/formula_version", actual=formula, message="formula_version must be a string"))
-        elif formula not in {"2.0.0", "2.1.0"}:
-            issues.append(issue("ENUM", pointer="/formula_version", actual=formula, message="invalid formula_version, must be 2.0.0 or 2.1.0"))
+        elif formula not in SUPPORTED_FORMULA_VERSIONS:
+            issues.append(issue("ENUM", pointer="/formula_version", actual=formula, message="invalid formula_version, must be 2.0.0, 2.1.0, or 2.2.0"))
 
     # Validate generated_by
     if "generated_by" in trace:
@@ -366,6 +371,15 @@ def validate_execution_trace_data(
             tsa = step["target_state_after"]
             if tsa is None or not _is_finite_number(tsa):
                 issues.append(issue("TYPE", pointer=f"{p}/target_state_after", actual=tsa, message="target_state_after must be a finite number"))
+        if "input_mode" in step:
+            im = step["input_mode"]
+            if not isinstance(im, str):
+                issues.append(issue("TYPE", pointer=f"{p}/input_mode", actual=im, message="input_mode must be a string"))
+            elif im not in INPUT_MODES:
+                issues.append(issue("ENUM", pointer=f"{p}/input_mode", actual=im, message=f"input_mode must be one of {sorted(INPUT_MODES)}"))
+        for optional_num in ("input_effect", "source_baseline"):
+            if optional_num in step and not _is_finite_number(step[optional_num]):
+                issues.append(issue("TYPE", pointer=f"{p}/{optional_num}", actual=step[optional_num], message=f"{optional_num} must be a finite number"))
 
         # Check sampled_parameters
         if "sampled_parameters" in step:
@@ -473,7 +487,7 @@ def validate_execution_trace_data(
                 issues.append(issue("HASH_MISMATCH", pointer=f"{p}/hash_chain", expected=expected_hash, actual=hchain, message="hash_chain divergence"))
             prev_hash = hchain
 
-    if steps and rhash and prev_hash != rhash:
+    if isinstance(rhash, str) and HEX64_RE.match(rhash) and prev_hash != rhash:
         issues.append(issue("HASH_MISMATCH", pointer="/replay_hash", expected=prev_hash, actual=rhash, message="replay_hash does not match final step hash_chain"))
 
     return issues

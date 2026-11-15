@@ -1,10 +1,6 @@
 # Upgrade workflow contract
 
-This `2.6.0` stable release pins the published D Research `3.7.0`
-runtime profile to its immutable annotated tag, source commit, Git tree,
-reproducible source archive and full/runtime artifact digests. CI verifies the
-projection against upstream Git objects. Stable release provenance establishes the locked source identity; it does
-not establish empirical calibration or live-provider availability.
+This `2.8.0` stable release builds on `2.7.0`'s `formula_version: "2.2.0"` engine by adding node `initial_value` separation from `baseline`, conditional edge `gate` preconditions (`all`/`any`/`veto`, `gate_multiplier`), atomic `finalize_simulation.py --complete`, semantic manifest hashing (`manifest_model_contract_payload`), expanded LLM alias repair (`repair_model_schema.py`), Monte Carlo branch capping (`<= 12` branches with tail consolidation), precision quality checks (`downstream_frozen`, Vietnamese fidelity, `MISSING_MATERIAL_ACTORS`, direct-source tier tightening), wide numeric CSV time-series + bilingual EN/VI conditional/climate/HUMINT extraction in `auto_causal.py`, and enriched `mechanisms.json` across all seven packs — while retaining the locked D Research `3.7.0` runtime profile pinned in `component-lock.json` to its immutable annotated tag, source commit, Git tree, reproducible source archive and full/runtime artifact digests. CI verifies the projection against upstream Git objects. Stable release provenance establishes the locked source identity; it does not establish empirical calibration or live-provider availability.
 
 Development snapshots can still use `provenance.mode = local_candidate`.
 That policy verifies artifact/recipe/snapshot integrity without asserting an
@@ -31,15 +27,7 @@ and rationale. Revise and rehash the proposal when new evidence resolves gaps;
 do not remove gaps merely to obtain approval. Optional reviewed `interventions`
 are an explicit array in the decisions artifact, never copied from templates.
 
-`admit`/`apply` requires a fresh or empty target. Partial review writes only
-candidate artifacts, proposal/review and assumptions; it creates no executable
-nodes/model/run. A ready export verifies the numerical model; the normal Aleph
-research workflow must still supply evidence mapping, research receipts and all
-final scenario artifacts before full final-workspace validation. Approved inputs
-must have complete parameters and substantive
-mechanisms. The standard disk compiler, run CLI and replay CLI must agree before
-a single directory rename publishes the complete workspace. Existing traces,
-models or unrelated files are refused regardless of their content.
+`admit`/`apply` requires a fresh or empty target by default, or `--into-initialized` to merge cleanly into a newly initialized empty draft workspace while preserving its manifest metadata and `artifact_paths`. Partial review writes only candidate artifacts, proposal/review and assumptions; it creates no executable nodes/model/run. A ready export verifies the numerical model; the normal Aleph research workflow must still supply evidence mapping, research receipts and all final scenario artifacts before full final-workspace validation. Approved inputs must have complete parameters and substantive mechanisms. The standard disk compiler, run CLI and replay CLI must agree before a single directory rename publishes the complete workspace. Existing traces, models or unrelated files (and any pre-existing simulation data under `--into-initialized`) are refused regardless of their content.
 
 ## Simulation and roleplay
 

@@ -11,6 +11,7 @@ from aleph import (
     EXIT_SEMANTIC,
     EXIT_USAGE,
     FORMULA_VERSION,
+    FORMULA_VERSION_2_2,
     LEGACY_FORMULA_VERSION,
     SUPPORTED_FORMULA_VERSIONS,
 )
@@ -114,7 +115,7 @@ def main() -> None:
     if (
         not isinstance(recorded, dict)
         or recorded.get("schema_version") != "2.0.0"
-        or recorded.get("run_contract_version") not in {"aleph-run-2.0", "aleph-run-2.1"}
+        or recorded.get("run_contract_version") not in {"aleph-run-2.0", "aleph-run-2.1", "aleph-run-2.2"}
         or recorded.get("mode") not in {"deterministic", "monte_carlo"}
         or not isinstance(recorded.get("ticks"), int)
         or isinstance(recorded.get("ticks"), bool)
@@ -128,20 +129,21 @@ def main() -> None:
 
     formula_version = recorded.get("formula_version", LEGACY_FORMULA_VERSION)
     run_contract_version = str(recorded.get("run_contract_version"))
-    expected_formula_version = (
-        LEGACY_FORMULA_VERSION if run_contract_version == "aleph-run-2.0" else FORMULA_VERSION
-    )
-    expected_binding_version = (
-        "aleph-trace-execution-binding-v1"
-        if run_contract_version == "aleph-run-2.0"
-        else "aleph-trace-execution-binding-v2"
-    )
+    if run_contract_version == "aleph-run-2.0":
+        expected_formula_version = LEGACY_FORMULA_VERSION
+        expected_binding_version = "aleph-trace-execution-binding-v1"
+    elif run_contract_version == "aleph-run-2.2":
+        expected_formula_version = FORMULA_VERSION_2_2
+        expected_binding_version = "aleph-trace-execution-binding-v3"
+    else:
+        expected_formula_version = FORMULA_VERSION
+        expected_binding_version = "aleph-trace-execution-binding-v2"
     recorded_execution_binding = recorded.get("trace_execution_binding")
     manifest_formula_version = manifest.get("formula_version") if isinstance(manifest, dict) else None
     if (
         formula_version not in SUPPORTED_FORMULA_VERSIONS
         or formula_version != expected_formula_version
-        or (run_contract_version == "aleph-run-2.1" and "formula_version" not in recorded)
+        or (run_contract_version in {"aleph-run-2.1", "aleph-run-2.2"} and "formula_version" not in recorded)
         or not isinstance(recorded_execution_binding, dict)
         or recorded_execution_binding.get("version") != expected_binding_version
         or (
@@ -204,7 +206,11 @@ def main() -> None:
         if isinstance(recorded_trace, dict) and recorded_trace.get("path"):
             declared_trace = recorded_trace.get("path")
         else:
-            declared_trace = "execution-trace.json" if formula_version == FORMULA_VERSION else "propagation-trace.jsonl"
+            declared_trace = (
+                "execution-trace.json"
+                if formula_version in {FORMULA_VERSION, FORMULA_VERSION_2_2}
+                else "propagation-trace.jsonl"
+            )
     trace_path: Path | None = None
     if recorded_trace is None:
         trace_issues.append(
@@ -238,12 +244,13 @@ def main() -> None:
             current_trace_hash = sha256_file(trace_path)
             expected_hash = recorded_trace.get("sha256")
             expected_rows = recorded_trace.get("row_count")
+            is_json_trace = trace_path.suffix == ".json"
             trace_contract_ok = (
                 isinstance(expected_hash, str)
                 and current_trace_hash == expected_hash
                 and isinstance(expected_rows, int)
                 and not isinstance(expected_rows, bool)
-                and expected_rows > 0
+                and (expected_rows >= 0 if is_json_trace else expected_rows > 0)
                 and not any(value.severity == "error" for value in trace_issues)
             )
             if current_trace_hash != expected_hash:
@@ -390,7 +397,7 @@ def main() -> None:
     binding_issues: list[Issue] = []
     if trace_ok:
         current_execution_binding, binding_issues = build_trace_execution_binding(
-            validated_rows,
+            trace_json if trace_json is not None else validated_rows,
             model,
             config,
             ticks=ticks,

@@ -5,7 +5,7 @@ import json
 import math
 from collections import Counter
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from _lib import write_json
 from aleph.formula import amplification_ratio
@@ -16,6 +16,34 @@ from aleph.validator import validate_workspace
 
 
 def read_trace(path: Path) -> list[dict[str, Any]]:
+    if path.suffix.lower() == ".json":
+        doc, issues = load_json_secure(path)
+        if issues or not isinstance(doc, dict):
+            raise ValueError(json.dumps({"status": "fail", "issues": [item.to_dict() for item in issues]}))
+        raw_steps = doc.get("steps")
+        if not isinstance(raw_steps, list):
+            raise ValueError(json.dumps({"status": "fail", "code": "TYPE", "reason": "execution trace JSON requires steps array"}))
+        normalized: list[dict[str, Any]] = []
+        for step in raw_steps:
+            if not isinstance(step, dict):
+                continue
+            trans = step.get("state_transitions")
+            trans_dict = trans if isinstance(trans, dict) else {}
+            params = step.get("sampled_parameters")
+            params_dict = params if isinstance(params, dict) else {}
+            out_eff = step.get("output_effect", trans_dict.get("delta", 0.0))
+            in_eff = step.get(
+                "input_change",
+                step.get("input_effect", params_dict.get("input_effect", step.get("source_state", 0.0))),
+            )
+            normalized.append(
+                {
+                    **step,
+                    "output_effect": out_eff,
+                    "input_effect": in_eff,
+                }
+            )
+        return normalized
     rows, issues = load_jsonl_secure(path)
     if issues:
         raise ValueError(json.dumps({"status": "fail", "issues": [item.to_dict() for item in issues]}))
@@ -40,7 +68,7 @@ def score(rows: list[dict[str, Any]], initial_change: float | None = None) -> di
     initial = initial_change if initial_change is not None else rows[0].get("input_change", rows[0].get("input_effect"))
     if not is_number(initial):
         return {"status": "fail", "reason": "initial change must be a finite number", "code": "TYPE"}
-    base = abs(float(cast(int | float, initial)))
+    base = abs(float(initial))
     if base == 0:
         base = 1.0
     ratios: list[float] = []
@@ -103,17 +131,37 @@ def main() -> None:
         }
         print(json.dumps(result, indent=2))
         raise SystemExit(1)
-    declared = (manifest.get("artifact_paths") or {}).get("propagation_trace", "propagation-trace.jsonl")
+    artifacts = manifest.get("artifact_paths") or {}
+    declared = artifacts.get("execution_trace") or artifacts.get("propagation_trace", "propagation-trace.jsonl")
+    allowed_declared = {
+        value
+        for value in (artifacts.get("execution_trace"), artifacts.get("propagation_trace"))
+        if isinstance(value, str) and value
+    } or {"propagation-trace.jsonl"}
     requested = args.trace or declared
-    if requested != declared:
-        result = {"status": "fail", "code": "PATH_ESCAPE", "reason": "--trace must match manifest propagation_trace"}
+    if requested not in allowed_declared:
+        result = {"status": "fail", "code": "PATH_ESCAPE", "reason": "--trace must match manifest propagation_trace or execution_trace"}
         print(json.dumps(result, indent=2))
         raise SystemExit(3)
     path, issues = resolve_in_workspace(ws, requested, must_exist=True, require_file=True)
     if issues or path is None:
         print(json.dumps({"status": "fail", "issues": [i.to_dict() for i in issues]}, indent=2))
         raise SystemExit(3)
-    result = score(read_trace(path), args.initial_change)
+    rows = read_trace(path)
+    if path.suffix.lower() == ".json" and rows == []:
+        result = {
+            "status": "pass",
+            "steps": 0,
+            "max_amplification_ratio": 0.0,
+            "classification": "dampening",
+            "mean_amplification_ratio": 0.0,
+            "patterns": {},
+            "max_step": None,
+            "recomputed": True,
+            "warnings": ["Execution trace contains zero propagation steps."],
+        }
+    else:
+        result = score(rows, args.initial_change)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     if args.out:
         write_json(Path(args.out).resolve(), result)

@@ -35,7 +35,9 @@ Use `"pass"` as a machine-readable overall result only when every applicable sch
 
 ## Core artifacts
 
-`simulation-manifest.json` declares temporal frame, change point, scope, execution state, simulation/likelihood modes, assurance tier, artifacts, assumptions, and hashes. The manifest is not completed until all hard gates pass.
+`simulation-manifest.json` declares temporal frame, change point, scope, execution state, simulation/likelihood modes, `formula_version` (`2.2.0` default for new numerical runs; `2.1.0`/`2.0.0` replay preserved), optional `offline_provisional` assurance flag, artifacts, assumptions, and hashes. The manifest is not completed until all hard gates pass.
+
+`repair_model_schema.py` can normalize common alias keys on draft `nodes.json`/`edges.json` (`initial_state` → `initial_value`, `units` → `unit`, `source`/`target` → `from`/`to`, `strength` → `base_strength`, `lag` → `lag_ticks`), and `quickstart_quant.py` runs an end-to-end numerical demonstration in a new workspace.
 
 `evidence-map.csv` contains atomic claims with source URL, tier, dates, access/retrieval methods, excerpt/value, evidence confidence, contradiction state, and notes. D Research raw provenance remains separately preserved.
 

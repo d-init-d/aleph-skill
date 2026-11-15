@@ -11,8 +11,9 @@ import re
 from pathlib import Path
 
 from _lib import load_json, skill_root, utc_now, write_json
-from aleph import FORMULA_VERSION
+from aleph import FORMULA_VERSION, FORMULA_VERSION_2_2, SUPPORTED_FORMULA_VERSIONS
 from aleph.io import canonical_hash
+from aleph.schema import parse_timestep_seconds
 
 ISO_DURATION = re.compile(r"^P(?:(?P<years>\d+)Y)?(?:(?P<months>\d+)M)?(?:(?P<days>\d+)D)?$")
 
@@ -75,8 +76,18 @@ def build_workspace(args: argparse.Namespace) -> Path:
     manifest["created_at"] = utc_now()
     manifest["status"] = "draft"
     manifest["likelihood_mode"] = "relative_weight"
-    manifest["simulation_mode"] = "qualitative"
-    manifest["formula_version"] = FORMULA_VERSION
+    manifest["simulation_mode"] = getattr(args, "simulation_mode", None) or "qualitative"
+    req_formula = getattr(args, "formula_version", None)
+    default_formula = FORMULA_VERSION if manifest["simulation_mode"] == "qualitative" else FORMULA_VERSION_2_2
+    manifest["formula_version"] = req_formula if req_formula in SUPPORTED_FORMULA_VERSIONS else default_formula
+    if manifest["simulation_mode"] in {"deterministic", "monte_carlo"}:
+        ap = manifest.setdefault("artifact_paths", {})
+        if isinstance(ap, dict):
+            ap.pop("propagation_trace", None)
+            ap["execution_trace"] = "execution-trace.json"
+            ap.setdefault("computational_model", "simulation-model.json")
+            ap.setdefault("run_ledger", "simulation-run.json")
+            ap.setdefault("replay_report", "replay-report.json")
     manifest["assurance_tier"] = None
     manifest["change_point"]["description"] = args.change_point
     manifest["change_point"]["time"] = change_date.isoformat()
@@ -90,6 +101,11 @@ def build_workspace(args: argparse.Namespace) -> Path:
         "calibration_strategy": "pending adaptive scope assessment",
         "monitoring_indicators": [],
     }
+    req_timestep = getattr(args, "timestep", None)
+    if req_timestep is not None:
+        if parse_timestep_seconds(str(req_timestep)) is None:
+            raise ValueError(f"Invalid --timestep duration {req_timestep!r}; use ISO duration like P1M or P7D")
+        manifest["temporal_frame"]["timestep"] = str(req_timestep).strip()
     manifest["scope"] = {
         "horizon": args.horizon,
         "domains": [item.strip() for item in args.domain.split(",") if item.strip()],
@@ -110,17 +126,34 @@ def build_workspace(args: argparse.Namespace) -> Path:
         "rationale": "pending assessment",
         "decomposition": {"subquestions": [], "critical_paths": [], "research_waves_completed": 0},
     }
-    manifest["execution"]["research_quality"] = "unknown"
-    manifest["execution"]["research_control"] = {
+    manifest["execution"]["research_quality"] = (
+        "limited" if getattr(args, "offline_provisional", False) else "unknown"
+    )
+    offline_provisional = bool(getattr(args, "offline_provisional", False))
+    offline_reason = getattr(args, "offline_reason", None)
+    research_control = {
         "policy": "evidence-saturation",
         "sources_examined": 0,
         "saturation_reached": False,
         "consecutive_no_new_material_claims": 0,
-        "stop_reason": "",
-        "unresolved_critical_gaps": [],
+        "stop_reason": "offline-provisional" if offline_provisional else "",
+        "unresolved_critical_gaps": (
+            ["gap:offline-provisional-no-live-retrieval"]
+            if offline_provisional
+            else []
+        ),
         "next_wave_queue": [],
     }
-    manifest["execution"]["d_research"] = {"status": "unknown", "invoked": False}
+    if offline_provisional:
+        research_control["offline_provisional"] = True
+        research_control["offline_reason"] = str(
+            offline_reason or "Offline historical-cutoff simulation without online d-research retrieval"
+        )
+    manifest["execution"]["research_control"] = research_control
+    manifest["execution"]["d_research"] = {
+        "status": "unavailable" if offline_provisional else "unknown",
+        "invoked": False,
+    }
     manifest["execution"]["subagents"] = {
         "status": "unknown",
         "tool": None,
@@ -206,6 +239,8 @@ def build_workspace(args: argparse.Namespace) -> Path:
     branches = load_json(templates / "branch-ledger.json")
     for branch in branches["branches"]:
         branch["end_state"]["time"] = simulation_end.isoformat()
+        if manifest["simulation_mode"] in {"deterministic", "monte_carlo"}:
+            branch.setdefault("derivation", "analyst_authored")
 
     write_json(workspace / "simulation-manifest.json", manifest)
     write_json(workspace / "nodes.json", [entity, node, target, context])
@@ -224,11 +259,13 @@ def build_workspace(args: argparse.Namespace) -> Path:
     (workspace / "evidence-map.csv").write_text(
         evidence_buffer.getvalue(), encoding="utf-8", newline="\n"
     )
-    trace = load_json(templates / "propagation-trace.jsonl")
-    trace["time"] = change_date.isoformat()
-    trace.pop("hash_chain", None)
-    trace["hash_chain"] = canonical_hash({"previous_hash": None, "row": trace})
-    (workspace / "propagation-trace.jsonl").write_text(json.dumps(trace, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    if manifest.get("simulation_mode") == "qualitative":
+        trace = load_json(templates / "propagation-trace.jsonl")
+        trace["time"] = change_date.isoformat()
+        trace["formula_version"] = manifest["formula_version"]
+        trace.pop("hash_chain", None)
+        trace["hash_chain"] = canonical_hash({"previous_hash": None, "row": trace})
+        (workspace / "propagation-trace.jsonl").write_text(json.dumps(trace, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     (workspace / "human-track-ledger.jsonl").write_text("", encoding="utf-8", newline="\n")
     write_json(workspace / "branch-ledger.json", branches)
     validation_report = load_json(templates / "validation-report.json")
@@ -253,12 +290,33 @@ def main() -> None:
     parser.add_argument("--change-point", default="Example change point", help="Change point description.")
     parser.add_argument("--time", default=dt.date.today().isoformat(), help="Change point date.")
     parser.add_argument("--horizon", default="P24M", help="ISO simulation horizon from the change point.")
+    parser.add_argument("--timestep", help="Optional simulation timestep duration (e.g., P1M, P7D, P1D).")
     parser.add_argument("--simulation-end", help="Optional absolute simulation end date; overrides the derived horizon end.")
     parser.add_argument("--observation-cutoff", help="Last date treated as observed reality. Defaults to today.")
     parser.add_argument("--domain", default="mixed", help="Comma-separated domains.")
     parser.add_argument("--geography", default="global", help="Comma-separated geographic or institutional scopes.")
     parser.add_argument("--out-dir", help="Output base directory outside the installed skill. Defaults to ./simulation-output.")
     parser.add_argument("--force", action="store_true", help="Allow using an existing workspace directory.")
+    parser.add_argument(
+        "--simulation-mode",
+        choices=["qualitative", "deterministic", "monte_carlo"],
+        default="qualitative",
+        help="Simulation execution mode (qualitative default writes propagation-trace.jsonl; deterministic/monte_carlo prepares execution_trace).",
+    )
+    parser.add_argument(
+        "--formula-version",
+        choices=list(SUPPORTED_FORMULA_VERSIONS),
+        help="Formula override. Defaults to 2.2.0 for numerical modes and 2.1.0 for qualitative mode.",
+    )
+    parser.add_argument(
+        "--offline-provisional",
+        action="store_true",
+        help="Mark workspace for offline provisional final validation when d-research is unavailable.",
+    )
+    parser.add_argument(
+        "--offline-reason",
+        help="Explicit rationale when using --offline-provisional.",
+    )
     parser.add_argument(
         "--schema-version",
         choices=["2.0.0", "2.1.0"],

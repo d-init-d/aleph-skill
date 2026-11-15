@@ -4,7 +4,48 @@
       "id": "mech:history:pass_through",
       "relation": "increases",
       "sign": 1,
-      "description": "Core history transmission mechanism template for validated packs."
+      "transform": "linear",
+      "lag_ticks": 1,
+      "typical_strength": 0.45,
+      "description": "Historical structural pressure transmission linking fiscal/subsistence stress to elite bargaining breakdowns and mobilization."
+    },
+    {
+      "id": "mech:history:elite_cohesion_split_threshold",
+      "relation": "inhibits",
+      "sign": -1,
+      "transform": "threshold",
+      "lag_ticks": 1,
+      "typical_strength": 0.70,
+      "gate_pattern": "all(mass_protest > threshold AND elite_split > threshold)",
+      "description": "Coordinated mass mobilization threatens regime continuity only once leadership factions fracture or security-apparatus loyalty wavers."
+    },
+    {
+      "id": "mech:history:institutional_legitimacy_erosion",
+      "relation": "decreases",
+      "sign": -1,
+      "transform": "threshold",
+      "lag_ticks": 0,
+      "typical_strength": 0.80,
+      "description": "Concentrated decision-making and the loss of public accountability erode long-run institutional legitimacy."
+    },
+    {
+      "id": "mech:history:seasonal_market_isolation",
+      "relation": "decreases",
+      "sign": -1,
+      "transform": "linear",
+      "saturation": 1.0,
+      "lag_ticks": 2,
+      "typical_strength": 0.50,
+      "description": "Persistent seasonal flooding reduces market access and household trade in isolated settlements."
+    },
+    {
+      "id": "mech:history:imperial_overextension_attrition",
+      "relation": "decreases",
+      "sign": -1,
+      "transform": "logistic",
+      "lag_ticks": 3,
+      "typical_strength": 0.65,
+      "description": "Multi-front expansion stretches industrial resource base, fuel stockpiles, and garrison manpower faster than occupied territory yields extractable surplus."
     }
   ]
 }

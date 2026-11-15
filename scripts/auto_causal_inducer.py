@@ -54,6 +54,7 @@ def run_cli() -> int:
     p_apply.add_argument("--review", required=True, help="Path to causal-review.json")
     p_apply.add_argument("--workspace", required=True, help="Target workspace directory")
     p_apply.add_argument("--workspace-id", default="workspace:auto-causal-model", help="Simulation workspace ID")
+    p_apply.add_argument("--into-initialized", action="store_true", help="Merge into an existing initialized workspace cleanly")
 
     args = parser.parse_args()
 
@@ -90,7 +91,13 @@ def run_cli() -> int:
             print("Error loading proposal or review", file=sys.stderr)
             return EXIT_SEMANTIC
         try:
-            res = apply_model(prop_data, rev_data, Path(args.workspace), workspace_id=args.workspace_id)
+            res = apply_model(
+                prop_data,
+                rev_data,
+                Path(args.workspace),
+                workspace_id=args.workspace_id,
+                into_initialized=args.into_initialized,
+            )
             print(json.dumps(res, indent=2))
             return EXIT_OK if res.get("ok") is True else EXIT_SEMANTIC
         except (OSError, ValueError, TypeError, KeyError) as exc:

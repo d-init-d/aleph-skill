@@ -3,14 +3,42 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from typing import Any
 
-from . import FORMULA_VERSION, LEGACY_FORMULA_VERSION, SUPPORTED_FORMULA_VERSIONS
+from . import (
+    FORMULA_VERSION,
+    FORMULA_VERSION_2_2,
+    LEGACY_FORMULA_VERSION,
+    SUPPORTED_FORMULA_VERSIONS,
+)
 from .issues import Issue, issue
-from .schema import TRANSFORMS, nonempty_str, refuse_string_number
+from .schema import (
+    GATE_COMPARE_OPS,
+    GATE_OPS,
+    INPUT_MODES,
+    TRANSFORMS,
+    nonempty_str,
+    refuse_string_number,
+)
 
 DEFAULT_TOLERANCE_ABS = 1e-9
 DEFAULT_TOLERANCE_REL = 1e-6
+
+
+def compute_effective_input(input_mode: str, source_state: float, source_baseline: float = 0.0) -> float:
+    """Compute effective causal edge input from raw source state and baseline."""
+    if input_mode == "level":
+        return float(source_state)
+    if input_mode == "deviation":
+        return float(source_state) - float(source_baseline)
+    if input_mode == "log_ratio":
+        if not math.isfinite(float(source_baseline)) or float(source_baseline) <= 0.0:
+            raise ValueError(f"log_ratio input_mode requires positive finite baseline, got {source_baseline}")
+        if not math.isfinite(float(source_state)) or float(source_state) <= 0.0:
+            raise ValueError(f"log_ratio input_mode requires positive finite state, got {source_state}")
+        return math.log(float(source_state) / float(source_baseline))
+    raise ValueError(f"unsupported input_mode {input_mode!r}")
 
 
 def context_multiplier(modifiers: list[Any], node_ids: set[str], issues: list[Issue], pointer: str) -> float:
@@ -54,6 +82,55 @@ def _stable_logistic(value: float) -> float:
     return exp_value / (1.0 + exp_value)
 
 
+def evaluate_edge_gate(
+    gate: Mapping[str, Any] | None,
+    state_map: Mapping[str, Any] | None = None,
+) -> float:
+    """Evaluate a conjunction/veto edge gate and return multiplier 1.0 or 0.0."""
+    if gate is None:
+        return 1.0
+    if not isinstance(gate, Mapping):
+        raise ValueError("edge gate must be a mapping")
+    op = str(gate.get("op", ""))
+    if op not in GATE_OPS:
+        raise ValueError(f"unsupported gate op {op}")
+    conditions = gate.get("conditions")
+    if not isinstance(conditions, list) or not conditions:
+        raise ValueError("edge gate requires a non-empty conditions list")
+    states = state_map or {}
+    outcomes: list[bool] = []
+    for cond in conditions:
+        if not isinstance(cond, Mapping):
+            raise ValueError("gate condition must be a mapping")
+        node_id = str(cond.get("node", ""))
+        cmp_op = str(cond.get("op", ""))
+        if cmp_op not in GATE_COMPARE_OPS:
+            raise ValueError(f"unsupported gate comparison op {cmp_op}")
+        if node_id not in states:
+            raise ValueError(f"gate condition node {node_id} missing from state map")
+        raw_val = states[node_id]
+        raw_target = cond.get("value")
+        if isinstance(raw_val, bool) or not isinstance(raw_val, (int, float)) or not math.isfinite(float(raw_val)):
+            raise ValueError(f"gate condition state for {node_id} must be finite")
+        if isinstance(raw_target, bool) or not isinstance(raw_target, (int, float)) or not math.isfinite(float(raw_target)):
+            raise ValueError(f"gate condition threshold for {node_id} must be finite")
+        cur_val = float(raw_val)
+        target_val = float(raw_target)
+        if cmp_op == "gt":
+            outcomes.append(cur_val > target_val)
+        elif cmp_op == "gte":
+            outcomes.append(cur_val >= target_val)
+        elif cmp_op == "lt":
+            outcomes.append(cur_val < target_val)
+        else:
+            outcomes.append(cur_val <= target_val)
+    if op == "all":
+        return 1.0 if all(outcomes) else 0.0
+    if op == "any":
+        return 1.0 if any(outcomes) else 0.0
+    return 0.0 if any(outcomes) else 1.0
+
+
 def evaluate_output_effect(
     *,
     base_strength: float,
@@ -66,9 +143,12 @@ def evaluate_output_effect(
     noise: float = 0.0,
     formula_version: str = FORMULA_VERSION,
     threshold_active: bool | None = None,
+    gate_multiplier: float = 1.0,
 ) -> tuple[float, bool | None]:
     """Evaluate one edge and return its output plus hysteresis latch state."""
-    if formula_version == "2.1":
+    if formula_version == "2.2":
+        formula_version = FORMULA_VERSION_2_2
+    elif formula_version == "2.1":
         formula_version = FORMULA_VERSION
     elif formula_version == "2.0":
         formula_version = LEGACY_FORMULA_VERSION
@@ -123,7 +203,7 @@ def evaluate_output_effect(
             raise ValueError(f"unsupported threshold mode {mode}")
     else:
         raise ValueError(f"unsupported transform {transform}")
-    raw = float(sign) * coefficient * float(context_mult) * response
+    raw = float(sign) * coefficient * float(context_mult) * response * float(gate_multiplier)
     if saturation is not None and math.isfinite(saturation) and saturation > 0:
         # soft saturate
         raw = saturation * math.tanh(raw / saturation)
@@ -142,6 +222,7 @@ def expected_output_effect(
     noise: float = 0.0,
     formula_version: str = FORMULA_VERSION,
     threshold_active: bool | None = None,
+    gate_multiplier: float = 1.0,
 ) -> float:
     """Replay one supported version of the edge formula contract."""
     output, _ = evaluate_output_effect(
@@ -155,6 +236,7 @@ def expected_output_effect(
         noise=noise,
         formula_version=formula_version,
         threshold_active=threshold_active,
+        gate_multiplier=gate_multiplier,
     )
     return output
 
@@ -169,9 +251,10 @@ def amplification_ratio(
     transform_parameters: dict[str, Any] | None = None,
     formula_version: str = FORMULA_VERSION,
     threshold_active: bool | None = None,
+    gate_multiplier: float = 1.0,
 ) -> float:
     if formula_version == LEGACY_FORMULA_VERSION:
-        denom = abs(base_strength * context_mult)
+        denom = abs(base_strength * context_mult * gate_multiplier)
         if denom < 1e-15:
             return 0.0 if abs(output_effect) < 1e-15 else float("inf")
         return abs(output_effect) / denom
@@ -186,6 +269,7 @@ def amplification_ratio(
         transform_parameters=transform_parameters,
         formula_version=formula_version,
         threshold_active=threshold_active,
+        gate_multiplier=gate_multiplier,
     )
     denom = abs(reference)
     if denom < 1e-15:
@@ -242,6 +326,35 @@ def replay_trace_row(
         ie = refuse_string_number(row.get("input_effect"), f"{pointer}.input_effect", issues)
         if ie is not None:
             input_effect = ie
+
+    row_formula_hint = row.get("formula_version")
+    edge_transform_hint = str(edge.get("transform", "linear"))
+    input_mode = row.get("input_mode", edge.get("input_mode"))
+    if input_mode is None and row_formula_hint == FORMULA_VERSION_2_2:
+        input_mode = "log_ratio" if edge_transform_hint == "elasticity" else "deviation"
+    if input_mode is not None:
+        if not isinstance(input_mode, str) or input_mode not in INPUT_MODES:
+            issues.append(issue("ENUM", pointer=f"{pointer}/input_mode", actual=input_mode, message="input_mode must be level, deviation, or log_ratio"))
+        elif "input_effect" in row and "source_state" in row and "source_baseline" in row:
+            ss = refuse_string_number(row.get("source_state"), f"{pointer}.source_state", issues)
+            sb = refuse_string_number(row.get("source_baseline"), f"{pointer}.source_baseline", issues)
+            if ss is not None and sb is not None:
+                try:
+                    expected_input = compute_effective_input(input_mode, ss, sb)
+                    if not nearly_equal(expected_input, input_effect, abs_tol=abs_tol, rel_tol=rel_tol):
+                        issues.append(
+                            issue(
+                                "TRACE_FORMULA_MISMATCH",
+                                severity="error",
+                                artifact="propagation_trace",
+                                pointer=f"{pointer}.input_effect",
+                                message="input_effect does not match input_mode transformation of source_state and source_baseline",
+                                expected=expected_input,
+                                actual=input_effect,
+                            )
+                        )
+                except ValueError as exc:
+                    issues.append(issue("RANGE", pointer=f"{pointer}.input_effect", message=str(exc)))
 
     transform = edge.get("transform", "linear")
     if transform not in TRANSFORMS:
@@ -321,6 +434,29 @@ def replay_trace_row(
     elif threshold_after is not None and not isinstance(threshold_after, bool):
         issues.append(issue("TYPE", pointer=f"{pointer}/threshold_active_after", message="must be boolean"))
         threshold_after = None
+    gate_multiplier = 1.0
+    if "gate_multiplier" in row:
+        parsed_gate = refuse_string_number(row.get("gate_multiplier"), f"{pointer}.gate_multiplier", issues)
+        if parsed_gate is not None:
+            if not (0.0 <= parsed_gate <= 1.0):
+                issues.append(
+                    issue(
+                        "RANGE",
+                        pointer=f"{pointer}.gate_multiplier",
+                        message="gate_multiplier must lie in [0, 1]",
+                        actual=parsed_gate,
+                    )
+                )
+            else:
+                gate_multiplier = parsed_gate
+    elif edge.get("gate") is not None:
+        issues.append(
+            issue(
+                "MISSING_FIELD",
+                pointer=f"{pointer}.gate_multiplier",
+                message="trace row on a gated edge must declare gate_multiplier",
+            )
+        )
     try:
         expected, expected_threshold_after = evaluate_output_effect(
             base_strength=base if base is not None else 0.0,
@@ -333,6 +469,7 @@ def replay_trace_row(
             noise=noise,
             formula_version=str(row_formula_version),
             threshold_active=threshold_before,
+            gate_multiplier=gate_multiplier,
         )
     except (OverflowError, TypeError, ValueError) as exc:
         issues.append(issue("SCHEMA", pointer=f"{pointer}/edge.transform_parameters", message=str(exc)))
@@ -378,6 +515,7 @@ def replay_trace_row(
             transform_parameters=transform_parameters,
             formula_version=str(row_formula_version),
             threshold_active=threshold_before,
+            gate_multiplier=gate_multiplier,
         )
         if "amplification" in row or "amplification_ratio" in row:
             art_amp = row.get("amplification", row.get("amplification_ratio"))

@@ -183,6 +183,19 @@ def replay_case(workspace: Path, case: dict[str, Any]) -> dict[str, Any]:
             if periods != sorted(set(periods)):
                 raise ValueError("momentum inputs must have distinct increasing periods")
             bound_values[variable] = sum(b - a for a, b in zip(values[:-1], values[1:], strict=True)) / (len(values) - 1)
+        elif binding.get("operation") == "damped_difference" and len(values) >= 2:
+            periods = [observations[i]["period"] for i in indices]
+            if periods != sorted(set(periods)):
+                raise ValueError("damped_difference inputs must have distinct increasing periods")
+            damping = binding.get("damping", 1.0)
+            if isinstance(damping, bool) or not isinstance(damping, (int, float)) or not math.isfinite(damping) or not (0.0 <= float(damping) <= 1.0):
+                raise ValueError("damped_difference requires damping in [0, 1]")
+            bound_values[variable] = float(damping) * (sum(b - a for a, b in zip(values[:-1], values[1:], strict=True)) / (len(values) - 1))
+        elif binding.get("operation") == "trailing_mean_deviation" and len(values) >= 2:
+            periods = [observations[i]["period"] for i in indices]
+            if periods != sorted(set(periods)):
+                raise ValueError("trailing_mean_deviation inputs must have distinct increasing periods")
+            bound_values[variable] = (sum(values) / len(values)) - values[-1]
         else:
             raise ValueError("unsupported input binding operation")
     if set(bound_values) != required_inputs:

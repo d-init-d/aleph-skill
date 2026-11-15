@@ -4,7 +4,38 @@
       "id": "mech:policy:pass_through",
       "relation": "increases",
       "sign": 1,
-      "description": "Core policy transmission mechanism template for validated packs."
+      "transform": "linear",
+      "lag_ticks": 1,
+      "typical_strength": 0.45,
+      "description": "Statutory rule and subsidy enforcement transmission across administrative capacity into behavioral compliance outcomes."
+    },
+    {
+      "id": "mech:policy:implementation_capacity_bottleneck",
+      "relation": "inhibits",
+      "sign": -1,
+      "transform": "threshold",
+      "lag_ticks": 1,
+      "typical_strength": 0.55,
+      "gate_pattern": "veto(enforcement_capacity < minimum_threshold)",
+      "description": "Ambitious statutory mandates fail to convert into field outcomes when provincial inspectorate staffing or fiscal disbursement stalls."
+    },
+    {
+      "id": "mech:policy:regulatory_compliance_hysteresis",
+      "relation": "increases",
+      "sign": 1,
+      "transform": "threshold",
+      "lag_ticks": 2,
+      "typical_strength": 0.50,
+      "description": "High upfront capital-retooling cost creates threshold hysteresis until carbon pricing or subsidy certainty surpasses payback hurdles."
+    },
+    {
+      "id": "mech:policy:public_legitimacy_backlash",
+      "relation": "decreases",
+      "sign": -1,
+      "transform": "logistic",
+      "lag_ticks": 2,
+      "typical_strength": 0.45,
+      "description": "Sharp uncompensated cost-of-living shocks from policy reform erode coalition support and trigger partial policy reversal."
     }
   ]
 }

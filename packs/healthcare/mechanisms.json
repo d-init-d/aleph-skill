@@ -4,7 +4,38 @@
       "id": "mech:healthcare:pass_through",
       "relation": "increases",
       "sign": 1,
-      "description": "Core healthcare transmission mechanism template for validated packs."
+      "transform": "linear",
+      "lag_ticks": 1,
+      "typical_strength": 0.50,
+      "description": "Epidemiological transmission pass-through linking effective reproduction rate to clinical case incidence and hospital admissions."
+    },
+    {
+      "id": "mech:healthcare:icu_saturation_mortality_spike",
+      "relation": "increases",
+      "sign": 1,
+      "transform": "threshold",
+      "lag_ticks": 1,
+      "typical_strength": 0.75,
+      "gate_pattern": "all(hospital_occupancy > capacity_threshold)",
+      "description": "When ICU bed occupancy breaches safe staffing limits, triage delays elevate case fatality across severe acute conditions."
+    },
+    {
+      "id": "mech:healthcare:immunization_transmission_suppression",
+      "relation": "decreases",
+      "sign": -1,
+      "transform": "logistic",
+      "lag_ticks": 2,
+      "typical_strength": 0.60,
+      "description": "Population vaccination coverage and prior-infection immunity reduce susceptible host density and blunt secondary attack rates."
+    },
+    {
+      "id": "mech:healthcare:climate_vector_expansion",
+      "relation": "enables",
+      "sign": 1,
+      "transform": "linear",
+      "lag_ticks": 1,
+      "typical_strength": 0.40,
+      "description": "Seasonal warming and standing floodwater expand vector habitat suitability and lengthen vector-borne outbreak seasons."
     }
   ]
 }

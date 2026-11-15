@@ -3,7 +3,7 @@ name: aleph-skill
 description: Evidence-grounded causal timeline simulation for AI CLI and IDE hosts that support Agent Skills or an Aleph adapter contract. Use for counterfactual history, prospective interventions, hybrid past-to-future projections, butterfly effects, calibrated scenario analysis, domain-pack modeling, evidence-based or assumption-only actor decisions, and auditable uncertainty.
 ---
 
-# Aleph Skill 2.6.0
+# Aleph Skill 2.8.0
 
 Model how a defined intervention propagates through a causal system. Treat Aleph as a simulation protocol, never an oracle. Keep these labels distinct:
 
@@ -34,10 +34,10 @@ A hypothetical change point is valid without evidence that it already occurred. 
 
 1. Research the baseline, mechanisms, contradictions, actors, and measurable factors until evidence saturation. Checkpoint every wave. If a host limit interrupts the run, publish an honest unsaturated handoff that can be resumed. Follow `references/adaptive-research-workflow.md`.
 2. After gateway preflight verifies the locked bundle and the required route capability, invoke D Research only through `<ALEPH_SKILL_ROOT>/scripts/research_gateway.py`, import its signed ledger with `<ALEPH_SKILL_ROOT>/scripts/import_research_ledger.py`, preserve the source ledger and HMAC sidecar, and bind a portable `component_binding` on the import receipt. For an investigative route whose interop contract exposes policy and plan entrypoints, initialize/check the scope through `research:policy` and bind it through `research:plan bind-policy` before dispatch. Import only `record_type=claim` from the `evidence` field; preserve `lead` separately from `process`/`blocker` audit rows. If the required capability is blocked, build the evidence map directly from opened host-native sources, retain explicit provenance, omit the D Research import receipt, and cap assurance at `limited`.
-3. Build typed nodes and admitted causal edges. Read `references/node-builder.md` and `references/causal-edge-protocol.md`. The optional `<ALEPH_SKILL_ROOT>/scripts/auto_causal_inducer.py` (`propose` / `review` / `admit`) generates candidates and gaps, not verified causal truth. Supply per-node `node_measurements` (baseline, unit, observation time, stock retention when relevant). Default `review` is deterministic screening and exports only a draft. Execution requires explicit decisions for every node/edge and a named reviewer (`--reviewer ... --decisions ...`). Apply to a new workspace; never reuse an existing model or trace. See `references/upgrade-completion.md`.
-4. Compile and run the deterministic or Monte Carlo engine. Preserve config/model hashes, samples, invalid mass, traces, and replay material. Cyclic feedback systems support `scc_solver: linear_auto` (or Jacobi) with structured nonconvergence diagnostics and cycle analysis. Read `references/propagation-engine.md`.
-5. Cluster distinct scenario branches. Use `relative_weight` unless a declared calibration policy and hindcast gate authorize `calibrated_probability`. Read `references/branch-management.md` and `references/calibration-lineage.md`.
-6. Render the report using `references/reporting-contract.md`, validate, finalize atomically, then verify receipts.
+3. Build typed nodes and admitted causal edges. Read `references/node-builder.md` and `references/causal-edge-protocol.md`. Nodes may supply distinct finite `initial_value` vs equilibrium `baseline`; edges may declare conditional `gate` blocks (`all`/`any`/`veto`). The optional `<ALEPH_SKILL_ROOT>/scripts/auto_causal_inducer.py` (`propose` / `review` / `admit` / `apply --into-initialized`) ingests bilingual claim ledgers or wide numeric time-series CSVs (flagged `correlation_not_causation`) and generates candidates/gaps; `<ALEPH_SKILL_ROOT>/scripts/repair_model_schema.py` normalizes noisy LLM node/edge/intervention aliases before compilation. Supply per-node `node_measurements` (baseline, unit, observation time, stock retention when relevant). Default `review` is deterministic screening and exports only a draft. Execution requires explicit decisions for every node/edge and a named reviewer (`--reviewer ... --decisions ...`). Apply to a new workspace or pass `--into-initialized` cleanly for newly initialized drafts; never overwrite an existing simulation trace. See `references/upgrade-completion.md`.
+4. Compile and run the deterministic or Monte Carlo engine (default `formula_version: 2.2.0` with `deviation` edge inputs, `retention_unit: per_day|per_tick`, `gate_multiplier`, scale-aware divergence guard, and optional tail shocks; see `references/formula-2.2.md`), or run `<ALEPH_SKILL_ROOT>/scripts/quickstart_quant.py` to exercise numerical initialization, propagation, replay, sensitivity, and validation on a demonstration model. Preserve config/model hashes, samples, invalid mass, traces, and replay material. Cyclic feedback systems support `scc_solver: linear_auto` (or Jacobi) with structured nonconvergence diagnostics and cycle analysis. Read `references/propagation-engine.md`.
+5. Cluster distinct scenario branches. Use `relative_weight` unless a declared calibration policy and hindcast gate authorize `calibrated_probability`. For offline causal point backtesting and distribution-free ACI conformal intervals, run `<ALEPH_SKILL_ROOT>/scripts/evaluate_point_forecasts.py --model adaptive`, `<ALEPH_SKILL_ROOT>/scripts/calibrate_intervals.py`, or `<ALEPH_SKILL_ROOT>/scripts/run_offline_backtest.py` (`references/offline-backtest.md`). Pass `--offline-provisional` to `init_simulation_workspace.py` or `quickstart_quant.py` when running offline without external research to tag an unverified workspace honestly at `limited` assurance rather than failing missing-research saturation gates. Read `references/branch-management.md` and `references/calibration-lineage.md`.
+6. Render the report using `references/reporting-contract.md`, validate, finalize atomically (`finalize_simulation.py --complete` promotes status/checkpoints atomically before receipt sealing), then verify receipts.
 
 ## Seal material human decisions
 
@@ -76,9 +76,9 @@ These gates control the truth claims, reproducibility, and assurance of artifact
 - Bundled research routes and gateway: `references/bundled-research-routing.md`
 - Temporal semantics: `references/temporal-modes.md`
 - Nodes and edges: `references/node-builder.md`, `references/causal-edge-protocol.md`
-- Engine, uncertainty, and replay: `references/propagation-engine.md`
+- Engine, uncertainty, and replay: `references/propagation-engine.md`, `references/formula-2.2.md`
 - Sealed actors: `references/human-node-protocol.md`
-- Branch likelihood and calibration: `references/branch-management.md`
+- Branch likelihood and calibration: `references/branch-management.md`, `references/offline-backtest.md`
 - Report and audit: `references/reporting-contract.md`
 - Host install paths/profiles: `adapters/registry.json`
 
@@ -90,7 +90,7 @@ POSIX example:
 
 ```sh
 export ALEPH_SKILL_ROOT="/absolute/path/to/aleph-skill"
-python "$ALEPH_SKILL_ROOT/scripts/preflight.py" --json
+python3 "$ALEPH_SKILL_ROOT/scripts/preflight.py" --json
 ```
 
 PowerShell example:
@@ -104,9 +104,9 @@ python "$env:ALEPH_SKILL_ROOT\scripts\preflight.py" --json
 
 Cold-start simulation generates authentic execution traces directly from mathematical model execution without requiring pre-authored trace numbers:
 
-1. **Specification**: Agent specifies model nodes, causal edges, and engine configuration in workspace artifacts (`nodes.json`, `edges.json`, `simulation-manifest.json`).
+1. **Specification**: Agent specifies model nodes, causal edges, and engine configuration in workspace artifacts (`nodes.json`, `edges.json`, `simulation-manifest.json`; optionally normalized via `<ALEPH_SKILL_ROOT>/scripts/repair_model_schema.py`).
    For a newly initialized qualitative workspace, explicitly select `simulation_mode: deterministic|monte_carlo` and set `artifact_paths.execution_trace: execution-trace.json` to a new or empty file. Preserve the qualitative template separately; do not direct engine-generated JSON into a legacy `.jsonl` trace path.
-2. **Engine execution**: `<ALEPH_SKILL_ROOT>/scripts/run_simulation.py` executes mathematical propagation (formula 2.1 or legacy 2.0), dynamically computing state transitions, edge delivery queues, and fixed-point cycle convergence, and automatically generates an authentic, schema-compliant `execution-trace.json` (with `generation_mode: engine_derived` and deterministic `replay_hash`).
+2. **Engine execution**: `<ALEPH_SKILL_ROOT>/scripts/run_simulation.py` executes mathematical propagation (formula 2.2 default, or legacy 2.1 / 2.0 replay), dynamically computing state transitions, edge delivery queues, and fixed-point cycle convergence, and automatically generates an authentic, schema-compliant `execution-trace.json` (with `generation_mode: engine_derived` and deterministic `replay_hash`).
 3. **Replay & validation**: `<ALEPH_SKILL_ROOT>/scripts/replay_simulation.py` independently verifies the generated trace against analytical transitions and checks trace contracts. `<ALEPH_SKILL_ROOT>/scripts/validate_simulation_artifacts.py` validates schema conformity and artifact integrity.
 4. **Finalization**: Atomic receipts bind the model and trace digests.
 
@@ -115,20 +115,25 @@ Cold-start simulation generates authentic execution traces directly from mathema
 Sensitivity analysis requires a workspace-relative `sensitivity-config.json` (or an explicit `--spec` path) with at least one valid parameter and output variable.
 
 ```text
-python "<ALEPH_SKILL_ROOT>/scripts/preflight.py" --json
-python "<ALEPH_SKILL_ROOT>/scripts/research_gateway.py" research:preflight
-python "<ALEPH_SKILL_ROOT>/scripts/init_simulation_workspace.py" ...
-python "<ALEPH_SKILL_ROOT>/scripts/import_research_ledger.py" ...
-python "<ALEPH_SKILL_ROOT>/scripts/auto_causal_inducer.py" propose --ledger <ledger.csv> --out <proposal.json>
-python "<ALEPH_SKILL_ROOT>/scripts/auto_causal_inducer.py" admit --proposal <proposal.json> --review <review.json> --workspace <run>
-python "<ALEPH_SKILL_ROOT>/scripts/interactive_roleplay.py" init --spec <roleplay-spec.json> --workspace <run>
-python "<ALEPH_SKILL_ROOT>/scripts/validate_simulation_artifacts.py" --workspace <run> --mode draft --write-report
-python "<ALEPH_SKILL_ROOT>/scripts/run_simulation.py" --workspace <run> ...
-python "<ALEPH_SKILL_ROOT>/scripts/replay_simulation.py" --workspace <run> ...
-python "<ALEPH_SKILL_ROOT>/scripts/render_simulation_report.py" --workspace <run>
-python "<ALEPH_SKILL_ROOT>/scripts/finalize_simulation.py" --workspace <run>
-python "<ALEPH_SKILL_ROOT>/scripts/validate_simulation_artifacts.py" --workspace <run> --mode final --require-report
-python "<ALEPH_SKILL_ROOT>/scripts/verify_receipts.py" ...
+python3 "<ALEPH_SKILL_ROOT>/scripts/preflight.py" --json
+python3 "<ALEPH_SKILL_ROOT>/scripts/research_gateway.py" research:preflight
+python3 "<ALEPH_SKILL_ROOT>/scripts/init_simulation_workspace.py" ... [--offline-provisional]
+python3 "<ALEPH_SKILL_ROOT>/scripts/quickstart_quant.py" --out-dir <output-parent> --slug <slug> --change-point "..." [--offline-provisional]
+python3 "<ALEPH_SKILL_ROOT>/scripts/repair_model_schema.py" --workspace <run> --in-place
+python3 "<ALEPH_SKILL_ROOT>/scripts/import_research_ledger.py" ...
+python3 "<ALEPH_SKILL_ROOT>/scripts/auto_causal_inducer.py" propose --ledger <ledger.csv> --out <proposal.json>
+python3 "<ALEPH_SKILL_ROOT>/scripts/auto_causal_inducer.py" admit --proposal <proposal.json> --review <review.json> --workspace <run> [--into-initialized]
+python3 "<ALEPH_SKILL_ROOT>/scripts/interactive_roleplay.py" init --spec <roleplay-spec.json> --workspace <run>
+python3 "<ALEPH_SKILL_ROOT>/scripts/evaluate_point_forecasts.py" --data <series.csv> --out <eval-dir> --model adaptive
+python3 "<ALEPH_SKILL_ROOT>/scripts/calibrate_intervals.py" --evaluation-dir <eval-dir> --out <intervals.json>
+python3 "<ALEPH_SKILL_ROOT>/scripts/run_offline_backtest.py" --data <archive.json> --series <names> --out-dir <backtest-dir>
+python3 "<ALEPH_SKILL_ROOT>/scripts/validate_simulation_artifacts.py" --workspace <run> --mode draft --write-report
+python3 "<ALEPH_SKILL_ROOT>/scripts/run_simulation.py" --workspace <run> ...
+python3 "<ALEPH_SKILL_ROOT>/scripts/replay_simulation.py" --workspace <run> ...
+python3 "<ALEPH_SKILL_ROOT>/scripts/render_simulation_report.py" --workspace <run>
+python3 "<ALEPH_SKILL_ROOT>/scripts/finalize_simulation.py" --workspace <run>
+python3 "<ALEPH_SKILL_ROOT>/scripts/validate_simulation_artifacts.py" --workspace <run> --mode final --require-report
+python3 "<ALEPH_SKILL_ROOT>/scripts/verify_receipts.py" ...
 ```
 
 The core is Python-stdlib-first and host-neutral. Native Agent Skills hosts load this directory. The generated Continue rule and external-CLI profiles are installed beside the same verified core at `.aleph/core/aleph-skill`; every generated adapter resolves scripts and references from that path. External-CLI profiles are declarative adapter contracts, not turnkey orchestration: a host or wrapper must implement their probes, capability boundaries, isolation, and receipts. All hosts execute the same core scripts and artifact contract.

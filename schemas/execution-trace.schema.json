@@ -39,7 +39,7 @@
     },
     "formula_version": {
       "type": "string",
-      "enum": ["2.0.0", "2.1.0"],
+      "enum": ["2.0.0", "2.1.0", "2.2.0"],
       "description": "Mathematical engine propagation formula semantics applied."
     },
     "generated_by": {
@@ -173,6 +173,25 @@
           "type": "number",
           "description": "Numerical value of source node at emission_tick."
         },
+        "source_baseline": {
+          "type": "number",
+          "description": "Declared baseline of source node used for deviation or log_ratio input modes."
+        },
+        "input_mode": {
+          "type": "string",
+          "enum": ["level", "deviation", "log_ratio"],
+          "description": "Effective edge input representation mode."
+        },
+        "input_effect": {
+          "type": "number",
+          "description": "Effective edge input value passed into the edge transform after applying input_mode."
+        },
+        "gate_multiplier": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Optional conditional conjunction/veto multiplier (0 or 1) applied from edge.gate."
+        },
         "target_state_before": {
           "type": "number",
           "description": "Numerical value of target node prior to applying this step effect."
@@ -220,7 +239,7 @@
         "transform_applied": {
           "type": "object",
           "properties": {
-            "mode": { "type": "string", "enum": ["linear", "logistic", "hysteresis", "saturation"] },
+            "mode": { "type": "string", "enum": ["linear", "threshold", "logistic", "elasticity", "identity", "saturation", "above", "below", "deadband", "hysteresis"] },
             "threshold_active_before": { "type": "boolean" },
             "threshold_active_after": { "type": "boolean" }
           }

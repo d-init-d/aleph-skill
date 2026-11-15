@@ -17,12 +17,13 @@
     "confidence": {"type": "number", "minimum": 0, "maximum": 1}, "assumption_ref": {"type": "string"},
     "alternative_explanations": {"type": "array", "items": {"type": "string"}},
     "sensitivity": {"type": "object", "additionalProperties": false, "required": ["level", "drivers"], "properties": {"level": {"enum": ["low", "medium", "high"]}, "drivers": {"type": "array", "items": {"type": "string"}}}}, "role": {"type": "string"}, "datatype": {"type": "string"},
-    "unit": {"type": "string"}, "scale": {"enum": ["level", "flow", "stock"]}, "baseline": {"type": "number"}, "bounds": {"type": "array"},
+    "unit": {"type": "string"}, "scale": {"enum": ["level", "flow", "stock"]}, "baseline": {"type": "number"}, "initial_value": {"type": "number"}, "bounds": {"type": "array"},
     "retention": {"oneOf": [{"type": "number", "minimum": 0, "maximum": 1}, {"$ref": "#/$defs/scalarDistribution"}]},
+    "retention_unit": {"enum": ["per_day", "per_tick"]},
     "decay_rate": {"oneOf": [{"type": "number", "minimum": 0}, {"$ref": "#/$defs/scalarDistribution"}]}
   },
   "allOf": [
-    {"if": {"anyOf": [{"required": ["retention"]}, {"required": ["decay_rate"]}]}, "then": {"properties": {"scale": {"const": "stock"}}, "required": ["scale"]}},
+    {"if": {"anyOf": [{"required": ["retention"]}, {"required": ["retention_unit"]}, {"required": ["decay_rate"]}]}, "then": {"properties": {"scale": {"const": "stock"}}, "required": ["scale"]}},
     {"not": {"required": ["retention", "decay_rate"]}}
   ],
   "$defs": {

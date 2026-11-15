@@ -1,6 +1,6 @@
 {
   "name": "aleph-skill-tools",
-  "version": "2.6.0",
+  "version": "2.8.0",
   "description": "Portable causal timeline simulation skill with bundled D Research, strict validation, numerical engine, domain packs, and thin adapters.",
   "private": true,
   "license": "CC-BY-NC-4.0",
@@ -29,7 +29,7 @@
     "validate:skill": "python scripts/validate_skill_package.py .",
     "package:check": "python scripts/validate_skill_package.py .",
     "test": "python -m unittest discover -s tests -p \"test*.py\" -v",
-    "test:coverage": "python -m coverage run --branch -m unittest discover -s tests -p \"test*.py\" && python -m coverage report",
+    "test:coverage": "python -m coverage run --branch -m unittest discover -s tests -p \"test*.py\" && python -m coverage combine && python -m coverage report",
     "lint": "python -m ruff check scripts tests",
     "typecheck": "python -m mypy --strict scripts",
     "butterfly:score": "python scripts/score_butterfly.py",

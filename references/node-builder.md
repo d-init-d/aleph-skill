@@ -180,3 +180,11 @@ Prefer primary data, official records, peer-reviewed research, institutional rep
 Node detail follows causal materiality and adaptive complexity rather than a named depth level. Critical-path nodes require type-specific fields, directly supported mechanisms, contradiction checks, rival explanations, sensitivity drivers, and calibration anchors. Peripheral nodes may remain compact but still require the complete artifact schema.
 
 Human decision makers on critical paths require an explicit `actor_basis`, sealed packets, and roleplay labeled `simulation`. Evidence/mixed actors separate research from roleplay; assumption-only actors skip research and state assumptions/unknowns directly.
+
+## Stock dynamics and numerical fields (formula 2.2.0)
+
+For continuous-time and macroeconomic modeling under `formula_version: "2.2.0"`:
+
+- `retention_unit` (`per_day` default or `per_tick`): clarifies whether stock `retention` / `decay_rate` applies per calendar day or directly per discrete simulation tick (`timestep`);
+- edge `input_mode` (`deviation` default in `2.2.0`, `log_ratio`, or legacy `level`): determines whether downstream edges transmit baseline deviations `(x_src - baseline)` (eliminating spurious zero-intervention drift on large baselines), log-ratios `ln(x_src / baseline)`, or raw levels;
+- node/distribution `tail` (`fat_tail` / `regime_shift` metadata) and branch `tail_coverage`: support stress scenarios and tail-risk accounting under Monte Carlo runs.

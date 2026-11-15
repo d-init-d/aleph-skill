@@ -11,7 +11,6 @@ import stat
 import subprocess
 import sys
 import tempfile
-import uuid
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -360,7 +359,7 @@ def main() -> None:
     if args.with_dev:
         dev_cache = tempfile.TemporaryDirectory(prefix="aleph-release-dev-")
         mypy_cache = Path(dev_cache.name) / "mypy"
-        coverage_data = Path(tempfile.gettempdir()) / f"aleph-release-coverage-{uuid.uuid4().hex}"
+        coverage_data = Path(dev_cache.name) / ".coverage"
         commands.extend(
             [
                 (
@@ -439,13 +438,14 @@ def main() -> None:
         ]
     )
     if coverage_data is not None:
-        commands.append(
-            (
-                "coverage-report",
-                [python, "-m", "coverage", "report", f"--data-file={coverage_data}"],
-                None,
+        for operation in ("combine", "report"):
+            commands.append(
+                (
+                    f"coverage-{operation}",
+                    [python, "-m", "coverage", operation, f"--data-file={coverage_data}"],
+                    None,
+                )
             )
-        )
     if (root / ".git").exists() and shutil.which("git"):
         commands.append(("git-diff-check", ["git", "diff", "--check"], None))
 

@@ -1,0 +1,136 @@
+{
+  "schema_version": "2.0.0",
+  "formula_version": "2.2.0",
+  "case_id": "hindcast:economics:macro-brent-2024-09",
+  "cutoff": "2024-09-11T00:00:00Z",
+  "official_release_date": "2024-10-10T13:30:00Z",
+  "evidence_snapshot_hash": "2c82b0e7c0fb4f069310f23967bbf00878d5a675ed556d079c04bb62fe18a306",
+  "model_hash": "94702d693ff414b78dbebad48972c2cc2242de9b6438b8aa5c1a8d12e5ec4f74",
+  "outcome_dataset": {
+    "source": "data/us_macro_2024_2026.json",
+    "sha256": "6f6065a4f1abd413b6bd98a9dada614a5501ab3287bbc00220edaa63969bdb1b",
+    "observed_at": "2024-10-10T13:30:00Z"
+  },
+  "model": {
+    "nodes": [
+      {
+        "id": "economics:brent_level",
+        "role": "exogenous",
+        "datatype": "continuous",
+        "unit": "USD/bbl",
+        "baseline": 80.36,
+        "bounds": [
+          0,
+          500
+        ]
+      },
+      {
+        "id": "economics:brent_delta",
+        "role": "exogenous",
+        "datatype": "continuous",
+        "unit": "USD/bbl",
+        "baseline": -4.790000000000006,
+        "bounds": [
+          -200,
+          200
+        ]
+      },
+      {
+        "id": "economics:brent_forecast",
+        "role": "endogenous",
+        "datatype": "continuous",
+        "unit": "USD/bbl",
+        "baseline": 0.0,
+        "bounds": [
+          0,
+          500
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge:economics:brent_level_base",
+        "from": "economics:brent_level",
+        "to": "economics:brent_forecast",
+        "sign": 1,
+        "base_strength": 1.0,
+        "lag_ticks": 0,
+        "transform": "linear",
+        "input_mode": "level"
+      },
+      {
+        "id": "edge:economics:brent_damped_delta",
+        "from": "economics:brent_delta",
+        "to": "economics:brent_forecast",
+        "sign": 1,
+        "base_strength": 0.02,
+        "lag_ticks": 0,
+        "transform": "linear",
+        "input_mode": "level"
+      }
+    ],
+    "interventions": []
+  },
+  "config": {
+    "seed": "economics-hindcast",
+    "mode": "deterministic"
+  },
+  "ticks": 1,
+  "observations": {
+    "economics:brent_forecast": 74.02
+  },
+  "baselines": {
+    "economics:brent_forecast": 80.36
+  },
+  "evidence": [
+    {
+      "id": "evidence:economics:brent:2024-01",
+      "available_at": "2024-02-10T13:30:00Z",
+      "vintage_date": "2024-02-10T13:30:00Z",
+      "value": 80.04
+    },
+    {
+      "id": "evidence:economics:brent:2024-02",
+      "available_at": "2024-03-10T13:30:00Z",
+      "vintage_date": "2024-03-10T13:30:00Z",
+      "value": 81.1
+    },
+    {
+      "id": "evidence:economics:brent:2024-03",
+      "available_at": "2024-04-10T13:30:00Z",
+      "vintage_date": "2024-04-10T13:30:00Z",
+      "value": 85.47
+    },
+    {
+      "id": "evidence:economics:brent:2024-04",
+      "available_at": "2024-05-10T13:30:00Z",
+      "vintage_date": "2024-05-10T13:30:00Z",
+      "value": 89.94
+    },
+    {
+      "id": "evidence:economics:brent:2024-05",
+      "available_at": "2024-06-10T13:30:00Z",
+      "vintage_date": "2024-06-10T13:30:00Z",
+      "value": 81.75
+    },
+    {
+      "id": "evidence:economics:brent:2024-06",
+      "available_at": "2024-07-10T13:30:00Z",
+      "vintage_date": "2024-07-10T13:30:00Z",
+      "value": 82.25
+    },
+    {
+      "id": "evidence:economics:brent:2024-07",
+      "available_at": "2024-08-10T13:30:00Z",
+      "vintage_date": "2024-08-10T13:30:00Z",
+      "value": 85.15
+    },
+    {
+      "id": "evidence:economics:brent:2024-08",
+      "available_at": "2024-09-10T13:30:00Z",
+      "vintage_date": "2024-09-10T13:30:00Z",
+      "value": 80.36
+    }
+  ],
+  "provenance": "Retrospective Brent regression fixture using estimated monthly release timestamps"
+}

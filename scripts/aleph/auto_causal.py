@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import math
@@ -18,8 +19,15 @@ from typing import Any
 
 from . import FORMULA_VERSION
 from .import_ledger import import_d_research_ledger
-from .io import canonical_hash, canonical_json_bytes, load_json_secure, write_json_atomic
+from .io import (
+    canonical_hash,
+    canonical_json_bytes,
+    load_json_secure,
+    load_jsonl_secure,
+    write_json_atomic,
+)
 from .paths import path_contains_link_or_reparse
+from .schema import parse_timestep_seconds
 
 PROPOSAL_SCHEMA_VERSION = "1.0.0"
 REVIEW_SCHEMA_VERSION = "1.0.0"
@@ -27,7 +35,8 @@ REVIEW_SCHEMA_VERSION = "1.0.0"
 # --- Diacritic & Slug Utilities ---
 
 def _strip_accents(text: str) -> str:
-    """Normalize unicode and strip combining diacritical marks."""
+    """Normalize unicode, transliterate đ/Đ, and strip combining diacritical marks."""
+    text = text.replace("đ", "d").replace("Đ", "D")
     nfkd = unicodedata.normalize("NFKD", text)
     return "".join(c for c in nfkd if not unicodedata.combining(c))
 
@@ -43,11 +52,11 @@ def _slugify(text: str) -> str:
 
 # English causal verbs / phrases
 EN_POSITIVE_RE = re.compile(
-    r"\b(?:increases?|boosts?|raises?|stimulates?|drives?|amplifies?|accelerates?|leads? to higher|causes? higher|results? in higher)\b",
+    r"\b(?:increases?|boosts?|raises?|stimulates?|drives?|amplifies?|accelerates?|expands?|widens?|exacerbates?|aggravates?|escalates?|galvanizes?|mobilizes?|bolsters?|strengthens?|heightens?|leads? to higher|causes? higher|results? in higher)\b",
     re.IGNORECASE,
 )
 EN_NEGATIVE_RE = re.compile(
-    r"\b(?:decreases?|reduces?|lowers?|inhibits?|dampens?|cuts?|suppresses?|erodes?|undermines?|curbs?|slows?(?:\s+down)?|leads? to lower|causes? lower|results? in lower)\b",
+    r"\b(?:decreases?|reduces?|lowers?|inhibits?|dampens?|cuts?|suppresses?|erodes?|undermines?|curbs?|slows?(?:\s+down)?|depletes?|disrupts?|degrades?|destabilizes?|weakens?|collapses?|strains?|deters?|constrains?|leads? to lower|causes? lower|results? in lower)\b",
     re.IGNORECASE,
 )
 EN_CORRELATION_RE = re.compile(
@@ -61,11 +70,11 @@ EN_NEUTRAL_CAUSAL_RE = re.compile(
 
 # Vietnamese causal verbs / phrases
 VI_POSITIVE_RE = re.compile(
-    r"(?:làm tăng|thúc đẩy|nâng cao|kích thích|dẫn đến tăng|tăng cường|khuếch đại|đẩy mạnh|tạo đà cho|gia tăng|củng cố)",
+    r"(?:làm tăng|thúc đẩy|nâng cao|kích thích|dẫn đến tăng|tăng cường|khuếch đại|đẩy mạnh|tạo đà cho|gia tăng|củng cố thêm|củng cố|làm trầm trọng|làm leo thang|châm ngòi cho|thổi bùng|huy động|đẩy cao|đẩy(?!\s+lùi)\b)",
     re.IGNORECASE,
 )
 VI_NEGATIVE_RE = re.compile(
-    r"(?:làm giảm|làm suy giảm|suy giảm|kìm hãm|kìm chế|kiềm chế|hạ thấp|cắt giảm|hạn chế|kéo tụt|làm suy yếu|bào mòn|thu hẹp)",
+    r"(?:làm giảm|làm suy giảm|suy giảm|kìm hãm|kìm chế|kiềm chế|hạ thấp|cắt giảm|hạn chế|kéo tụt|kéo giảm|đẩy lùi|làm suy yếu|bào mòn|thu hẹp|làm cạn kiệt|làm gián đoạn|phá hủy|làm suy thoái|răn đe|gây bất ổn|bóp nghẹt|cản trở)",
     re.IGNORECASE,
 )
 VI_CORRELATION_RE = re.compile(
@@ -99,11 +108,12 @@ MECHANISM_VI_RE = re.compile(
 
 # Lag extraction
 LAG_EN_RE = re.compile(
-    r"\b(?:with (?:a )?lag of|delay of|lagged by|after)\s+(\d+)\s*(tick|ticks|day|days|month|months|quarter|quarters|year|years)\b",
+    r"\b(?:with\s+(?:a\s+)?lag\s+of|delay\s+of|lagged\s+by|after|over|within)\s+(\d+)\s*(tick|ticks|day|days|week|weeks|month|months|quarter|quarters|year|years)\b"
+    r"|\bwith\s+(?:a\s+)?(\d+)[-\s]+(tick|day|week|month|quarter|year)\s+lag\b",
     re.IGNORECASE,
 )
 LAG_VI_RE = re.compile(
-    r"(?:với độ trễ|trễ|sau)\s+(\d+)\s*(tick|ngày|tháng|quý|năm)\b",
+    r"(?:với\s+độ\s+trễ|độ\s+trễ|trễ|sau|trong\s+vòng)\s+(\d+)\s*(tick|ngày|tuần|tháng|quý|năm)\b",
     re.IGNORECASE,
 )
 
@@ -118,12 +128,27 @@ EFFECT_SIZE_VI_RE = re.compile(
 )
 
 # Stock keywords
-STOCK_EN_WORDS = {"stock", "debt", "inventory", "reserve", "accumulated", "wealth", "capital", "holdings"}
-STOCK_VI_WORDS = {"tồn kho", "nợ", "dự trữ", "tích lũy", "vốn", "tài sản"}
+STOCK_EN_WORDS = {
+    "stock", "debt", "inventory", "reserve", "reserves", "accumulated", "wealth", "capital", "holdings",
+    "reservoir", "groundwater", "forest", "forest cover", "glacier", "soil moisture", "biomass",
+    "munitions", "troop", "troops", "morale", "legitimacy", "trust", "credibility", "cohesion",
+}
+STOCK_VI_WORDS = {
+    "tồn kho", "nợ", "dự trữ", "tích lũy", "vốn", "tài sản",
+    "rừng", "độ che phủ rừng", "nước ngầm", "hồ chứa", "độ ẩm đất", "sinh khối",
+    "quân số", "sĩ khí", "uy tín", "niềm tin", "đạn dược", "gắn kết",
+}
 
 # Flow keywords
-FLOW_EN_WORDS = {"flow", "rate", "speed", "growth", "deficit", "surplus", "influx", "outflow", "issuance"}
-FLOW_VI_WORDS = {"dòng tiền", "tốc độ", "tỷ lệ tăng", "thâm hụt", "thặng dư", "dòng vốn", "phát hành"}
+FLOW_EN_WORDS = {
+    "flow", "rate", "speed", "growth", "deficit", "surplus", "influx", "outflow", "issuance",
+    "rainfall", "precipitation", "emission", "emissions", "runoff", "deforestation", "desertification",
+    "casualties", "recruitment", "desertion", "mobilization", "bombardment", "aid",
+}
+FLOW_VI_WORDS = {
+    "dòng tiền", "tốc độ", "tỷ lệ tăng", "thâm hụt", "thặng dư", "dòng vốn", "phát hành",
+    "lượng mưa", "phát thải", "dòng chảy", "phá rừng", "thương vong", "tuyển quân", "biểu tình", "viện trợ",
+}
 
 # Baseline extraction
 BASELINE_EN_RE = re.compile(r"\b(?:baseline (?:of)?|initial (?:value)? (?:of)?)\s*([+-]?\d+(?:\.\d+)?)\b", re.IGNORECASE)
@@ -140,6 +165,12 @@ UNIT_PATTERNS = [
     (re.compile(r"\b(?:vnd|đồng)\b", re.IGNORECASE), "VND"),
     (re.compile(r"\b(?:triệu usd|million usd)\b", re.IGNORECASE), "M_USD"),
     (re.compile(r"\b(?:tỷ vnd|billion vnd)\b", re.IGNORECASE), "B_VND"),
+    (re.compile(r"(?:°c|\bdegrees?\s*c\b|\bcelsius\b|\bđộ\s*c\b)", re.IGNORECASE), "degC"),
+    (re.compile(r"\b(?:mm|millimeters?|millimetres?|milimet)\b", re.IGNORECASE), "mm"),
+    (re.compile(r"\b(?:ppm)\b", re.IGNORECASE), "ppm"),
+    (re.compile(r"\b(?:gtco2|mtco2|tco2|tonnes?\s+co2)\b", re.IGNORECASE), "tCO2"),
+    (re.compile(r"\b(?:mwh|mw|gw)\b", re.IGNORECASE), "MW"),
+    (re.compile(r"\b(?:troops|soldiers|personnel|binh sĩ)\b", re.IGNORECASE), "personnel"),
 ]
 
 
@@ -187,12 +218,17 @@ def _parse_confidence(raw: Any) -> float:
 
 
 def _parse_lag_ticks(match: re.Match[str]) -> int:
-    val = int(match.group(1))
-    unit = match.group(2).lower()
+    groups = [g for g in match.groups() if g is not None]
+    if len(groups) < 2:
+        return 0
+    val = int(groups[0])
+    unit = groups[1].lower()
     if unit in ("tick", "ticks"):
         return max(0, val)
     if unit in ("day", "days", "ngày"):
         return max(0, val)
+    if unit in ("week", "weeks", "tuần"):
+        return max(0, val * 7)
     if unit in ("month", "months", "tháng"):
         return max(0, val * 30)
     if unit in ("quarter", "quarters", "quý"):
@@ -200,6 +236,39 @@ def _parse_lag_ticks(match: re.Match[str]) -> int:
     if unit in ("year", "years", "năm"):
         return max(0, val * 365)
     return max(0, val)
+
+
+def _strip_causal_modifiers(text: str) -> str:
+    """Remove trailing/embedded lag, effect-size, and time-horizon modifiers before entity slugification."""
+    cleaned = LAG_EN_RE.sub(" ", text)
+    cleaned = LAG_VI_RE.sub(" ", cleaned)
+    cleaned = EFFECT_SIZE_EN_RE.sub(" ", cleaned)
+    cleaned = re.sub(
+        r"(?:với\s+|ở\s+)?(?:mức|khoảng|hệ số|tỷ lệ|quy mô)\s*[+-]?\d+(?:\.\d+)?%?",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"\b(?:over|within|across|in|for)\s+(?:the\s+next\s+)?\d+\s*(?:tick|ticks|day|days|week|weeks|month|months|quarter|quarters|year|years)\b",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"(?:trong|sau|với)\s+(?:khoảng\s+)?\d+\s*(?:tick|ngày|tuần|tháng|quý|năm)\b",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"(?:\s*,?\s*(?:ngay\s+lập\s+tức|immediately))+$",
+        "",
+        cleaned.strip(),
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.;:-")
+    return cleaned
 
 
 def _parse_effect_size(val_str: str) -> float | None:
@@ -214,8 +283,70 @@ def _parse_effect_size(val_str: str) -> float | None:
         return None
 
 
+_COND_EN_RE = re.compile(
+    r"^\s*(?P<conj>if|when|whenever|once|unless|provided\s+that|because|since|as)\s+(?P<cond>.+?)(?:,\s*(?:then\s+)?|\s+then\s+)(?P<cons>.+?)\s*$",
+    re.IGNORECASE,
+)
+_COND_VI_RE = re.compile(
+    r"^\s*(?P<conj>nếu\s+như|nếu|hễ|khi|mỗi\s+khi|một\s+khi|trừ\s+khi|do|bởi\s+vì|vì)\s+(?P<cond>.+?)(?:,\s*(?:thì\s+|nên\s+)?|\s+(?:thì|nên)\s+)(?P<cons>.+?)\s*$",
+    re.IGNORECASE,
+)
+_CLAUSE_UP_RE = re.compile(
+    r"(?:\b(?:rises?|increases?|surges?|spikes?|grows?|expands?|intensifies?|escalates?|prolongs?|strengthens?|worsens?|exceeds?|continues?|persists?|arrives?|reaches?|raises?|high|higher)\b|tăng\s+lên|tăng\s+mạnh|tăng\s+cao|gia\s+tăng|tăng|kéo\s+dài|leo\s+thang|bùng\s+phát|trầm\s+trọng|vượt\s+ngưỡng)",
+    re.IGNORECASE,
+)
+_CLAUSE_DOWN_RE = re.compile(
+    r"(?:\b(?:falls?|drops?|declines?|decreases?|shrinks?|contracts?|collapses?|weakens?|erodes?|fails?|stops?|halts?|ends?|low|lower)\b|giảm\s+sâu|sụt\s+giảm|suy\s+giảm|giảm|suy\s+yếu|sụp\s+đổ|cạn\s+kiệt|gián\s+đoạn|ngừng)",
+    re.IGNORECASE,
+)
+_COND_TAIL_VERB_RE = re.compile(
+    r"(?:\s+(?:above\s+threshold|exceeds?\s+\S+|rises?|increases?|surges?|spikes?|grows?|expands?|intensifies?|escalates?|prolongs?|strengthens?|worsens?|continues?|persists?|arrives?|reaches?|falls?|drops?|declines?|decreases?|shrinks?|contracts?|collapses?|weakens?|erodes?|fails?|stops?|halts?|ends?|tăng\s+lên|tăng\s+mạnh|tăng\s+cao|tăng|kéo\s+dài|leo\s+thang|bùng\s+phát|trầm\s+trọng|vượt\s+ngưỡng|giảm\s+sâu|sụt\s+giảm|suy\s+giảm|giảm|suy\s+yếu|sụp\s+đổ|cạn\s+kiệt|gián\s+đoạn|ngừng))+$",
+    re.IGNORECASE,
+)
+
+
+def _clean_clause_entity(text: str) -> tuple[str, int]:
+    cleaned = re.split(
+        r"\b(?:via|through|by means of|thông qua|bằng cơ chế|nhờ vào|bằng cách)\b",
+        text,
+        flags=re.IGNORECASE,
+    )[0].strip()
+    cleaned = re.split(r"[,;]|(?<!\d)\.(?!\d)", cleaned)[0].strip()
+    up_match = _CLAUSE_UP_RE.search(cleaned)
+    down_match = _CLAUSE_DOWN_RE.search(cleaned)
+    direction = -1 if (down_match and (not up_match or down_match.start() < up_match.start())) else 1
+    cleaned = _COND_TAIL_VERB_RE.sub("", cleaned).strip()
+    cleaned = re.sub(r"^(?:an?|the|việc|sự|nguồn|mức|tình\s+trạng)\s+", "", cleaned, flags=re.IGNORECASE).strip()
+    cleaned = _strip_causal_modifiers(cleaned)
+    return cleaned, direction
+
+
+def _extract_conditional_relation(claim_text: str) -> tuple[str, str, int, str, bool] | None:
+    match = _COND_EN_RE.match(claim_text) or _COND_VI_RE.match(claim_text)
+    if not match:
+        return None
+    conj = match.group("conj").strip().lower()
+    cond_raw = match.group("cond").strip()
+    cons_raw = match.group("cons").strip()
+    # Skip negative meta-claims ("If false that...") or nested multi-clause prose
+    if len(cond_raw.split()) > 14 or len(cons_raw.split()) > 16:
+        return None
+    src_name, src_dir = _clean_clause_entity(cond_raw)
+    tgt_name, tgt_dir = _clean_clause_entity(cons_raw)
+    if not src_name or not tgt_name:
+        return None
+    if conj in {"unless", "trừ khi"}:
+        src_dir = -src_dir
+    net_sign = 1 if (src_dir * tgt_dir) >= 0 else -1
+    rel = "increases" if net_sign == 1 else "decreases"
+    return src_name, tgt_name, net_sign, rel, False
+
+
 def _extract_entities_and_relation(claim_text: str) -> tuple[str, str, int | None, str, bool]:
     """Extract source entity, target entity, sign (-1, 1 or None), relation label, and is_correlation flag."""
+    cond_res = _extract_conditional_relation(claim_text)
+    if cond_res is not None:
+        return cond_res
     is_correlation = bool(EN_CORRELATION_RE.search(claim_text) or VI_CORRELATION_RE.search(claim_text))
     sign: int | None = None
     relation = "causes"
@@ -254,8 +385,8 @@ def _extract_entities_and_relation(claim_text: str) -> tuple[str, str, int | Non
             target_part,
             flags=re.IGNORECASE,
         )[0].strip()
-        # Cut off secondary clauses at comma, semicolon, period
-        target = re.split(r"[,;.]", target_part)[0].strip()
+        # Cut off secondary clauses at comma, semicolon, or non-decimal period
+        target = re.split(r"[,;]|(?<!\d)\.(?!\d)", target_part)[0].strip()
         # Clean up leading/trailing prepositions, articles, or negation prefixes
         clean_source = re.sub(
             r"^(?:it is false that|false that|is false that|there is no evidence that|no evidence (?:that|of)|sai lầm khi cho rằng|không đúng khi cho rằng)\s+",
@@ -265,11 +396,15 @@ def _extract_entities_and_relation(claim_text: str) -> tuple[str, str, int | Non
         ).strip()
         source = re.sub(r"^(an?|the|việc|sự|higher|lower)\s+", "", clean_source, flags=re.IGNORECASE).strip()
         target = re.sub(r"^(an?|the|việc|sự|đến|to|higher|lower)\s+", "", target, flags=re.IGNORECASE).strip()
+        source = _strip_causal_modifiers(source)
+        target = _strip_causal_modifiers(target)
+        source = re.sub(r"\s+(?:tăng mạnh|giảm mạnh|tăng cao|giảm sâu|tăng|giảm)$", "", source, flags=re.IGNORECASE).strip()
+        target = re.sub(r"\s+(?:tăng mạnh|giảm mạnh|tăng cao|giảm sâu|tăng|giảm)$", "", target, flags=re.IGNORECASE).strip()
         if source and target:
             return source, target, sign, relation, is_correlation
 
-    # Fallback heuristic
-    return "source-factor", "target-factor", sign, relation, is_correlation
+    # No causal or correlation syntax found: reject fabrication of source-factor / target-factor
+    return "", "", None, "non_causal", False
 
 
 def _extract_structured_or_text_claim(
@@ -315,7 +450,7 @@ def _extract_structured_or_text_claim(
             relation = "correlation"
         elif sign == -1:
             relation = "decreases"
-        elif text_relation != "causes":
+        elif text_relation in {"increases", "decreases", "causes"}:
             relation = text_relation
         else:
             relation = "increases" if sign == 1 else "causes"
@@ -325,6 +460,204 @@ def _extract_structured_or_text_claim(
 
 
 # --- Core Pipeline Functions ---
+
+_TIME_COLUMN_NAMES = frozenset({"period", "date", "month", "year", "time", "timestamp", "tick", "t"})
+_TIME_VALUE_RE = re.compile(r"^\d{4}(?:-\d{2}(?:-\d{2})?)?$|^\d+$")
+
+
+def _infer_series_unit(col_name: str) -> str:
+    low = col_name.strip().lower()
+    if any(tok in low for tok in ("pct", "percent", "rate", "share", "unemployment", "yield_pct", "cpi_yoy")):
+        return "%"
+    if any(tok in low for tok in ("bps", "spread")):
+        return "bps"
+    if any(tok in low for tok in ("index", "idx", "cpi")):
+        return "index"
+    if any(tok in low for tok in ("usd", "price", "brent", "oil", "cost", "gdp_usd")):
+        return "USD"
+    if any(tok in low for tok in ("_mm", "rain", "precip")):
+        return "mm"
+    if any(tok in low for tok in ("temp", "celsius", "degc")):
+        return "degC"
+    if any(tok in low for tok in ("co2", "ppm")):
+        return "ppm"
+    return "units"
+
+
+def _normalise_csv_timestamp(raw_time: str) -> str:
+    s = raw_time.strip()
+    if re.fullmatch(r"\d{4}-\d{2}", s):
+        return f"{s}-01"
+    if re.fullmatch(r"\d{4}", s):
+        return f"{s}-01-01"
+    return s
+
+
+def _pearson_and_beta(xs: list[float], ys: list[float]) -> tuple[float, float] | None:
+    if len(xs) != len(ys) or len(xs) < 2:
+        return None
+    n = float(len(xs))
+    mx = sum(xs) / n
+    my = sum(ys) / n
+    cov = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True))
+    var_x = sum((x - mx) * (x - mx) for x in xs)
+    var_y = sum((y - my) * (y - my) for y in ys)
+    if var_x <= 1e-12 or var_y <= 1e-12:
+        return None
+    r = cov / math.sqrt(var_x * var_y)
+    beta = cov / var_x
+    if not (math.isfinite(r) and math.isfinite(beta)):
+        return None
+    return r, beta
+
+
+def _ingest_wide_timeseries_csv(
+    rows: list[dict[str, Any]],
+    fieldnames: list[str],
+) -> list[dict[str, Any]] | None:
+    """Convert a wide numeric CSV table into empirical correlation claim rows.
+
+    Returns None when the CSV does not match a wide numeric time-series layout.
+    Every derived edge is explicitly flagged `is_correlation=True` so review rejects
+    or holds it for human causal-direction adjudication (`correlation_not_causation`).
+    """
+    if len(rows) < 3 or len(fieldnames) < 3:
+        return None
+    lower_fields = {f.strip().lower(): f for f in fieldnames if f}
+    if "claim" in lower_fields:
+        return None
+
+    time_col: str | None = None
+    for field in fieldnames:
+        if field and field.strip().lower() in _TIME_COLUMN_NAMES:
+            time_col = field
+            break
+    if time_col is None and fieldnames[0]:
+        first_vals = [str(r.get(fieldnames[0]) or "").strip() for r in rows]
+        if all(val and _TIME_VALUE_RE.match(val) for val in first_vals):
+            time_col = fieldnames[0]
+    if time_col is None:
+        return None
+
+    series_cols: list[str] = []
+    series_values: dict[str, list[float]] = {}
+    time_vals: list[str] = [str(r.get(time_col) or "").strip() for r in rows]
+    if not all(time_vals):
+        return None
+
+    for col in fieldnames:
+        if not col or col == time_col:
+            continue
+        parsed_col: list[float] = []
+        valid = True
+        for row in rows:
+            raw_v = str(row.get(col) or "").strip()
+            if not raw_v:
+                valid = False
+                break
+            try:
+                num = float(raw_v)
+            except ValueError:
+                valid = False
+                break
+            if not math.isfinite(num):
+                valid = False
+                break
+            parsed_col.append(num)
+        if valid and len(parsed_col) == len(rows):
+            series_cols.append(col)
+            series_values[col] = parsed_col
+
+    if len(series_cols) < 2:
+        return None
+
+    deltas: dict[str, list[float]] = {
+        col: [vals[idx] - vals[idx - 1] for idx in range(1, len(vals))]
+        for col, vals in series_values.items()
+    }
+    obs_time_last = _normalise_csv_timestamp(time_vals[-1])
+    obs_time_first = time_vals[0]
+
+    selected_pairs: list[tuple[str, str, int, float, float, int]] = []
+    fallback_best: tuple[str, str, int, float, float, int] | None = None
+    for i, col_a in enumerate(series_cols):
+        da = deltas[col_a]
+        for j, col_b in enumerate(series_cols):
+            if i == j:
+                continue
+            db = deltas[col_b]
+            best_lag1 = _pearson_and_beta(da[:-1], db[1:]) if len(da) >= 3 else None
+            best_lag0 = _pearson_and_beta(da, db) if len(da) >= 2 else None
+            if best_lag1 is not None and abs(best_lag1[0]) >= 0.45:
+                cand = (col_a, col_b, 1, best_lag1[0], best_lag1[1], len(da) - 1)
+                selected_pairs.append(cand)
+                if fallback_best is None or abs(cand[3]) > abs(fallback_best[3]):
+                    fallback_best = cand
+                continue
+            if best_lag0 is not None:
+                cand0 = (col_a, col_b, 0, best_lag0[0], best_lag0[1], len(da))
+                if fallback_best is None or abs(cand0[3]) > abs(fallback_best[3]):
+                    fallback_best = cand0
+                if i < j and abs(best_lag0[0]) >= 0.55:
+                    selected_pairs.append(cand0)
+
+    if not selected_pairs and fallback_best is not None:
+        selected_pairs.append(fallback_best)
+    if not selected_pairs:
+        return None
+
+    derived_rows: list[dict[str, Any]] = []
+    for col_a, col_b, lag_ticks, r_val, beta_val, n_pairs in selected_pairs:
+        name_a = col_a.replace("_", " ").strip()
+        name_b = col_b.replace("_", " ").strip()
+        slug_a = _slugify(name_a)
+        slug_b = _slugify(name_b)
+        src_id = f"factor:{slug_a}"
+        tgt_id = f"factor:{slug_b}"
+        vals_a = series_values[col_a]
+        vals_b = series_values[col_b]
+        sign = 1 if r_val >= 0 else -1
+        derived_rows.append(
+            {
+                "claim_id": f"claim:csv-{slug_a}-to-{slug_b}-lag{lag_ticks}",
+                "evidence_id": f"evidence:csv-{slug_a}-{slug_b}",
+                "record_type": "claim",
+                "claim": f"{name_a} is correlated with {name_b}",
+                "source_factor": name_a,
+                "target_factor": name_b,
+                "sign": sign,
+                "relation": "correlation",
+                "is_correlation": True,
+                "lag_ticks": lag_ticks,
+                "effect_size": round(abs(beta_val), 6),
+                "confidence": min(0.85, round(0.35 + 0.5 * abs(r_val), 3)),
+                "mechanism": (
+                    f"Empirical delta correlation (r={r_val:.3f}, beta={beta_val:.4f}, "
+                    f"lag={lag_ticks}, n={n_pairs}) between '{col_a}' and '{col_b}'"
+                ),
+                "observation_time": obs_time_last,
+                "node_measurements": {
+                    src_id: {
+                        "baseline": vals_a[-1],
+                        "initial_value": vals_a[0],
+                        "time": obs_time_last,
+                        "unit": _infer_series_unit(col_a),
+                    },
+                    tgt_id: {
+                        "baseline": vals_b[-1],
+                        "initial_value": vals_b[0],
+                        "time": obs_time_last,
+                        "unit": _infer_series_unit(col_b),
+                    },
+                },
+                "quote_or_value": (
+                    f"Wide CSV {len(rows)} periods ({obs_time_first}..{time_vals[-1]}): "
+                    f"delta r={r_val:.3f}, beta={beta_val:.4f}"
+                ),
+            }
+        )
+    return derived_rows
+
 
 def propose_model(
     evidence_input: list[dict[str, Any]] | Path | str,
@@ -339,7 +672,28 @@ def propose_model(
         path = Path(evidence_input)
         if path.suffix.lower() == ".csv":
             import_res = import_d_research_ledger(path)
-            raw_rows = import_res.get("evidence_rows", [])
+            if import_res.get("ok") and isinstance(import_res.get("evidence_rows"), list):
+                raw_rows = import_res["evidence_rows"]
+            else:
+                with path.open("r", encoding="utf-8-sig", newline="") as handle:
+                    reader = csv.DictReader(handle)
+                    ordered_fields = list(reader.fieldnames or [])
+                    fieldnames = set(ordered_fields)
+                    csv_rows = [dict(row) for row in reader if isinstance(row, dict)]
+                    if "claim" in fieldnames:
+                        raw_rows = csv_rows
+                    else:
+                        wide_rows = _ingest_wide_timeseries_csv(csv_rows, ordered_fields)
+                        if wide_rows is None:
+                            raise ValueError(
+                                f"CSV ledger must match D-Research/Aleph schema, contain a 'claim' column, or be a wide numeric time-series: {import_res.get('issues')}"
+                            )
+                        raw_rows = wide_rows
+        elif path.suffix.lower() == ".jsonl":
+            rows, jsonl_issues = load_jsonl_secure(path)
+            if jsonl_issues:
+                raise ValueError(f"Invalid JSONL ledger {path}: {jsonl_issues[0].message}")
+            raw_rows = [item for item in rows if isinstance(item, dict)]
         elif path.suffix.lower() == ".json":
             data, _ = load_json_secure(path)
             if isinstance(data, list):
@@ -388,6 +742,15 @@ def propose_model(
         confidence = _parse_confidence(row.get("confidence"))
 
         source_name, target_name, sign, relation, is_corr = _extract_structured_or_text_claim(row, claim_text)
+        if not source_name or not target_name or relation == "non_causal" or sign not in (-1, 1):
+            entity_mappings[claim_id] = {
+                "claim_id": claim_id,
+                "evidence_ids": [evidence_id],
+                "node_ids": [],
+                "edge_ids": [],
+                "source_anchor": quote_text[:120] if quote_text else claim_text[:120],
+            }
+            continue
         source_slug = _slugify(source_name)
         target_slug = _slugify(target_name)
 
@@ -458,6 +821,8 @@ def propose_model(
                     "evidence_ids": [evidence_id],
                     "source_anchor": quote_text[:120] if quote_text else claim_text[:120],
                 }
+                if _finite_number(measurement.get("initial_value")):
+                    node_obj["initial_value"] = float(measurement["initial_value"])
                 if scale == "stock":
                     retention = measurement.get("retention")
                     node_obj["retention"] = retention if isinstance(retention, (int, float)) and _finite_number(retention) and 0 <= retention <= 1 else None
@@ -787,6 +1152,8 @@ def review_model(
         overall_status = "partial"
     elif admitted_count > 0 and incomplete_count == 0 and rejected_count == 0 and not has_assumptions and not has_gaps and not has_unadmitted_nodes:
         overall_status = "approved" if complete_manual_review else "partial"
+    elif incomplete_count > 0 and rejected_count == 0:
+        overall_status = "partial"
     else:
         overall_status = "rejected"
 
@@ -934,14 +1301,33 @@ def _publish_workspace(stage: Path, target: Path) -> None:
         raise
 
 
+def _merge_items_by_id(existing: Any, incoming: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    base = [dict(item) for item in existing if isinstance(item, dict)] if isinstance(existing, list) else []
+    by_id: dict[str, int] = {}
+    for idx, item in enumerate(base):
+        item_id = item.get("id")
+        if isinstance(item_id, str) and item_id:
+            by_id[item_id] = idx
+    for item in incoming:
+        item_id = item.get("id")
+        if isinstance(item_id, str) and item_id in by_id:
+            base[by_id[item_id]] = dict(item)
+        else:
+            if isinstance(item_id, str) and item_id:
+                by_id[item_id] = len(base)
+            base.append(dict(item))
+    return base
+
+
 def apply_model(
     proposal: dict[str, Any],
     review: dict[str, Any],
     target_dir: Path | str,
     *,
     workspace_id: str = "workspace:auto-causal-model",
+    into_initialized: bool = False,
 ) -> dict[str, Any]:
-    """Export a draft or publish a reviewed, replayed model to a fresh workspace."""
+    """Export a draft or publish a reviewed, replayed model to a fresh or initialized workspace."""
     _validate_sidecar(proposal, "causal-proposal")
     _validate_sidecar(review, "causal-review")
     expected_hash = f"sha256:{canonical_hash(proposal)}"
@@ -952,7 +1338,17 @@ def apply_model(
     target = Path(os.path.abspath(target_dir))
     if path_contains_link_or_reparse(target):
         raise ValueError("REFUSED_LINKED_WORKSPACE")
-    if target.exists() and (not target.is_dir() or any(target.iterdir())):
+    if into_initialized:
+        manifest_path = target / "simulation-manifest.json"
+        if not target.is_dir() or not manifest_path.is_file():
+            return {
+                "ok": False,
+                "error": "MISSING_INITIALIZED_MANIFEST: --into-initialized requires an existing workspace with simulation-manifest.json",
+                "workspace_dir": str(target),
+                "compilation_ok": False,
+                "simulation_run_ok": False,
+            }
+    elif target.exists() and (not target.is_dir() or any(target.iterdir())):
         return {"ok": False, "error": "REFUSED_EXISTING_WORKSPACE: target must be new or empty",
                 "workspace_dir": str(target), "compilation_ok": False, "simulation_run_ok": False}
     if review.get("overall_status") == "rejected":
@@ -990,7 +1386,7 @@ def apply_model(
             "effect_parameter": edge.get("effect_parameter", {"kind": "reference_value", "reference_value": abs(edge["effect_size"])}),
             "evidence": edge.get("evidence_ids", []),
         }
-        for key in ("transform_parameters", "weight_distribution", "integration", "saturation", "existence_prob"):
+        for key in ("transform_parameters", "weight_distribution", "integration", "saturation", "existence_prob", "gate"):
             if key in edge:
                 compiled[key] = edge[key]
         admitted_edges.append(compiled)
@@ -1016,14 +1412,34 @@ def apply_model(
         }
         if node.get("scale") == "stock":
             compiled["retention"] = node.get("retention")
-        for key in ("bounds", "decay_rate", "retention_distribution", "decay_rate_distribution"):
+        for key in ("bounds", "decay_rate", "retention_distribution", "decay_rate_distribution", "initial_value"):
             if key in node:
                 compiled[key] = node[key]
         admitted_nodes.append(compiled)
     if not admitted_edges or len(admitted_nodes) != len(ids):
-        return {"ok": False, "error": "NO_COMPLETE_CAUSAL_GRAPH", "compilation_ok": False, "simulation_run_ok": False}
+        if into_initialized and review.get("overall_status") == "partial":
+            draft_edges = [
+                dict(c)
+                for c in proposal.get("candidate_edges", [])
+                if edge_decisions.get(c["id"], {}).get("decision") in {"admit", "revise", "incomplete"}
+            ]
+            draft_ids = {e[k] for e in draft_edges for k in ("from", "to")}
+            draft_nodes = [
+                dict(c)
+                for c in proposal.get("candidate_nodes", [])
+                if c["id"] in draft_ids
+            ]
+            if not draft_edges or len(draft_nodes) != len(draft_ids):
+                return {"ok": False, "error": "NO_COMPLETE_CAUSAL_GRAPH", "compilation_ok": False, "simulation_run_ok": False}
+            admitted_edges_for_draft = draft_edges
+            admitted_nodes_for_draft = draft_nodes
+        else:
+            return {"ok": False, "error": "NO_COMPLETE_CAUSAL_GRAPH", "compilation_ok": False, "simulation_run_ok": False}
+    else:
+        admitted_edges_for_draft = admitted_edges
+        admitted_nodes_for_draft = admitted_nodes
     approved = review["overall_status"] == "approved"
-    runnable = approved and not proposal.get("gaps") and all(
+    runnable = approved and bool(admitted_edges) and not proposal.get("gaps") and all(
         _finite_number(n.get("baseline")) and n.get("time") and n.get("unit")
         and n.get("status") != "assumption" and len(n["mechanism"].split()) >= 10
         and (n["scale"] != "stock" or _finite_number(n.get("retention"))) for n in admitted_nodes
@@ -1048,6 +1464,126 @@ def apply_model(
             "causal_proposal": "causal-proposal.json", "causal_review": "causal-review.json",
             "assumptions": "assumptions.json",
         }
+    if into_initialized:
+        existing_manifest, m_issues = load_json_secure(target / "simulation-manifest.json")
+        if m_issues or not isinstance(existing_manifest, dict):
+            raise ValueError("INVALID_INITIALIZED_MANIFEST")
+        merged_manifest = dict(existing_manifest)
+        existing_paths = dict(merged_manifest.get("artifact_paths") or {})
+        target_node_rel = str(existing_paths.get("nodes" if runnable else "candidate_nodes") or node_filename)
+        target_edge_rel = str(existing_paths.get("edges" if runnable else "candidate_edges") or edge_filename)
+        existing_nodes, _ = (load_json_secure(target / target_node_rel) if (target / target_node_rel).is_file() else ([], []))
+        existing_edges, _ = (load_json_secure(target / target_edge_rel) if (target / target_edge_rel).is_file() else ([], []))
+        incoming_nodes = admitted_nodes if runnable else admitted_nodes_for_draft
+        incoming_edges = admitted_edges if runnable else admitted_edges_for_draft
+        merged_nodes = _merge_items_by_id(existing_nodes, incoming_nodes)
+        merged_edges = _merge_items_by_id(existing_edges, incoming_edges)
+
+        existing_paths["causal_proposal"] = "causal-proposal.json"
+        existing_paths["causal_review"] = "causal-review.json"
+        existing_paths["assumptions"] = "assumptions.json"
+        if runnable:
+            if merged_manifest.get("simulation_mode") in (None, "qualitative"):
+                merged_manifest["simulation_mode"] = "deterministic"
+            existing_paths.pop("propagation_trace", None)
+            existing_paths.setdefault("nodes", target_node_rel)
+            existing_paths.setdefault("edges", target_edge_rel)
+            existing_paths.setdefault("interventions", "interventions.json")
+            existing_paths.setdefault("simulation_config", "simulation-config.json")
+            existing_paths.setdefault("computational_model", "simulation-model.json")
+            existing_paths.setdefault("run_ledger", "simulation-run.json")
+            existing_paths.setdefault("execution_trace", "execution-trace.json")
+            existing_paths.setdefault("replay_report", "replay-report.json")
+        else:
+            existing_paths["candidate_nodes"] = target_node_rel
+            existing_paths["candidate_edges"] = target_edge_rel
+        merged_manifest["artifact_paths"] = existing_paths
+
+        assumptions_doc = {
+            "schema_version": "1.0.0",
+            "gaps": proposal.get("gaps", []),
+            "assumptions": [n for n in proposal.get("candidate_nodes", []) if n.get("status") == "assumption"],
+        }
+        verified_hash = None
+        if runnable:
+            interventions = review.get("interventions", [])
+            if not isinstance(interventions, list):
+                raise ValueError("INVALID_REVIEW_INTERVENTIONS")
+            staged = Path(tempfile.mkdtemp(prefix=".aleph-merge-", dir=target.parent))
+            try:
+                write_json_atomic(staged / "nodes.json", merged_nodes)
+                write_json_atomic(staged / "edges.json", merged_edges)
+                write_json_atomic(staged / "interventions.json", interventions)
+                staged_config: dict[str, Any] = {"mode": "deterministic", "seed": "42", "ticks": 5, "timestep": 1.0}
+                existing_cfg_path = target / "simulation-config.json"
+                if existing_cfg_path.is_file():
+                    loaded_cfg, cfg_issues = load_json_secure(existing_cfg_path)
+                    if not cfg_issues and isinstance(loaded_cfg, dict):
+                        staged_config = loaded_cfg
+                else:
+                    engine_config = merged_manifest.get("engine_config")
+                    temporal_frame = merged_manifest.get("temporal_frame")
+                    ts_raw = engine_config.get("timestep") if isinstance(engine_config, dict) else None
+                    if ts_raw is None and isinstance(temporal_frame, dict):
+                        ts_raw = temporal_frame.get("timestep")
+                    ts_sec = parse_timestep_seconds(ts_raw) if ts_raw is not None else None
+                    if ts_sec is not None and ts_sec > 0:
+                        staged_config["timestep"] = ts_sec / 86400.0
+                    if merged_manifest.get("simulation_mode") == "monte_carlo":
+                        staged_config["mode"] = "monte_carlo"
+                write_json_atomic(staged / "simulation-config.json", staged_config)
+                write_json_atomic(staged / "simulation-manifest.json", merged_manifest)
+                branch_rel = str(existing_paths.get("branch_ledger", "branch-ledger.json"))
+                target_branch_path = target / branch_rel
+                if target_branch_path.is_file():
+                    shutil.copyfile(target_branch_path, staged / branch_rel)
+                verified_hash = _verify_staged_execution(staged)
+                for fname in (
+                    "interventions.json",
+                    "simulation-config.json",
+                    "simulation-model.json",
+                    "simulation-run.json",
+                    "execution-trace.json",
+                    "replay-report.json",
+                ):
+                    if (staged / fname).is_file():
+                        shutil.copyfile(staged / fname, target / fname)
+                if (staged / branch_rel).is_file() and target_branch_path.is_file():
+                    shutil.copyfile(staged / branch_rel, target_branch_path)
+                stub_trace = target / "propagation-trace.jsonl"
+                if stub_trace.is_file():
+                    stub_rows, _ = load_jsonl_secure(stub_trace)
+                    if (
+                        len(stub_rows) == 1
+                        and isinstance(stub_rows[0], dict)
+                        and stub_rows[0].get("edge_id") == "causal:example-increases-target"
+                    ):
+                        stub_trace.unlink(missing_ok=True)
+            finally:
+                if staged.exists():
+                    shutil.rmtree(staged)
+        write_json_atomic(target / target_node_rel, merged_nodes)
+        write_json_atomic(target / target_edge_rel, merged_edges)
+        write_json_atomic(target / "causal-proposal.json", proposal)
+        write_json_atomic(target / "causal-review.json", review)
+        write_json_atomic(target / "assumptions.json", assumptions_doc)
+        write_json_atomic(target / "simulation-manifest.json", merged_manifest)
+        return {
+            "ok": True,
+            "workspace_dir": str(target),
+            "into_initialized": True,
+            "runnable": bool(runnable),
+            "status": merged_manifest.get("status", "initialized" if runnable else "draft"),
+            "admitted_edge_count": len(admitted_edges),
+            "admitted_node_count": len(admitted_nodes),
+            "compilation_ok": bool(runnable),
+            "simulation_run_ok": bool(runnable),
+            "replay_ok": bool(runnable),
+            "model_hash": verified_hash,
+            "gaps_count": len(proposal.get("gaps", [])),
+            "overall_status": review["overall_status"],
+        }
+
     target.parent.mkdir(parents=True, exist_ok=True)
     staged = Path(tempfile.mkdtemp(prefix=".aleph-apply-", dir=target.parent))
     verified_hash = None

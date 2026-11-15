@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import re
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TypeGuard
 
 from . import SCHEMA_VERSION_2_1, SUPPORTED_SCHEMA_VERSIONS
 from .issues import Issue, issue
@@ -41,6 +41,13 @@ RELATION_ALLOWED = frozenset(
 )
 LAG_TYPES = frozenset({"fixed", "uniform", "triangular", "truncated_exponential"})
 TRANSFORMS = frozenset({"linear", "elasticity", "identity", "logistic", "threshold"})
+GATE_OPS = frozenset({"all", "any", "veto"})
+GATE_COMPARE_OPS = frozenset({"gt", "gte", "lt", "lte"})
+GATE_FIELDS = frozenset({"op", "conditions"})
+GATE_CONDITION_FIELDS = frozenset({"node", "op", "value"})
+INPUT_MODES = frozenset({"level", "deviation", "log_ratio"})
+RETENTION_UNITS = frozenset({"per_day", "per_tick"})
+TAIL_CLASSES = frozenset({"normal", "tail_shock"})
 SOURCE_TIERS = frozenset({"primary", "authoritative-secondary", "secondary", "tertiary", "user-provided"})
 RETRIEVAL_STATUSES = frozenset(
     {"opened", "downloaded", "api", "local-file", "user-provided", "search-snippet", "blocked"}
@@ -104,6 +111,7 @@ KNOWN_MANIFEST_FIELDS = frozenset(
         "active_contexts",
         "assumptions",
         "finalization",
+        "engine_config",
     }
 )
 
@@ -117,6 +125,7 @@ ARTIFACT_PATH_FIELDS = frozenset(
         "evidence_map",
         "branch_ledger",
         "propagation_trace",
+        "execution_trace",
         "validation_report",
         "quality_report",
         "final_report",
@@ -127,13 +136,31 @@ ARTIFACT_PATH_FIELDS = frozenset(
         "replay_report",
         "sensitivity_report",
         "calibration_report",
+        "calibration_bundle",
         "roleplay_receipts",
         "research_import_receipt",
+        "candidate_nodes",
+        "candidate_edges",
+        "causal_proposal",
+        "causal_review",
+        "assumptions",
     }
 )
 ARTIFACT_INDEX_FIELDS = frozenset({"path", "media_type", "size", "sha256", "hash_scope"})
 RECEIPT_REFERENCE_FIELDS = frozenset({"path", "sha256", "bundle_digest", "assurance_tier"})
 FINALIZATION_FIELDS = frozenset({"status", "committed_at", "transaction_id"})
+ENGINE_CONFIG_FIELDS = frozenset(
+    {
+        "timestep",
+        "scc_solver",
+        "jacobi_max_iter",
+        "jacobi_abs_tol",
+        "jacobi_rel_tol",
+        "jacobi_relax",
+        "divergence_threshold",
+        "max_events",
+    }
+)
 ASSUMPTION_FIELDS = frozenset({"id", "statement"})
 MIGRATION_FIELDS = frozenset(
     {"source_schema_version", "target_schema_version", "source_digest", "transforms", "unresolved_fields"}
@@ -166,8 +193,10 @@ NODE_FIELDS = frozenset(
         "unit",
         "scale",
         "baseline",
+        "initial_value",
         "bounds",
         "retention",
+        "retention_unit",
         "decay_rate",
     }
 )
@@ -191,6 +220,7 @@ EDGE_FIELDS = frozenset(
         "assumption_ref",
         "status",
         "transform",
+        "input_mode",
         "transform_parameters",
         "effect_distribution",
         "integration",
@@ -199,6 +229,7 @@ EDGE_FIELDS = frozenset(
         "feedback_policy",
         "saturation",
         "effect_size",
+        "gate",
     }
 )
 
@@ -322,6 +353,7 @@ BRANCH_LEDGER_FIELDS = frozenset(
         "branches",
         "calibration",
         "unresolved_mass",
+        "tail_coverage",
     }
 )
 
@@ -342,6 +374,8 @@ BRANCH_FIELDS = frozenset(
         "confidence",
         "warnings",
         "stress",
+        "tail",
+        "tail_class",
         "method",
         "sample_count",
         "interval",
@@ -386,6 +420,9 @@ TRACE_ROW_FIELDS = frozenset(
         "threshold_active_after",
         "integrated_effect",
         "target_retention_factor",
+        "input_mode",
+        "source_baseline",
+        "gate_multiplier",
         "hash_chain",
     }
 )
@@ -466,6 +503,7 @@ TEMPORAL_FRAME_FIELDS = frozenset(
         "observation_cutoff",
         "simulation_start",
         "simulation_end",
+        "timestep",
         "future_projection",
         "calibration_strategy",
         "monitoring_indicators",
@@ -487,6 +525,19 @@ CHANGE_POINT_FIELDS = frozenset(
         "assumption_ref",
     }
 )
+INTERVENTION_FIELDS = frozenset(
+    {
+        "id",
+        "target",
+        "op",
+        "value",
+        "start_tick",
+        "end_tick",
+        "release_policy",
+    }
+)
+INTERVENTION_OPS = frozenset({"set", "add", "multiply"})
+INTERVENTION_RELEASE_POLICIES = frozenset({"retain", "reset_baseline"})
 SCOPE_FIELDS = frozenset({"horizon", "domains", "geographies"})
 EXECUTION_FIELDS = frozenset(
     {
@@ -524,6 +575,9 @@ RESEARCH_CONTROL_FIELDS = frozenset(
         "stop_reason",
         "unresolved_critical_gaps",
         "next_wave_queue",
+        "offline_provisional",
+        "offline_reason",
+        "offline_note",
     }
 )
 D_RESEARCH_FIELDS = frozenset({"status", "invoked", "path", "package_major", "ledger_ref"})
@@ -652,7 +706,7 @@ def is_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def is_number(value: Any) -> bool:
+def is_number(value: Any) -> TypeGuard[int | float]:
     if isinstance(value, bool) or value is None:
         return False
     if isinstance(value, (int, float)):
@@ -743,6 +797,38 @@ def parse_duration_seconds(value: Any) -> float | None:
         return None
     days = parts["years"] * 365 + parts["months"] * 30 + parts["weeks"] * 7 + parts["days"]
     return days * 86400 + parts["hours"] * 3600 + parts["minutes"] * 60 + parts["seconds"]
+
+
+_COMPACT_TIMESTEP_RE = re.compile(r"^(?P<value>\d+(?:\.\d+)?)(?P<unit>[yYwWdDhHsS]|M)$")
+
+
+def parse_timestep_seconds(value: Any) -> float | None:
+    """Parse a positive timestep duration from ISO-8601 (``P1M``) or compact form (``1d``)."""
+    iso_seconds = parse_duration_seconds(value)
+    if iso_seconds is not None:
+        return iso_seconds if math.isfinite(iso_seconds) and iso_seconds > 0 else None
+    if not isinstance(value, str):
+        return None
+    match = _COMPACT_TIMESTEP_RE.fullmatch(value.strip())
+    if not match:
+        return None
+    amount = float(match.group("value"))
+    unit = match.group("unit")
+    multipliers = {
+        "y": 365 * 86400,
+        "Y": 365 * 86400,
+        "M": 30 * 86400,
+        "w": 7 * 86400,
+        "W": 7 * 86400,
+        "d": 86400,
+        "D": 86400,
+        "h": 3600,
+        "H": 3600,
+        "s": 1,
+        "S": 1,
+    }
+    seconds = amount * multipliers[unit]
+    return seconds if math.isfinite(seconds) and seconds > 0 else None
 
 
 def has_id_prefix(value: Any, kind: str) -> bool:

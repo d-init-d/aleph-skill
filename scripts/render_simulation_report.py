@@ -68,7 +68,38 @@ def render(workspace: Path) -> str:
     nodes = _safe_load(workspace, str(artifacts.get("nodes", "nodes.json")))
     edges = _safe_load(workspace, str(artifacts.get("edges", "edges.json")))
     actors = _safe_load(workspace, str(artifacts.get("actors", "actors.json")))
-    trace = _safe_load(workspace, str(artifacts.get("propagation_trace", "propagation-trace.jsonl")), kind="jsonl")
+    trace_rel = str(
+        artifacts.get("execution_trace")
+        or artifacts.get("propagation_trace")
+        or "propagation-trace.jsonl"
+    )
+    if trace_rel.endswith(".json"):
+        trace_doc = _safe_load(workspace, trace_rel, kind="json")
+        raw_steps = trace_doc.get("steps", []) if isinstance(trace_doc, dict) else []
+        trace: list[dict[str, Any]] = []
+        for step_row in raw_steps:
+            if not isinstance(step_row, dict):
+                continue
+            trans = step_row.get("state_transitions")
+            trans_dict = trans if isinstance(trans, dict) else {}
+            params = step_row.get("sampled_parameters")
+            params_dict = params if isinstance(params, dict) else {}
+            if isinstance(step_row.get("delivery_tick"), int) and isinstance(step_row.get("emission_tick"), int):
+                lag_text = f"{int(step_row['delivery_tick']) - int(step_row['emission_tick'])} ticks"
+            else:
+                lag_text = f"{params_dict.get('lag', 0)} ticks"
+            trace.append(
+                {
+                    "step": step_row.get("step"),
+                    "from": step_row.get("from") or step_row.get("source_node_id") or "intervention",
+                    "to": step_row.get("to") or step_row.get("node_id"),
+                    "output_effect": step_row.get("output_effect", trans_dict.get("delta")),
+                    "lag_applied": step_row.get("lag_applied", lag_text),
+                    "mechanism": step_row.get("mechanism", trans_dict.get("mechanism", "")),
+                }
+            )
+    else:
+        trace = _safe_load(workspace, trace_rel, kind="jsonl")
     evidence_rows = _safe_load(workspace, str(artifacts.get("evidence_map", "evidence-map.csv")), kind="csv")
     validation_path_rel = str(artifacts.get("validation_report", "validation-report.json"))
     vpath, viss = resolve_in_workspace(workspace, validation_path_rel, must_exist=False)
@@ -91,7 +122,7 @@ def render(workspace: Path) -> str:
         1
         for row in evidence_rows
         if row.get("retrieval_status") in direct_statuses
-        and row.get("source_tier") in {"primary", "authoritative-secondary", "user-provided"}
+        and row.get("source_tier") in {"primary", "authoritative-secondary"}
     )
     tier_counts = Counter(row.get("source_tier", "unknown") for row in evidence_rows)
     contradiction_rows = [row for row in evidence_rows if row.get("contradiction_status") in {"contested", "contradicted"}]
@@ -108,14 +139,29 @@ def render(workspace: Path) -> str:
 
     ranked_branches = sorted(branches, key=branch_weight, reverse=True)
     top_branch = ranked_branches[0] if ranked_branches else None
+    d_research = execution.get("d_research", {}) if isinstance(execution, dict) else {}
+    is_offline_provisional = (
+        isinstance(control, dict)
+        and control.get("offline_provisional") is True
+        and bool(str(control.get("offline_reason") or "").strip())
+        and isinstance(d_research, dict)
+        and d_research.get("invoked") is False
+        and d_research.get("status") == "unavailable"
+    )
     report_ready = (
         manifest.get("status") in {"complete", "completed"}
-        and control.get("saturation_reached") is True
+        and (control.get("saturation_reached") is True or is_offline_provisional)
         and validation.get("mode") == "final"
         and validation.get("status") == "pass"
         and validation.get("assurance_status") != "failed"
     )
-    effective_validation_status = "final-pass" if report_ready else "draft-not-ready"
+    effective_validation_status = (
+        "final-pass (Offline Provisional)"
+        if (report_ready and is_offline_provisional)
+        else "final-pass"
+        if report_ready
+        else "draft-not-ready"
+    )
 
     lines: list[str] = [
         "# Aleph Causal Timeline Simulation Report",
@@ -128,6 +174,15 @@ def render(workspace: Path) -> str:
         "",
         f"This report evaluates the intervention **{change.get('description', '')}** from `{change.get('time', '')}` through `{frame.get('simulation_end', '')}` using `{frame.get('mode', 'unknown')}` temporal framing.",
     ]
+    if is_offline_provisional:
+        gaps_list = [str(g) for g in (control.get("unresolved_critical_gaps") or []) if str(g).strip()]
+        banner_lines = [
+            "",
+            f"> **Offline Provisional Mode:** External web research was not invoked (`d_research.status=unavailable`, `invoked=false`); assurance tier is capped at `limited`. Reason: {control.get('offline_reason')}",
+        ]
+        if gaps_list:
+            banner_lines.append(f"> Unresolved critical gaps ({len(gaps_list)}): " + "; ".join(gaps_list))
+        lines.extend(banner_lines)
     if top_branch:
         mode = top_branch.get("likelihood_mode") or manifest.get("likelihood_mode") or "relative_weight"
         weight = branch_weight(top_branch)
@@ -282,7 +337,12 @@ def render(workspace: Path) -> str:
             "",
             f"- Recorded validation status: `{validation.get('status', 'not-run')}` ({validation.get('mode', 'unknown')})",
             f"- Report readiness: `{effective_validation_status}`",
-            f"- Unresolved critical gaps: `{len(control.get('unresolved_critical_gaps', []))}`",
+            f"- Unresolved critical gaps: `{len(control.get('unresolved_critical_gaps', []))}`"
+            + (
+                f" ({'; '.join(str(g) for g in control.get('unresolved_critical_gaps', []) if str(g).strip())})"
+                if control.get("unresolved_critical_gaps")
+                else ""
+            ),
             f"- Repair cycles completed: `{execution.get('repair_cycles_completed', 0)}`",
         ]
     )

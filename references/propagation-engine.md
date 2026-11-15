@@ -1,14 +1,15 @@
 # Propagation engine
 
-Aleph formula 2.1 uses auditable discrete equations while retaining formula 2.0 replay for existing run contracts. New artifacts emit `formula_version: 2.1.0`; a run and trace may never mix formula versions. Formula 2.0 replay preserves its legacy level equation: a legacy `scale: stock|flow` label does not acquire formula 2.1 decay, retention, or rate-integration semantics. Rebuild the workspace under formula 2.1 before using those dynamics; do not add 2.1-only fields to a legacy run. The numerical result is a modeling convention, not a factual guarantee.
+Aleph formula 2.2 (see `references/formula-2.2.md`) extends formula 2.1 with baseline-deviation (`deviation`, default for `2.2.0`) and `log_ratio` edge inputs, explicit `retention_unit: per_day|per_tick`, and scale-aware divergence protection, while retaining bit-exact formula `2.0.0` and `2.1.0` replay for existing run contracts. New numerical runs default to `formula_version: 2.2.0`; a run and trace may never mix formula versions. Formula 2.0 replay preserves its legacy level equation: a legacy `scale: stock|flow` label does not acquire formula 2.1+ decay, retention, or rate-integration semantics. Rebuild the workspace under formula 2.2 (or 2.1) before using those dynamics; do not add 2.1/2.2-only fields to a legacy run. The numerical result is a modeling convention, not a factual guarantee.
 
 ## Level equation
 
-For each tick, `level` and `flow` variables start from their declared baseline. A `stock` carries its prior end-of-step state through timestep-invariant decay, then receives impulses and integrated rates:
+For each tick, `level` and `flow` variables start from their declared baseline. A `stock` carries its prior end-of-step state through timestep-invariant decay (`per_day` default) or direct per-tick retention (`per_tick`), then receives impulses and integrated rates:
 
 ```text
-retention_factor = exp(-decay_rate_per_day * timestep_days)
-# equivalent retention form: retention_per_day ** timestep_days
+retention_factor = retention if retention_unit == "per_tick" else exp(-decay_rate_per_day * timestep_days)
+# equivalent per_day retention form: retention_per_day ** timestep_days
+# effective edge input x_eff: (x_src - x_0) under deviation (2.2 default), ln(x_src / x_0) under log_ratio, x_src under level
 
 level_or_flow[t+1] = bounds(baseline + interventions + sum(edge_output))
 
@@ -72,7 +73,7 @@ When converting a freshly initialized qualitative workspace to numerical executi
 
 For legacy formula 2.0 authored traces (`propagation-trace.jsonl`), deterministic replay via `replay_simulation.py` remains distinctly supported under `generation_mode: analyst_authored_legacy`. In that mode, every row must strictly bind to admitted edges and the declared run contract; an absent, empty, or mismatched trace fails closed.
 
-Numerical traces have a stronger contract than qualitative traces. Every numerical row identifies exactly one bounded `run:N` sample, the source tick, source state, target state, and sampled edge strength. Execution binding v2 additionally binds formula version, sampled lag, resolved transform parameters, target scale/retention, rate integration factor, integrated effect, and the per-run stock dynamics hash. Binding v1 remains readable only for formula-2.0 run contracts. Rehashing a fabricated but internally consistent row is therefore insufficient.
+Numerical traces have a stronger contract than qualitative traces. Every numerical row identifies exactly one bounded `run:N` sample, the source tick, source state, target state, and sampled edge strength. Execution binding v2 (formula 2.1) additionally binds formula version, sampled lag, resolved transform parameters, target scale/retention, rate integration factor, integrated effect, and the per-run stock dynamics hash; binding v3 (`aleph-trace-execution-binding-v3`, formula 2.2) also binds edge `input_mode`, `source_baseline`, and `input_effect`. Binding v1 remains readable only for formula-2.0 run contracts. Rehashing a fabricated but internally consistent row is therefore insufficient.
 
 Manifest-declared paths are authoritative for nodes, edges, the compiled model, run ledger, replay report, and propagation trace. CLI output overrides must resolve to the same non-aliased file as the declared artifact path.
 

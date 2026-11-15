@@ -4,7 +4,39 @@
       "id": "mech:technology:pass_through",
       "relation": "increases",
       "sign": 1,
-      "description": "Core technology transmission mechanism template for validated packs."
+      "transform": "linear",
+      "lag_ticks": 1,
+      "typical_strength": 0.50,
+      "description": "R&D capability and capital investment transmission into compute capacity, model efficiency, and downstream sectoral adoption."
+    },
+    {
+      "id": "mech:technology:fab_tooling_chokepoint",
+      "relation": "inhibits",
+      "sign": -1,
+      "transform": "threshold",
+      "lag_ticks": 2,
+      "typical_strength": 0.70,
+      "gate_pattern": "all(lithography_supply < threshold)",
+      "description": "Export restrictions on leading-edge lithography and high-bandwidth memory cap frontier training cluster scaling despite capital surges."
+    },
+    {
+      "id": "mech:technology:grid_power_compute_ceiling",
+      "relation": "inhibits",
+      "sign": -1,
+      "transform": "linear",
+      "saturation": 1.0,
+      "lag_ticks": 2,
+      "typical_strength": 0.55,
+      "description": "Interconnection queues and regional baseload power bottlenecks throttle datacenter deployment speed relative to chip shipments."
+    },
+    {
+      "id": "mech:technology:algorithmic_efficiency_rebound",
+      "relation": "enables",
+      "sign": 1,
+      "transform": "logistic",
+      "lag_ticks": 1,
+      "typical_strength": 0.60,
+      "description": "Lower inference cost per token accelerates enterprise workflow integration and triggers Jevons-style aggregate compute demand growth."
     }
   ]
 }

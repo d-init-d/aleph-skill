@@ -1,5 +1,48 @@
 # Changelog
 
+## 2.8.0 - 2026-11-15
+
+### Added
+
+- Node `initial_value` separation from equilibrium `baseline` across `schemas/timeline-node*.schema.json`, `scripts/aleph/validator.py`, `scripts/aleph/engine.py`, and `scripts/aleph/interactive_roleplay.py` (including `tick=0` packet application and `ZERO_INTERVENTION_DRIFT` carve-out).
+- Conditional edge `gate` preconditions (`op: all|any|veto`, `conditions: [{node, op: gt|gte|lt|lte, value}]`) in `schemas/causal-edge.schema.json`, `scripts/aleph/formula.py` (`evaluate_edge_gate`), trace `gate_multiplier`, `scripts/aleph/execution_binding.py`, and SCC affine eligibility guards.
+- `scripts/finalize_simulation.py --complete` atomic completion flag marking manifest `status: "completed"` and checkpoints atomically with rollback on validation failure.
+- Wide numeric CSV time-series ingestion (`_ingest_wide_timeseries_csv`, flagged `correlation_not_causation`), bilingual EN/VI conditional extraction (`If/When/Unless/Nếu/Khi/Do/Vì`), and climate/environmental/HUMINT patterns in `scripts/aleph/auto_causal.py`.
+- Enriched multi-causal mechanism templates across all seven domain packs (`packs/*/mechanisms.json`).
+
+### Changed & Fixed
+
+- Fixed post-compile manifest deadlock (`manifest_model_contract_payload` in `validator.py` & `compile_model.py`) so finalizing/updating `status`, `checkpoints`, and downstream artifact paths no longer triggers false `STALE_ARTIFACT` failures.
+- Expanded `scripts/repair_model_schema.py` for real LLM output schemas (`node_id`, `label`, `kind`, `scale=dimensionless|normalized|unitless`, `edge_id`, `polarity`, `saturating_tanh`, `parameters`, `weight_distribution`, `gate`, `intervention_id`, `target_node_id`, `magnitude`, `mode=step|pulse`, stripping non-schema keys) while preserving valid `initial_value` and unwrapping dict wrappers cleanly in `compile_model.py`.
+- Fixed Formula 2.2.0 `_regime` negative `log2` bin labels and capped Monte Carlo `_cluster_relative` branches at `<= 12` with exact tail-mass consolidation (`tail_consolidated:<N>_regimes`).
+- Removed `"user-provided"` from `high_quality_direct_sources` in `validator.py` and `render_simulation_report.py`; refined `quality.py` (`downstream_frozen`, `%` dimensionless unit false positives, Vietnamese narrative fidelity, `MISSING_MATERIAL_ACTORS` check).
+
+See [release notes](.github/release-notes/v2.8.0.md) for compatibility, upgrade instructions, and verification details.
+
+## 2.7.0 (development, shipped in 2.8.0)
+
+### Added
+
+- Formula `2.2.0` (`references/formula-2.2.md`) as the default numerical propagation engine:
+  - Baseline-deviation edge input (`input_mode: "deviation"`) and log-ratio elasticities (`input_mode: "log_ratio"`), preventing spurious baseline drift on unshocked runs across arbitrary nominal scales.
+  - Explicit stock `retention_unit: "per_day" | "per_tick"` to prevent `retention ** dt` collapse on multi-day/monthly steps (`timestep: "P1M"`).
+  - Scale-aware state divergence guard (`STATE_DIVERGENCE`, `exit_code: 4`), `aleph-run-2.2`, and `aleph-trace-execution-binding-v3`.
+- Causal adaptive forecasting (`scripts/evaluate_point_forecasts.py --model {adaptive,damped_trend,mean_reversion,momentum}`) with Ridge-regularized AR(1) first-difference shrinkage, pre-cutoff regime screening, and `damped_difference` / `trailing_mean_deviation` replay bindings in `scripts/aleph/calibration_lineage.py`.
+- Causal distribution-free Adaptive Conformal Inference (ACI) interval calibration (`scripts/aleph/interval_calibration.py`, `scripts/calibrate_intervals.py`) and batch multi-series backtesting (`scripts/run_offline_backtest.py`, `references/offline-backtest.md`).
+- Turn-key numerical DX helpers: `scripts/quickstart_quant.py` and `scripts/repair_model_schema.py`.
+- Honest offline assurance support: `--offline-provisional` across validation/quality gates (`offline_provisional` field, capping assurance tier at `limited` rather than claiming `verified`/`calibrated`).
+- Quality hard checks (`scripts/aleph/quality.py`) detecting frozen constant numerical trajectories (`ENGINE_FROZEN`) and monetary/bps/% prose claims on dimensionless model nodes (`NARRATIVE_UNIT_MISMATCH`), plus `errors_detail` and `warnings_detail`.
+- Bilingual Vietnamese/English auto-causal induction improvements (`scripts/aleph/auto_causal.py`, `scripts/auto_causal_inducer.py --into-initialized`), lightweight claim CSV/JSONL parsing, `đ`/`Đ` accent transliteration, and `partial` review status when only incomplete candidates exist.
+- Upgraded `packs/economics` to `validated` maturity with 31 retrospective hindcast fixtures (`packs/economics/data/us_macro_2024_2026.json`, `hindcast/case-002.json`..`case-031.json`).
+
+### Fixed
+
+- Fixed `scripts/run_sensitivity.py` missing Formula `2.2.0` -> `aleph-engine-2.2` mapping that triggered `REPLAY_MISMATCH` under `formula_version: "2.2.0"`.
+- Fixed cold-start `execution-trace.json` branch-ledger derivation synchronization in `scripts/run_simulation.py` and lag/horizon validation in `scripts/aleph/validator.py`.
+- Preserved bit-exact backward compatibility and replay hashes for `formula_version` `"2.0.0"` and `"2.1.0"`.
+
+See [release notes](.github/release-notes/v2.7.0.md) for compatibility, upgrade instructions, and verification details.
+
 ## 2.6.0 - 2026-11-14
 
 Official stable release delivering correlated Monte Carlo shocks, a

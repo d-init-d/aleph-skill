@@ -10,7 +10,7 @@ resolution-markers = [
 
 [[package]]
 name = "aleph-skill"
-version = "2.6.0"
+version = "2.8.0"
 source = { editable = "." }
 
 [package.optional-dependencies]
@@ -35,7 +35,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "coverage", extras = ["toml"], marker = "extra == 'dev'", specifier = ">=7.6" },
+    { name = "coverage", extras = ["toml"], marker = "extra == 'dev'", specifier = ">=7.10" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.20" },
     { name = "jsonschema", marker = "extra == 'test'", specifier = ">=4.20" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },

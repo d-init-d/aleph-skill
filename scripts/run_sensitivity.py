@@ -4,6 +4,7 @@ import argparse
 import copy
 import json
 import math
+from dataclasses import fields
 from pathlib import Path
 from typing import Any, cast
 
@@ -12,8 +13,39 @@ from aleph import EXIT_OK, EXIT_SEMANTIC, EXIT_USAGE
 from aleph.engine import EngineConfig, compile_model, model_hash, run_deterministic
 from aleph.io import canonical_hash, write_json_atomic
 from aleph.paths import output_alias_issues, resolve_in_workspace
+from aleph.schema import parse_timestep_seconds
 from aleph.sensitivity import morris_screening, one_at_a_time, sobol_saltelli_optional
 from compile_model import load_interventions, resolve_workspace_formula_version
+
+
+def _resolve_sensitivity_config(workspace: Path, manifest: dict[str, Any], seed: str) -> EngineConfig:
+    values: dict[str, Any] = {}
+    allowed = {item.name for item in fields(EngineConfig)}
+    raw_ec = manifest.get("engine_config") if isinstance(manifest, dict) else None
+    if isinstance(raw_ec, dict):
+        values.update({key: value for key, value in raw_ec.items() if key in allowed})
+        if isinstance(raw_ec.get("timestep"), str):
+            sec = parse_timestep_seconds(raw_ec["timestep"])
+            if sec is not None and sec > 0:
+                values["timestep"] = sec / 86400.0
+    cfg_path = workspace / "simulation-config.json"
+    if cfg_path.is_file():
+        raw_cfg = load_json(cfg_path)
+        if isinstance(raw_cfg, dict):
+            values.update({key: value for key, value in raw_cfg.items() if key in allowed})
+            if isinstance(raw_cfg.get("timestep"), str):
+                sec = parse_timestep_seconds(raw_cfg["timestep"])
+                if sec is not None and sec > 0:
+                    values["timestep"] = sec / 86400.0
+    if "timestep" not in values and isinstance(manifest, dict):
+        frame = manifest.get("temporal_frame")
+        if isinstance(frame, dict) and frame.get("timestep") is not None:
+            sec = parse_timestep_seconds(str(frame["timestep"]))
+            if sec is not None and sec > 0:
+                values["timestep"] = sec / 86400.0
+    values["mode"] = "deterministic"
+    values["seed"] = seed
+    return EngineConfig(**values)
 
 
 def main() -> None:
@@ -125,6 +157,7 @@ def main() -> None:
         print(json.dumps({"ok": False, "error": "spec references no valid parameters or output"}, indent=2))
         raise SystemExit(EXIT_SEMANTIC)
     ticks = int(spec.get("ticks", 1))
+    base_config = _resolve_sensitivity_config(workspace, manifest if isinstance(manifest, dict) else {}, args.seed)
 
     def evaluate(values: dict[str, float]) -> float:
         candidate = copy.deepcopy(model)
@@ -132,7 +165,7 @@ def main() -> None:
         for parameter_id, value in values.items():
             by_id[str(parameters[parameter_id]["edge_id"])].strength = float(value)
             by_id[str(parameters[parameter_id]["edge_id"])].effect_distribution = None
-        result = run_deterministic(candidate, EngineConfig(seed=args.seed), ticks=ticks)
+        result = run_deterministic(candidate, base_config, ticks=ticks)
         if not result["ok"]:
             raise ValueError("sensitivity evaluation did not converge")
         return float(result["payload"]["final_state"][output_id])
@@ -166,6 +199,8 @@ def main() -> None:
         "model_version": (
             "aleph-engine-2.0"
             if model.formula_version == "2.0.0"
+            else "aleph-engine-2.2"
+            if model.formula_version == "2.2.0"
             else "aleph-engine-2.1"
         ),
         "formula_version": model.formula_version,

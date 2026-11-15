@@ -10,6 +10,7 @@ from typing import Any, cast
 
 from . import (
     FORMULA_VERSION,
+    FORMULA_VERSION_2_2,
     LEGACY_FORMULA_VERSION,
     SCHEMA_VERSION,
     SCHEMA_VERSION_2_1,
@@ -21,13 +22,13 @@ from .calibration_lineage import verify_lineage
 from .engine import (
     ComputationalModel,
     EngineConfig,
-    ModelEdge,
-    Variable,
+    inspect_execution_health,
+    model_from_dict,
     run_deterministic,
     run_monte_carlo,
     semantic_result_payload,
 )
-from .execution_binding import BINDING_V1, BINDING_V2, build_trace_execution_binding
+from .execution_binding import BINDING_V1, BINDING_V2, BINDING_V3, build_trace_execution_binding
 from .formula import replay_trace_row
 from .io import (
     ResourceLimitError,
@@ -63,12 +64,21 @@ from .schema import (
     EDGE_FIELDS,
     EDGE_STATUS,
     EFFECT_PARAMETER_FIELDS,
+    ENGINE_CONFIG_FIELDS,
     EPISTEMIC_STATUS,
     EVIDENCE_COLUMNS,
     EXECUTION_FIELDS,
     EXTENSION_KEY_RE,
     FINALIZATION_FIELDS,
+    GATE_COMPARE_OPS,
+    GATE_CONDITION_FIELDS,
+    GATE_FIELDS,
+    GATE_OPS,
     HUMAN_TRACK_LEDGER_FIELDS,
+    INPUT_MODES,
+    INTERVENTION_FIELDS,
+    INTERVENTION_OPS,
+    INTERVENTION_RELEASE_POLICIES,
     KNOWN_MANIFEST_FIELDS,
     LAG_FIELDS,
     LAG_TYPES,
@@ -90,6 +100,7 @@ from .schema import (
     RESEARCH_CLAIM_FIELDS,
     RESEARCH_CONTROL_FIELDS,
     RESEARCH_TRACK_FIELDS,
+    RETENTION_UNITS,
     RETRIEVAL_STATUSES,
     ROLEPLAY_HYPOTHESIS_FIELDS,
     ROLEPLAY_TRACK_FIELDS,
@@ -97,6 +108,7 @@ from .schema import (
     SOURCE_TIERS,
     SUBAGENTS_FIELDS,
     SUBJECT_CLASS,
+    TAIL_CLASSES,
     TEMPORAL_FRAME_FIELDS,
     TIMELINE_LABELS,
     TIMELINE_MODES,
@@ -106,10 +118,12 @@ from .schema import (
     ensure_list,
     has_id_prefix,
     is_bool,
+    is_int,
     is_number,
     nonempty_str,
     parse_duration_seconds,
     parse_time,
+    parse_timestep_seconds,
     refuse_string_number,
     reject_unknown_fields,
     unit_interval,
@@ -205,11 +219,69 @@ def validate_paths(manifest: dict[str, Any], workspace: Path) -> CheckResult:
         "human_track_ledger",
         "evidence_map",
         "branch_ledger",
-        "propagation_trace",
         "final_report",
     ):
         if required not in artifact_paths:
             issues.append(issue("MISSING_FIELD", pointer=f"artifact_paths.{required}", message="required core artifact path"))
+    if "propagation_trace" not in artifact_paths and "execution_trace" not in artifact_paths:
+        issues.append(
+            issue(
+                "MISSING_FIELD",
+                pointer="artifact_paths.propagation_trace",
+                message="required core artifact path (propagation_trace or execution_trace)",
+            )
+        )
+    elif "propagation_trace" in artifact_paths and "execution_trace" in artifact_paths:
+        exec_raw = artifact_paths.get("execution_trace")
+        prop_raw = artifact_paths.get("propagation_trace")
+        if nonempty_str(exec_raw) and nonempty_str(prop_raw):
+            exec_norm = str(exec_raw).strip().replace("\\", "/")
+            prop_norm = str(prop_raw).strip().replace("\\", "/")
+            exec_suffix = Path(exec_norm).suffix.lower()
+            prop_suffix = Path(prop_norm).suffix.lower()
+            if exec_norm == prop_norm or exec_suffix != ".json" or prop_suffix != ".jsonl":
+                issues.append(
+                    issue(
+                        "TRACE_ALIAS_CONFLICT",
+                        pointer="artifact_paths",
+                        message="execution_trace (.json) and propagation_trace (.jsonl) declarations conflict",
+                        actual={"execution_trace": exec_norm, "propagation_trace": prop_norm},
+                    )
+                )
+            else:
+                exec_resolved, exec_iss = resolve_in_workspace(workspace, exec_norm, must_exist=False, require_file=True)
+                prop_resolved, prop_iss = resolve_in_workspace(workspace, prop_norm, must_exist=False, require_file=True)
+
+                def _has_real_trace(candidate: Path | None, path_errs: list[Issue], *, is_jsonl: bool) -> bool:
+                    if path_errs or candidate is None or not candidate.is_file() or candidate.stat().st_size == 0:
+                        return False
+                    if not is_jsonl:
+                        return True
+                    import json as _json
+
+                    lines = [ln.strip() for ln in candidate.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()]
+                    if not lines:
+                        return False
+                    if len(lines) == 1:
+                        try:
+                            row = _json.loads(lines[0])
+                        except ValueError:
+                            return True
+                        if isinstance(row, dict) and row.get("edge_id") == "causal:example-increases-target":
+                            return False
+                    return True
+
+                if _has_real_trace(exec_resolved, exec_iss, is_jsonl=False) and _has_real_trace(
+                    prop_resolved, prop_iss, is_jsonl=True
+                ):
+                    issues.append(
+                        issue(
+                            "TRACE_ALIAS_CONFLICT",
+                            pointer="artifact_paths",
+                            message="both execution_trace and propagation_trace point to populated trace files",
+                            actual={"execution_trace": exec_norm, "propagation_trace": prop_norm},
+                        )
+                    )
     for key, rel in artifact_paths.items():
         if not isinstance(rel, str):
             issues.append(issue("TYPE", pointer=f"artifact_paths.{key}", message="path must be string"))
@@ -291,6 +363,9 @@ def _reject_nested_manifest(manifest: dict[str, Any], issues: list[Issue]) -> No
     migration = manifest.get("migration")
     if isinstance(migration, dict):
         reject_unknown_fields(migration, MIGRATION_FIELDS, "manifest.migration", issues)
+    engine_config = manifest.get("engine_config")
+    if isinstance(engine_config, dict):
+        reject_unknown_fields(engine_config, ENGINE_CONFIG_FIELDS, "manifest.engine_config", issues)
     execution = manifest.get("execution")
     if not isinstance(execution, dict):
         return
@@ -704,6 +779,45 @@ def _validate_v2_manifest_contract(manifest: dict[str, Any], issues: list[Issue]
     elif finalization is not None:
         issues.append(issue("TYPE", pointer="finalization", message="must be object"))
 
+    engine_config = manifest.get("engine_config")
+    if engine_config is not None:
+        if not isinstance(engine_config, dict):
+            issues.append(issue("TYPE", pointer="engine_config", message="must be object"))
+        else:
+            if "timestep" in engine_config:
+                ts = engine_config.get("timestep")
+                if isinstance(ts, (int, float)) and not isinstance(ts, bool):
+                    num_ts = refuse_string_number(ts, "engine_config.timestep", issues)
+                    if num_ts is not None and num_ts <= 0:
+                        issues.append(issue("RANGE", pointer="engine_config.timestep", message="must be positive", actual=ts))
+                elif isinstance(ts, str):
+                    if parse_timestep_seconds(ts) is None:
+                        issues.append(issue("TEMPORAL_FRAME", pointer="engine_config.timestep", message="invalid timestep duration", actual=ts))
+                else:
+                    issues.append(issue("TYPE", pointer="engine_config.timestep", message="must be positive number or duration string"))
+            if "scc_solver" in engine_config:
+                solver = engine_config.get("scc_solver")
+                if not isinstance(solver, str) or solver not in {"jacobi", "linear_auto", "bounded_affine"}:
+                    issues.append(issue("ENUM", pointer="engine_config.scc_solver", expected=["jacobi", "linear_auto", "bounded_affine"], actual=solver))
+            for int_field in ("jacobi_max_iter", "max_events"):
+                if int_field in engine_config:
+                    val = engine_config.get(int_field)
+                    if not isinstance(val, int) or isinstance(val, bool) or val < 1:
+                        issues.append(issue("RANGE", pointer=f"engine_config.{int_field}", message="must be integer >= 1", actual=val))
+            for pos_field in ("jacobi_abs_tol", "divergence_threshold"):
+                if pos_field in engine_config:
+                    num = refuse_string_number(engine_config.get(pos_field), f"engine_config.{pos_field}", issues)
+                    if num is not None and num <= 0:
+                        issues.append(issue("RANGE", pointer=f"engine_config.{pos_field}", message="must be > 0", actual=num))
+            if "jacobi_rel_tol" in engine_config:
+                num = refuse_string_number(engine_config.get("jacobi_rel_tol"), "engine_config.jacobi_rel_tol", issues)
+                if num is not None and num < 0:
+                    issues.append(issue("RANGE", pointer="engine_config.jacobi_rel_tol", message="must be >= 0", actual=num))
+            if "jacobi_relax" in engine_config:
+                num = refuse_string_number(engine_config.get("jacobi_relax"), "engine_config.jacobi_relax", issues)
+                if num is not None and not (0.0 < num <= 1.0):
+                    issues.append(issue("RANGE", pointer="engine_config.jacobi_relax", message="must be in (0, 1]", actual=num))
+
 
 def validate_manifest_core(manifest: dict[str, Any], mode: str) -> CheckResult:
     issues: list[Issue] = []
@@ -777,16 +891,88 @@ def validate_manifest_core(manifest: dict[str, Any], mode: str) -> CheckResult:
             mode == "draft" and quality == "unknown"
         ):
             issues.append(issue("RESEARCH_QUALITY", pointer="execution.research_quality", message="invalid", actual=quality))
+        d_research = execution.get("d_research")
+        is_offline_provisional = False
         control = execution.get("research_control") or {}
         if isinstance(control, dict):
             for legacy in ["max_sources", "max_repair_loops", "time_limit", "source_limit"]:
                 if legacy in control:
                     issues.append(issue("LEGACY_EXECUTION_CONTROL", pointer=f"execution.research_control.{legacy}", message="forbidden"))
-            if mode == "final" and control.get("saturation_reached") is not True:
-                issues.append(issue("EVIDENCE_SATURATION", pointer="execution.research_control.saturation_reached", message="must be true"))
+            if "offline_provisional" in control and not is_bool(control.get("offline_provisional")):
+                issues.append(issue("TYPE", pointer="execution.research_control.offline_provisional", message="must be boolean"))
+            if "offline_reason" in control and not nonempty_str(control.get("offline_reason")):
+                issues.append(issue("TYPE", pointer="execution.research_control.offline_reason", message="must be non-empty string"))
+            if "offline_note" in control and control.get("offline_note") is not None and not isinstance(control.get("offline_note"), str):
+                issues.append(issue("TYPE", pointer="execution.research_control.offline_note", message="must be string"))
+            if control.get("offline_provisional") is True:
+                if not nonempty_str(control.get("offline_reason")):
+                    issues.append(
+                        issue(
+                            "MISSING_FIELD",
+                            pointer="execution.research_control.offline_reason",
+                            message="offline_provisional mode requires a non-empty offline_reason",
+                        )
+                    )
+                if not (
+                    isinstance(d_research, dict)
+                    and d_research.get("invoked") is False
+                    and d_research.get("status") == "unavailable"
+                ):
+                    issues.append(
+                        issue(
+                            "D_RESEARCH",
+                            pointer="execution.research_control.offline_provisional",
+                            message="offline_provisional requires d_research.invoked=false and d_research.status='unavailable'",
+                        )
+                    )
+                else:
+                    is_offline_provisional = True
+            if is_offline_provisional and mode == "final" and quality != "limited":
+                issues.append(
+                    issue(
+                        "RESEARCH_QUALITY",
+                        pointer="execution.research_quality",
+                        message="offline provisional mode in final validation requires research_quality='limited'",
+                        expected="limited",
+                        actual=quality,
+                    )
+                )
             declared_tier = manifest.get("assurance_tier")
+            if is_offline_provisional and isinstance(declared_tier, str) and declared_tier in {"verified", "calibrated"}:
+                issues.append(
+                    issue(
+                        "ASSURANCE_TIER",
+                        pointer="assurance_tier",
+                        message="offline provisional runs cannot claim verified or calibrated assurance tier",
+                        expected="limited",
+                        actual=declared_tier,
+                    )
+                )
+            if is_offline_provisional and mode == "final" and control.get("saturation_reached") is True:
+                issues.append(
+                    issue(
+                        "EVIDENCE_SATURATION",
+                        pointer="execution.research_control.saturation_reached",
+                        message="offline provisional mode cannot claim saturation_reached=true",
+                        expected=False,
+                        actual=True,
+                    )
+                )
+            elif mode == "final" and control.get("saturation_reached") is not True:
+                if is_offline_provisional:
+                    issues.append(
+                        issue(
+                            "OFFLINE_PROVISIONAL",
+                            severity="warning",
+                            pointer="execution.research_control",
+                            message=f"offline provisional mode active: {control.get('offline_reason')}",
+                        )
+                    )
+                else:
+                    issues.append(issue("EVIDENCE_SATURATION", pointer="execution.research_control.saturation_reached", message="must be true"))
             if (
                 mode != "final"
+                and not is_offline_provisional
                 and control.get("saturation_reached") is False
                 and isinstance(declared_tier, str)
                 and declared_tier in {"verified", "calibrated"}
@@ -807,8 +993,41 @@ def validate_manifest_core(manifest: dict[str, Any], mode: str) -> CheckResult:
             if control.get("policy") != "evidence-saturation":
                 issues.append(issue("EVIDENCE_SATURATION", pointer="execution.research_control.policy", message="must be evidence-saturation"))
             gaps = control.get("unresolved_critical_gaps")
-            if mode == "final" and gaps != []:
-                issues.append(issue("EVIDENCE_SATURATION", pointer="execution.research_control.unresolved_critical_gaps", message="final requires no unresolved critical gaps", actual=gaps))
+            if mode == "final":
+                if is_offline_provisional:
+                    valid_gaps = (
+                        [g for g in gaps if nonempty_str(g)]
+                        if isinstance(gaps, list)
+                        else []
+                    )
+                    if not isinstance(gaps, list) or not valid_gaps or len(valid_gaps) != len(gaps):
+                        issues.append(
+                            issue(
+                                "EVIDENCE_SATURATION",
+                                pointer="execution.research_control.unresolved_critical_gaps",
+                                message="offline provisional mode in final validation requires non-empty unresolved_critical_gaps",
+                                actual=gaps,
+                            )
+                        )
+                    else:
+                        issues.append(
+                            issue(
+                                "OFFLINE_PROVISIONAL",
+                                severity="warning",
+                                pointer="execution.research_control.unresolved_critical_gaps",
+                                message=f"offline provisional mode active with unresolved gaps: {control.get('offline_reason')}",
+                                actual=gaps,
+                            )
+                        )
+                elif gaps != []:
+                    issues.append(
+                        issue(
+                            "EVIDENCE_SATURATION",
+                            pointer="execution.research_control.unresolved_critical_gaps",
+                            message="final requires no unresolved critical gaps",
+                            actual=gaps,
+                        )
+                    )
             queue = control.get("next_wave_queue")
             if control.get("saturation_reached") is True and queue not in (None, []):
                 issues.append(
@@ -987,6 +1206,16 @@ def validate_manifest_core(manifest: dict[str, Any], mode: str) -> CheckResult:
             issues.append(issue("TEMPORAL_FRAME", pointer="temporal_frame.simulation_start", message="prospective start must be at/after cutoff"))
         if not isinstance(frame.get("future_projection"), bool):
             issues.append(issue("TYPE", pointer="temporal_frame.future_projection", message="must be boolean"))
+        if "timestep" in frame and frame.get("timestep") is not None:
+            if parse_timestep_seconds(frame.get("timestep")) is None:
+                issues.append(
+                    issue(
+                        "TEMPORAL_FRAME",
+                        pointer="temporal_frame.timestep",
+                        message="must be supported ISO duration or compact timestep (e.g. P1M, 1d)",
+                        actual=frame.get("timestep"),
+                    )
+                )
     scope = manifest.get("scope")
     if isinstance(scope, dict):
         if parse_duration_seconds(scope.get("horizon")) is None:
@@ -1071,7 +1300,7 @@ def validate_evidence(rows: list[dict[str, str]], manifest: dict[str, Any], mode
             issues.append(issue("TYPE", pointer=f"{p}/confidence", message="must be numeric string", actual=conf_raw))
         if isinstance(retrieval, str) and retrieval in {"opened", "downloaded", "api", "local-file", "user-provided"}:
             direct += 1
-            if isinstance(tier, str) and tier in {"primary", "authoritative-secondary", "user-provided"}:
+            if isinstance(tier, str) and tier in {"primary", "authoritative-secondary"}:
                 high_q += 1
     metrics = {
         "evidence_rows": len(rows),
@@ -1120,12 +1349,51 @@ def _validate_node_extensions(raw: dict[str, Any], p: str, issues: list[Issue]) 
             )
 
 
-def validate_nodes(nodes: list[Any], evidence_ids: set[str], manifest: dict[str, Any]) -> tuple[CheckResult, set[str]]:
+def _timestep_to_days(candidate: Any) -> float | None:
+    if is_number(candidate) and float(candidate) > 0:
+        return float(candidate)
+    sec = parse_timestep_seconds(candidate)
+    if sec is not None and sec > 0:
+        return sec / 86400.0
+    return None
+
+
+def _manifest_timestep_days(manifest: dict[str, Any]) -> float:
+    eng = _mapping(manifest.get("engine_config"))
+    tf = _mapping(manifest.get("temporal_frame"))
+    for candidate in (eng.get("timestep"), tf.get("timestep")):
+        days = _timestep_to_days(candidate)
+        if days is not None:
+            return days
+    return 1.0
+
+
+def _resolve_workspace_timestep_days(workspace: Path, manifest: dict[str, Any]) -> float:
+    raw_paths = _mapping(manifest.get("artifact_paths"))
+    cfg_rel = str(raw_paths.get("simulation_config") or "simulation-config.json")
+    cfg_path, cfg_iss = resolve_in_workspace(workspace, cfg_rel, must_exist=False, require_file=True)
+    if not cfg_iss and cfg_path is not None and cfg_path.is_file():
+        cfg_data, cfg_load_iss = load_json_secure(cfg_path)
+        if not cfg_load_iss and isinstance(cfg_data, dict):
+            days = _timestep_to_days(cfg_data.get("timestep"))
+            if days is not None:
+                return days
+    return _manifest_timestep_days(manifest)
+
+
+def validate_nodes(
+    nodes: list[Any],
+    evidence_ids: set[str],
+    manifest: dict[str, Any],
+    *,
+    timestep_days: float | None = None,
+) -> tuple[CheckResult, set[str]]:
     issues: list[Issue] = []
     ids: set[str] = set()
     cutoff = parse_time(_mapping(manifest.get("temporal_frame")).get("observation_cutoff"))
     schema_2_1 = manifest.get("schema_version") == SCHEMA_VERSION_2_1
     node_allowed_fields = NODE_FIELDS | NODE_V2_1_EXTRA_FIELDS if schema_2_1 else NODE_FIELDS
+    effective_timestep_days = float(timestep_days) if timestep_days is not None else _manifest_timestep_days(manifest)
     for idx, raw in enumerate(nodes):
         p = f"/nodes/{idx}"
         if not isinstance(raw, dict):
@@ -1234,6 +1502,35 @@ def validate_nodes(nodes: list[Any], evidence_ids: set[str], manifest: dict[str,
                 refuse_string_number(trigger.get("magnitude"), f"{p}/trigger/magnitude", issues)
         if "baseline" in raw:
             refuse_string_number(raw.get("baseline"), f"{p}/baseline", issues)
+        init_val: float | None = None
+        if "initial_value" in raw and raw.get("initial_value") is not None:
+            init_val = refuse_string_number(raw.get("initial_value"), f"{p}/initial_value", issues)
+        raw_bounds = raw.get("bounds")
+        lo_bound: float | None = None
+        hi_bound: float | None = None
+        if isinstance(raw_bounds, list):
+            if len(raw_bounds) != 2:
+                issues.append(issue("RANGE", pointer=f"{p}/bounds", message="bounds must contain [min, max]", actual=raw_bounds))
+            else:
+                if raw_bounds[0] is not None:
+                    lo_bound = refuse_string_number(raw_bounds[0], f"{p}/bounds/0", issues)
+                if raw_bounds[1] is not None:
+                    hi_bound = refuse_string_number(raw_bounds[1], f"{p}/bounds/1", issues)
+                if lo_bound is not None and hi_bound is not None and lo_bound > hi_bound:
+                    issues.append(issue("RANGE", pointer=f"{p}/bounds", message="lower bound exceeds upper bound", actual=raw_bounds))
+        elif "bounds" in raw and raw_bounds is not None:
+            issues.append(issue("TYPE", pointer=f"{p}/bounds", message="bounds must be a 2-element list"))
+        if init_val is not None:
+            if (lo_bound is not None and init_val < lo_bound) or (hi_bound is not None and init_val > hi_bound):
+                issues.append(
+                    issue(
+                        "RANGE",
+                        pointer=f"{p}/initial_value",
+                        message="initial_value must lie within declared bounds",
+                        actual=init_val,
+                        expected=raw_bounds,
+                    )
+                )
         if "scale" in raw and raw.get("scale") not in {"level", "flow", "stock"}:
             issues.append(
                 issue(
@@ -1274,6 +1571,66 @@ def validate_nodes(nodes: list[Any], evidence_ids: set[str], manifest: dict[str,
                 issues.append(issue("RANGE", pointer=f"{p}/decay_rate", message="distribution support must be non-negative"))
             if raw.get("scale") != "stock":
                 issues.append(issue("SCHEMA", pointer=f"{p}/decay_rate", message="decay_rate is only valid for stock variables"))
+        if "retention_unit" in raw:
+            retention_unit = raw.get("retention_unit")
+            if not isinstance(retention_unit, str) or retention_unit not in RETENTION_UNITS:
+                issues.append(
+                    issue(
+                        "ENUM",
+                        pointer=f"{p}/retention_unit",
+                        message="must be per_tick or per_day",
+                        actual=retention_unit,
+                    )
+                )
+            if raw.get("scale") != "stock":
+                issues.append(
+                    issue(
+                        "SCHEMA",
+                        pointer=f"{p}/retention_unit",
+                        message="retention_unit is only valid for stock variables",
+                    )
+                )
+        has_retention_param = any(
+            key in raw
+            for key in ("retention", "retention_distribution", "decay_rate", "decay_rate_distribution")
+        )
+        if raw.get("scale") == "stock" and has_retention_param and "retention_unit" not in raw and effective_timestep_days >= 7.0:
+            rep_ret: float | None = None
+            raw_ret = raw.get("retention")
+            raw_dec = raw.get("decay_rate")
+            if isinstance(raw_ret, (int, float)) and not isinstance(raw_ret, bool):
+                rep_ret = float(raw_ret)
+            elif isinstance(raw_ret, dict):
+                for key in ("value", "mean", "mode"):
+                    val = raw_ret.get(key)
+                    if isinstance(val, (int, float)) and not isinstance(val, bool):
+                        rep_ret = float(val)
+                        break
+            elif isinstance(raw_dec, (int, float)) and not isinstance(raw_dec, bool) and float(raw_dec) >= 0:
+                rep_ret = math.exp(-float(raw_dec))
+            elif isinstance(raw_dec, dict):
+                for key in ("value", "mean", "mode"):
+                    val = raw_dec.get(key)
+                    if isinstance(val, (int, float)) and not isinstance(val, bool) and float(val) >= 0:
+                        rep_ret = math.exp(-float(val))
+                        break
+            collapse_note = ""
+            if rep_ret is not None and 0.0 < rep_ret < 0.98:
+                per_tick = rep_ret ** effective_timestep_days
+                collapse_note = f" (retention={rep_ret:.4g} collapses to {per_tick:.4g} per tick over {effective_timestep_days:.4g} days)"
+            issues.append(
+                issue(
+                    "STOCK_RETENTION_UNIT_IMPLICIT",
+                    severity="warning",
+                    pointer=f"{p}/retention_unit",
+                    message=(
+                        f"stock node {raw.get('id')} specifies retention/decay without retention_unit under "
+                        f"timestep={effective_timestep_days:.4g}d (>=7d){collapse_note}; default 'per_day' "
+                        f"applies retention**dt decay and multiplies rate inflows by dt. Explicitly set "
+                        f"\"retention_unit\": \"per_tick\" or \"per_day\"."
+                    ),
+                )
+            )
     return _check("nodes", issues, {"nodes": len(ids)}), ids
 
 
@@ -1283,6 +1640,8 @@ def validate_edges(
     evidence_ids: set[str],
     node_types: dict[str, Any] | None = None,
     node_scales: dict[str, Any] | None = None,
+    nodes_by_id: dict[str, dict[str, Any]] | None = None,
+    manifest: dict[str, Any] | None = None,
 ) -> tuple[CheckResult, dict[str, dict[str, Any]]]:
     issues: list[Issue] = []
     by_id: dict[str, dict[str, Any]] = {}
@@ -1446,6 +1805,69 @@ def validate_edges(
             issues.append(issue("ENUM", pointer=f"{p}/integration", actual=integration))
         if integration == "rate" and node_scales is not None and node_scales.get(str(raw.get("to")), "level") != "stock":
             issues.append(issue("SCHEMA", pointer=f"{p}/integration", message="rate integration requires stock target"))
+        if "input_mode" in raw:
+            edge_input_mode = raw.get("input_mode")
+            if not isinstance(edge_input_mode, str) or edge_input_mode not in INPUT_MODES:
+                issues.append(
+                    issue(
+                        "ENUM",
+                        pointer=f"{p}/input_mode",
+                        message="must be level, deviation, or log_ratio",
+                        actual=edge_input_mode,
+                    )
+                )
+            elif raw.get("transform") == "elasticity" and edge_input_mode == "deviation":
+                src_node = (nodes_by_id or {}).get(str(raw.get("from")))
+                src_baseline = src_node.get("baseline") if isinstance(src_node, dict) else None
+                src_bounds = src_node.get("bounds") if isinstance(src_node, dict) else None
+                non_unit_scale = (
+                    src_node is None
+                    or not is_number(src_baseline)
+                    or abs(float(src_baseline)) > 1.0
+                )
+                if not non_unit_scale and isinstance(src_bounds, (list, tuple)) and len(src_bounds) == 2:
+                    lo_b, hi_b = src_bounds[0], src_bounds[1]
+                    if is_number(lo_b) and is_number(hi_b) and (float(hi_b) - float(lo_b)) > 2.0:
+                        non_unit_scale = True
+                if non_unit_scale or (
+                    isinstance(src_node, dict)
+                    and not (isinstance(src_bounds, (list, tuple)) and len(src_bounds) == 2)
+                ):
+                    issues.append(
+                        issue(
+                            "ELASTICITY_DEVIATION_SCALE_RISK",
+                            severity="warning",
+                            pointer=f"{p}/input_mode",
+                            message=(
+                                "elasticity edge explicitly sets input_mode='deviation', passing raw differences into "
+                                "expm1(coeff * x_eff) which can explode on non-unit deltas; prefer input_mode='log_ratio' "
+                                "(with positive source baseline)."
+                            ),
+                            actual="deviation",
+                        )
+                    )
+        elif (
+            isinstance(manifest, dict)
+            and manifest.get("formula_version") == FORMULA_VERSION_2_2
+            and raw.get("transform") == "elasticity"
+            and nodes_by_id is not None
+        ):
+            src_node = nodes_by_id.get(str(raw.get("from")))
+            if isinstance(src_node, dict):
+                raw_base = src_node.get("baseline")
+                base_val = float(raw_base) if is_number(raw_base) else 0.0
+                if not math.isfinite(base_val) or base_val <= 0.0:
+                    issues.append(
+                        issue(
+                            "RANGE",
+                            pointer=f"{p}/from",
+                            message=(
+                                f"elasticity edge defaults to input_mode='log_ratio' in formula_version 2.2.0 and "
+                                f"requires positive baseline on source {raw.get('from')}"
+                            ),
+                            actual=base_val,
+                        )
+                    )
         if not nonempty_str(raw.get("mechanism")) or len(str(raw.get("mechanism", "")).split()) < 10:
             issues.append(issue("MECHANISM", pointer=f"{p}/mechanism", message="mechanism required"))
         lag = raw.get("lag_distribution")
@@ -1526,7 +1948,220 @@ def validate_edges(
                     refuse_string_number(effect.get(field), f"{p}/effect_parameter/{field}", issues)
             if not numeric_present and "distribution" not in effect:
                 issues.append(issue("MISSING_FIELD", pointer=f"{p}/effect_parameter", message="requires numerical reference or distribution"))
+        if "gate" in raw and raw["gate"] is not None:
+            gate = raw["gate"]
+            if not isinstance(gate, dict):
+                issues.append(issue("TYPE", pointer=f"{p}/gate", message="gate must be object"))
+            else:
+                reject_unknown_fields(gate, GATE_FIELDS, f"{p}/gate", issues)
+                gate_op = gate.get("op")
+                if not isinstance(gate_op, str) or gate_op not in GATE_OPS:
+                    issues.append(issue("ENUM", pointer=f"{p}/gate/op", message="must be all, any, or veto", actual=gate_op))
+                conditions = gate.get("conditions")
+                if not isinstance(conditions, list) or not conditions:
+                    issues.append(issue("MISSING_FIELD", pointer=f"{p}/gate/conditions", message="requires non-empty conditions list"))
+                else:
+                    for ci, cond in enumerate(conditions):
+                        cp = f"{p}/gate/conditions/{ci}"
+                        if not isinstance(cond, dict):
+                            issues.append(issue("TYPE", pointer=cp, message="gate condition must be object"))
+                            continue
+                        reject_unknown_fields(cond, GATE_CONDITION_FIELDS, cp, issues)
+                        cnode = cond.get("node")
+                        if not nonempty_str(cnode):
+                            issues.append(issue("MISSING_FIELD", pointer=f"{cp}/node", message="required"))
+                        elif cnode not in node_ids:
+                            issues.append(issue("UNKNOWN_REF", pointer=f"{cp}/node", actual=cnode))
+                        cop = cond.get("op")
+                        if not isinstance(cop, str) or cop not in GATE_COMPARE_OPS:
+                            issues.append(issue("ENUM", pointer=f"{cp}/op", message="must be gt, gte, lt, or lte", actual=cop))
+                        if "value" not in cond:
+                            issues.append(issue("MISSING_FIELD", pointer=f"{cp}/value", message="required"))
+                        else:
+                            refuse_string_number(cond.get("value"), f"{cp}/value", issues)
     return _check("edges", issues, {"edges": len(by_id)}), by_id
+
+
+def validate_interventions(
+    interventions: Any,
+    node_ids: set[str],
+    node_scales: dict[str, str],
+    manifest: dict[str, Any],
+    *,
+    artifact_name: str = "interventions.json",
+    load_issues: list[Issue] | None = None,
+) -> CheckResult:
+    issues: list[Issue] = list(load_issues or [])
+    if interventions is None:
+        if not issues:
+            issues.append(issue("TYPE", artifact=artifact_name, message="top-level must be array"))
+        return _check("interventions", issues, {"interventions": 0})
+    if not isinstance(interventions, list):
+        issues.append(issue("TYPE", artifact=artifact_name, message="top-level must be array"))
+        return _check("interventions", issues, {"interventions": 0})
+
+    execution = _mapping(manifest.get("execution"))
+    formula_version = str(execution.get("formula_version") or manifest.get("formula_version") or "2.1.0")
+    seen_ids: set[str] = set()
+
+    for idx, raw in enumerate(interventions):
+        p = f"/interventions/{idx}"
+        if not isinstance(raw, dict):
+            issues.append(issue("TYPE", artifact=artifact_name, pointer=p, message="intervention must be object"))
+            continue
+        reject_unknown_fields(raw, INTERVENTION_FIELDS, p, issues)
+
+        iv_id = raw.get("id")
+        if not nonempty_str(iv_id):
+            issues.append(issue("MISSING_FIELD", artifact=artifact_name, pointer=f"{p}/id", message="required non-empty string"))
+        elif str(iv_id) in seen_ids:
+            issues.append(issue("DUPLICATE_ID", artifact=artifact_name, pointer=f"{p}/id", actual=iv_id))
+        else:
+            seen_ids.add(str(iv_id))
+
+        target = raw.get("target")
+        if not nonempty_str(target):
+            issues.append(issue("MISSING_FIELD", artifact=artifact_name, pointer=f"{p}/target", message="required non-empty string"))
+        elif str(target) not in node_ids:
+            issues.append(issue("UNKNOWN_REF", artifact=artifact_name, pointer=f"{p}/target", actual=target))
+
+        op = raw.get("op")
+        if op is None or (isinstance(op, str) and not op.strip()):
+            if formula_version == FORMULA_VERSION_2_2:
+                issues.append(
+                    issue(
+                        "MISSING_FIELD",
+                        artifact=artifact_name,
+                        pointer=f"{p}/op",
+                        message="op is required in formula_version 2.2.0 ('set', 'add', or 'multiply')",
+                    )
+                )
+            else:
+                issues.append(
+                    issue(
+                        "MISSING_FIELD",
+                        artifact=artifact_name,
+                        pointer=f"{p}/op",
+                        severity="warning",
+                        message="intervention omits explicit op; legacy engine defaults to 'set' (required in 2.2.0 and schema)",
+                    )
+                )
+        elif not isinstance(op, str) or op not in INTERVENTION_OPS:
+            issues.append(
+                issue(
+                    "ENUM",
+                    artifact=artifact_name,
+                    pointer=f"{p}/op",
+                    expected=sorted(INTERVENTION_OPS),
+                    actual=op,
+                )
+            )
+
+        if "value" not in raw or raw.get("value") is None:
+            issues.append(issue("MISSING_FIELD", artifact=artifact_name, pointer=f"{p}/value", message="required"))
+        else:
+            refuse_string_number(raw.get("value"), f"{p}/value", issues)
+
+        start_tick = raw.get("start_tick")
+        start_tick_valid = False
+        if "start_tick" not in raw or start_tick is None:
+            issues.append(issue("MISSING_FIELD", artifact=artifact_name, pointer=f"{p}/start_tick", message="required"))
+        elif isinstance(start_tick, str):
+            issues.append(
+                issue(
+                    "COERCION_REFUSED",
+                    artifact=artifact_name,
+                    pointer=f"{p}/start_tick",
+                    message="string cannot be coerced to integer",
+                    actual=start_tick,
+                )
+            )
+        elif not is_int(start_tick) or start_tick < 0:
+            issues.append(
+                issue(
+                    "RANGE",
+                    artifact=artifact_name,
+                    pointer=f"{p}/start_tick",
+                    message="must be integer >= 0",
+                    actual=start_tick,
+                )
+            )
+        else:
+            start_tick_valid = True
+
+        end_tick = raw.get("end_tick")
+        if "end_tick" in raw and end_tick is not None:
+            if isinstance(end_tick, str):
+                issues.append(
+                    issue(
+                        "COERCION_REFUSED",
+                        artifact=artifact_name,
+                        pointer=f"{p}/end_tick",
+                        message="string cannot be coerced to integer",
+                        actual=end_tick,
+                    )
+                )
+            elif not is_int(end_tick) or end_tick < 0:
+                issues.append(
+                    issue(
+                        "RANGE",
+                        artifact=artifact_name,
+                        pointer=f"{p}/end_tick",
+                        message="must be integer >= 0 or null",
+                        actual=end_tick,
+                    )
+                )
+            elif start_tick_valid and end_tick <= start_tick:
+                issues.append(
+                    issue(
+                        "RANGE",
+                        artifact=artifact_name,
+                        pointer=f"{p}/end_tick",
+                        message="end_tick must be greater than start_tick",
+                        actual=end_tick,
+                    )
+                )
+
+        release_policy = raw.get("release_policy")
+        if "release_policy" in raw and release_policy is not None:
+            if not isinstance(release_policy, str) or release_policy not in INTERVENTION_RELEASE_POLICIES:
+                issues.append(
+                    issue(
+                        "ENUM",
+                        artifact=artifact_name,
+                        pointer=f"{p}/release_policy",
+                        expected=sorted(INTERVENTION_RELEASE_POLICIES),
+                        actual=release_policy,
+                    )
+                )
+            elif release_policy == "reset_baseline":
+                effective_op = (
+                    op
+                    if isinstance(op, str) and op in INTERVENTION_OPS
+                    else ("set" if op is None and formula_version != FORMULA_VERSION_2_2 else None)
+                )
+                if effective_op is not None and effective_op != "set":
+                    issues.append(
+                        issue(
+                            "SCHEMA",
+                            artifact=artifact_name,
+                            pointer=f"{p}/release_policy",
+                            message="release_policy 'reset_baseline' requires op == 'set'",
+                            actual=op,
+                        )
+                    )
+                if nonempty_str(target) and str(target) in node_scales and node_scales[str(target)] != "stock":
+                    issues.append(
+                        issue(
+                            "SCHEMA",
+                            artifact=artifact_name,
+                            pointer=f"{p}/release_policy",
+                            message="release_policy 'reset_baseline' is only valid for stock targets",
+                            actual=node_scales[str(target)],
+                        )
+                    )
+
+    return _check("interventions", issues, {"interventions": len(seen_ids)})
 
 
 def validate_trace(
@@ -2394,6 +3029,8 @@ def validate_branches(
         issues.append(issue("ENUM", pointer="branch_ledger.likelihood_mode", actual=data.get("likelihood_mode")))
     if not is_bool(data.get("calibrated")):
         issues.append(issue("TYPE", pointer="branch_ledger.calibrated", message="must be boolean"))
+    if "tail_coverage" in data and not is_bool(data.get("tail_coverage")):
+        issues.append(issue("TYPE", pointer="branch_ledger.tail_coverage", message="must be boolean"))
     manifest_likelihood = manifest_dict.get("likelihood_mode")
     ledger_likelihood = data.get("likelihood_mode")
     if manifest_likelihood != ledger_likelihood:
@@ -2619,6 +3256,7 @@ def validate_branches(
     total_prob = 0.0
     total_weight = 0.0
     non_stress_count = 0
+    tail_branch_count = 0
     for idx, branch in enumerate(branches):
         p = f"/branches/{idx}"
         if not isinstance(branch, dict):
@@ -2636,6 +3274,16 @@ def validate_branches(
             )
         if "stress" in branch and not is_bool(branch.get("stress")):
             issues.append(issue("TYPE", pointer=f"{p}/stress", message="must be boolean"))
+        if "tail" in branch and not is_bool(branch.get("tail")):
+            issues.append(issue("TYPE", pointer=f"{p}/tail", message="must be boolean"))
+        if "tail_class" in branch:
+            tail_class = branch.get("tail_class")
+            if not isinstance(tail_class, str) or tail_class not in TAIL_CLASSES:
+                issues.append(issue("ENUM", pointer=f"{p}/tail_class", actual=tail_class))
+        if branch.get("tail_class") == "tail_shock" and branch.get("tail") is False:
+            issues.append(issue("SCHEMA", pointer=f"{p}/tail", message="tail_shock branch cannot set tail=false"))
+        if branch.get("tail") is True or branch.get("stress") is True or branch.get("tail_class") == "tail_shock":
+            tail_branch_count += 1
         for required in (
             "id",
             "name",
@@ -2909,7 +3557,15 @@ def validate_branches(
                     message="deterministic likelihood cannot retain unresolved mass",
                 )
             )
-    metrics = {"branches": len(branches), "near_duplicates": sum(1 for i in issues if i.code == "BRANCH_NEAR_DUPLICATE")}
+    if data.get("tail_coverage") is True and tail_branch_count == 0:
+        issues.append(
+            issue(
+                "MISSING_FIELD",
+                pointer="branch_ledger.branches",
+                message="tail_coverage=true requires at least one tail or stress branch",
+            )
+        )
+    metrics = {"branches": len(branches), "near_duplicates": sum(1 for i in issues if i.code == "BRANCH_NEAR_DUPLICATE"), "tail_branches": tail_branch_count}
     return _check("branches", issues, metrics)
 
 
@@ -2976,6 +3632,29 @@ def validate_report(
             )
         )
     return _check("report", issues)
+
+
+def manifest_model_contract_payload(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Return only the manifest fields that govern computational model compilation."""
+    raw_paths = manifest.get("artifact_paths")
+    model_paths = (
+        {
+            key: raw_paths[key]
+            for key in ("nodes", "edges", "interventions")
+            if key in raw_paths
+        }
+        if isinstance(raw_paths, dict)
+        else {}
+    )
+    return {
+        "schema_version": manifest.get("schema_version"),
+        "simulation_id": manifest.get("simulation_id"),
+        "formula_version": manifest.get("formula_version"),
+        "temporal_frame": manifest.get("temporal_frame"),
+        "change_point": manifest.get("change_point"),
+        "interventions": manifest.get("interventions"),
+        "artifact_paths": model_paths,
+    }
 
 
 def manifest_integrity_payload(manifest: dict[str, Any]) -> dict[str, Any]:
@@ -4382,9 +5061,23 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                 issues.extend(path_issues)
                 if path is None:
                     continue
-                actual = artifact_integrity_hash(path, str(relative), manifest)
-                if actual != expected:
-                    issues.append(issue("STALE_ARTIFACT", artifact=str(relative), message="compiled model source changed", expected=expected, actual=actual))
+                if relative.replace("\\", "/") == "simulation-manifest.json":
+                    contract_digest = canonical_hash(manifest_model_contract_payload(manifest))
+                    legacy_digest = canonical_hash(manifest_integrity_payload(manifest))
+                    if expected not in {contract_digest, legacy_digest}:
+                        issues.append(
+                            issue(
+                                "STALE_ARTIFACT",
+                                artifact=str(relative),
+                                message="compiled model source changed",
+                                expected=expected,
+                                actual=contract_digest,
+                            )
+                        )
+                else:
+                    actual = artifact_integrity_hash(path, str(relative), manifest)
+                    if actual != expected:
+                        issues.append(issue("STALE_ARTIFACT", artifact=str(relative), message="compiled model source changed", expected=expected, actual=actual))
 
     if run is not None:
         reject_unknown_fields(
@@ -4403,6 +5096,7 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                     "result",
                     "trace_contract",
                     "trace_execution_binding",
+                    "warnings",
                     "contract_hash",
                 }
             ),
@@ -4436,24 +5130,28 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                 )
             )
         run_contract_version = run.get("run_contract_version")
-        if run_contract_version not in {"aleph-run-2.0", "aleph-run-2.1"}:
+        if run_contract_version not in {"aleph-run-2.0", "aleph-run-2.1", "aleph-run-2.2"}:
             issues.append(issue("SCHEMA", artifact="run_ledger", pointer="run_contract_version", actual=run_contract_version))
         expected_run_formula = (
             LEGACY_FORMULA_VERSION
             if run_contract_version == "aleph-run-2.0"
-            else FORMULA_VERSION if run_contract_version == "aleph-run-2.1" else None
+            else FORMULA_VERSION
+            if run_contract_version == "aleph-run-2.1"
+            else FORMULA_VERSION_2_2 if run_contract_version == "aleph-run-2.2" else None
         )
         expected_binding_version = (
             BINDING_V1
             if run_contract_version == "aleph-run-2.0"
-            else BINDING_V2 if run_contract_version == "aleph-run-2.1" else None
+            else BINDING_V2
+            if run_contract_version == "aleph-run-2.1"
+            else BINDING_V3 if run_contract_version == "aleph-run-2.2" else None
         )
         run_formula_version = run.get("formula_version", LEGACY_FORMULA_VERSION)
         if run_formula_version not in SUPPORTED_FORMULA_VERSIONS:
             issues.append(issue("SCHEMA", artifact="run_ledger", pointer="formula_version", actual=run_formula_version))
             run_formula_version = FORMULA_VERSION
-        if run.get("run_contract_version") == "aleph-run-2.1" and "formula_version" not in run:
-            issues.append(issue("MISSING_FIELD", artifact="run_ledger", pointer="formula_version", message="required for aleph-run-2.1"))
+        if run.get("run_contract_version") in {"aleph-run-2.1", "aleph-run-2.2"} and "formula_version" not in run:
+            issues.append(issue("MISSING_FIELD", artifact="run_ledger", pointer="formula_version", message=f"required for {run_contract_version}"))
         if expected_run_formula is not None and run_formula_version != expected_run_formula:
             issues.append(
                 issue(
@@ -4542,14 +5240,8 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                 raw_interventions = model.get("interventions")
                 if not isinstance(raw_variables, dict) or not isinstance(raw_edges, list) or not isinstance(raw_interventions, list):
                     raise ValueError("compiled model payload is incomplete")
-                replay_model = ComputationalModel(
-                    variables={
-                        str(key): Variable(**value)
-                        for key, value in raw_variables.items()
-                        if isinstance(value, dict)
-                    },
-                    edges=[ModelEdge(**value) for value in raw_edges if isinstance(value, dict)],
-                    interventions=[value for value in raw_interventions if isinstance(value, dict)],
+                replay_model = model_from_dict(
+                    model,
                     formula_version=str(run_formula_version),
                 )
                 replay_config = EngineConfig(**config)
@@ -4582,6 +5274,24 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                             expected=independent_result_hash,
                             actual=run.get("result_hash"),
                             message="validator-independent engine replay differs from the saved result",
+                        )
+                    )
+                for health_item in inspect_execution_health(
+                    replay_model,
+                    replay_config,
+                    ticks=ticks,
+                    run_id=0,
+                    result=independent_result if run.get("mode") != "monte_carlo" else None,
+                ):
+                    issues.append(
+                        issue(
+                            str(health_item.get("code", "EXECUTION_HEALTH")),
+                            severity="warning",
+                            artifact="run_ledger",
+                            pointer=str(health_item.get("pointer", "result")),
+                            message=str(health_item.get("message", "execution health warning")),
+                            expected=health_item.get("expected"),
+                            actual=health_item.get("actual"),
                         )
                     )
             except (TypeError, ValueError) as exc:
@@ -4660,13 +5370,15 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
             else:
                 bound_trace_hash = trace_hash
             row_count = trace_contract.get("row_count")
-            if not isinstance(row_count, int) or isinstance(row_count, bool) or row_count <= 0:
+            is_json_trace = isinstance(trace_relative, str) and trace_relative.endswith(".json")
+            min_rows = 0 if is_json_trace else 1
+            if not isinstance(row_count, int) or isinstance(row_count, bool) or row_count < min_rows:
                 issues.append(
                     issue(
                         "TYPE",
                         artifact="run_ledger",
                         pointer="trace_contract.row_count",
-                        message="must be a positive integer",
+                        message="must be a non-negative integer" if is_json_trace else "must be a positive integer",
                     )
                 )
             if nonempty_str(trace_relative):
@@ -4800,7 +5512,7 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                 )
             binding_version = execution_binding.get("version")
             if (
-                binding_version not in {"aleph-trace-execution-binding-v1", "aleph-trace-execution-binding-v2"}
+                binding_version not in {BINDING_V1, BINDING_V2, BINDING_V3}
                 or execution_binding.get("mode") != run.get("mode")
                 or execution_binding.get("ticks") != run.get("ticks")
             ):
@@ -4823,10 +5535,10 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
                         actual=binding_version,
                     )
                 )
-            if binding_version == "aleph-trace-execution-binding-v2":
+            if binding_version in {BINDING_V2, BINDING_V3}:
                 for field in ("formula_version", "dynamics_hashes", "resolved_parameters_hash"):
                     if field not in execution_binding:
-                        issues.append(issue("MISSING_FIELD", artifact="run_ledger", pointer=f"trace_execution_binding.{field}", message="required for binding v2"))
+                        issues.append(issue("MISSING_FIELD", artifact="run_ledger", pointer=f"trace_execution_binding.{field}", message=f"required for {binding_version}"))
                 if execution_binding.get("formula_version") != run_formula_version:
                     issues.append(issue("REPLAY_MISMATCH", artifact="run_ledger", pointer="trace_execution_binding.formula_version", expected=run_formula_version, actual=execution_binding.get("formula_version")))
             if (
@@ -5197,7 +5909,8 @@ def validate_workspace(
         nodes: list[Any] = []
     else:
         nodes = nodes_raw
-    c_nodes, node_ids = validate_nodes(nodes, evidence_ids, manifest)
+    timestep_days = _resolve_workspace_timestep_days(workspace, manifest)
+    c_nodes, node_ids = validate_nodes(nodes, evidence_ids, manifest, timestep_days=timestep_days)
     checks["nodes"] = c_nodes.to_dict()
     all_issues.extend(c_nodes.issues)
 
@@ -5211,7 +5924,15 @@ def validate_workspace(
     node_types = {str(node.get("id")): node.get("type") for node in nodes if isinstance(node, dict)}
     node_scales = {str(node.get("id")): node.get("scale", "level") for node in nodes if isinstance(node, dict)}
     nodes_by_id = {str(node.get("id")): node for node in nodes if isinstance(node, dict) and nonempty_str(node.get("id"))}
-    c_edges, edge_by_id = validate_edges(edges, node_ids, evidence_ids, node_types, node_scales)
+    c_edges, edge_by_id = validate_edges(
+        edges,
+        node_ids,
+        evidence_ids,
+        node_types,
+        node_scales,
+        nodes_by_id=nodes_by_id,
+        manifest=manifest,
+    )
     checks["edges"] = c_edges.to_dict()
     checks["graph"] = c_edges.to_dict()  # alias
     all_issues.extend(c_edges.issues)
@@ -5237,15 +5958,20 @@ def validate_workspace(
     trace_rel = rel("execution_trace", "") or rel("propagation_trace", "propagation-trace.jsonl")
     if trace_rel.endswith(".json"):
         _, trace_doc, t_iss = load_workspace_artifact(workspace, trace_rel, kind="json")
-        all_issues.extend(t_iss)
+        exec_trace_issues = list(t_iss)
         trace_rows = trace_doc.get("steps", []) if isinstance(trace_doc, dict) else []
         try:
             from .trace_contract import validate_execution_trace_data
             if isinstance(trace_doc, dict):
-                all_issues.extend(validate_execution_trace_data(trace_doc, node_ids=node_ids, edge_by_id=edge_by_id, manifest=manifest))
+                exec_trace_issues.extend(
+                    validate_execution_trace_data(trace_doc, node_ids=node_ids, edge_by_id=edge_by_id, manifest=manifest)
+                )
+            elif not t_iss:
+                exec_trace_issues.append(issue("TYPE", artifact=trace_rel, message="top-level must be object"))
         except Exception as err:
-            all_issues.append(issue("VALIDATOR_INTERNAL_ERROR", pointer="/trace", message=f"trace contract validation error: {err}"))
-        c_tr = _check("trace", t_iss)
+            exec_trace_issues.append(issue("VALIDATOR_INTERNAL_ERROR", pointer="/trace", message=f"trace contract validation error: {err}"))
+        all_issues.extend(exec_trace_issues)
+        c_tr = _check("trace", exec_trace_issues, {"trace_rows": len(trace_rows) if isinstance(trace_rows, list) else 0})
         checks["trace"] = c_tr.to_dict()
     else:
         _, trace_rows, t_iss = load_workspace_artifact(workspace, trace_rel, kind="jsonl")
@@ -5257,6 +5983,22 @@ def validate_workspace(
     c_numerical = validate_numerical_artifacts(workspace, manifest)
     checks["numerical_artifacts"] = c_numerical.to_dict()
     all_issues.extend(c_numerical.issues)
+
+    iv_declared = nonempty_str(artifact_paths.get("interventions"))
+    iv_rel = str(artifact_paths.get("interventions")) if iv_declared else "interventions.json"
+    iv_candidate, _ = resolve_in_workspace(workspace, iv_rel, must_exist=False, require_file=True)
+    if iv_declared or (iv_candidate is not None and iv_candidate.is_file()):
+        _, iv_raw, iv_load_issues = load_workspace_artifact(workspace, iv_rel, kind="json")
+        c_iv = validate_interventions(
+            iv_raw,
+            node_ids,
+            node_scales,
+            manifest,
+            artifact_name=iv_rel,
+            load_issues=iv_load_issues,
+        )
+        checks["interventions"] = c_iv.to_dict()
+        all_issues.extend(c_iv.issues)
 
     # Material actor audit is an artifact, not a prose claim. Keep the import
     # lazy so packet validation can evolve independently without a cycle.
@@ -5340,11 +6082,21 @@ def validate_workspace(
     errors = [i for i in all_issues if i.severity == "error"]
     warnings = [i for i in all_issues if i.severity == "warning"]
     status = "fail" if errors else "pass"
-    # Assurance cannot be verified if fail
-    assurance = "failed" if status == "fail" else "experimental"
+    # Assurance cannot be verified if fail; align limited tier/status cleanly
+    execution = manifest.get("execution")
+    exec_cfg = execution if isinstance(execution, dict) else {}
+    research_control = exec_cfg.get("research_control")
+    rc_cfg = research_control if isinstance(research_control, dict) else {}
+    is_limited = bool(rc_cfg.get("offline_provisional") is True or exec_cfg.get("research_quality") == "limited")
+    if status == "fail":
+        assurance = "failed"
+    elif is_limited:
+        assurance = "limited"
+    else:
+        assurance = "experimental"
 
     metrics: dict[str, Any] = {}
-    for key in ("evidence", "nodes", "edges", "actors", "actor_protocol", "branches", "trace", "numerical_artifacts", "stale"):
+    for key in ("evidence", "nodes", "edges", "interventions", "actors", "actor_protocol", "branches", "trace", "numerical_artifacts", "stale"):
         if key in checks and isinstance(checks[key], dict):
             metrics.update(checks[key].get("metrics") or {})
 
@@ -5368,6 +6120,22 @@ def validate_workspace(
             continue
         try:
             digests[name.replace("\\", "/")] = artifact_integrity_hash(p, name, manifest)
+        except ResourceLimitError as exc:
+            all_issues.append(exc.issue)
+    for optional_key in ("execution_trace", "interventions"):
+        opt_name = rel(optional_key, "")
+        if not opt_name and optional_key == "interventions" and (workspace / "interventions.json").is_file():
+            opt_name = "interventions.json"
+        if not opt_name:
+            continue
+        opt_key_norm = opt_name.replace("\\", "/")
+        if opt_key_norm in digests:
+            continue
+        p, path_issues = resolve_in_workspace(workspace, opt_name, must_exist=False, require_file=True)
+        if path_issues or p is None or not p.is_file():
+            continue
+        try:
+            digests[opt_key_norm] = artifact_integrity_hash(p, opt_name, manifest)
         except ResourceLimitError as exc:
             all_issues.append(exc.issue)
 

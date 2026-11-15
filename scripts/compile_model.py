@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ from aleph import (
     EXIT_SEMANTIC,
     EXIT_USAGE,
     FORMULA_VERSION,
+    FORMULA_VERSION_2_2,
     LEGACY_FORMULA_VERSION,
     SUPPORTED_FORMULA_VERSIONS,
 )
@@ -24,7 +26,15 @@ from aleph.io import (
 )
 from aleph.issues import issue
 from aleph.paths import output_alias_issues, resolve_in_workspace
-from aleph.validator import manifest_integrity_payload
+from aleph.schema import is_number
+from aleph.validator import manifest_model_contract_payload
+
+
+def _unwrap_graph_list(data: Any, wrapper_key: str) -> list[Any]:
+    if isinstance(data, list):
+        return data
+    wrapped = data.get(wrapper_key) if isinstance(data, dict) else None
+    return wrapped if isinstance(wrapped, list) else []
 
 
 def _load_json_or_raise(path: Path) -> Any:
@@ -60,20 +70,67 @@ def load_interventions(workspace: Path, manifest: dict[str, Any]) -> list[dict[s
     if isinstance(declared, list):
         interventions.extend(item for item in declared if isinstance(item, dict))
     change = manifest.get("change_point")
-    if isinstance(change, dict) and change.get("target") and (
-        isinstance(change.get("value"), (int, float)) or isinstance(change.get("magnitude"), (int, float))
-    ):
-        interventions.append(
-            {
-                "id": str(change.get("id", "intervention:change-point")),
-                "target": str(change["target"]),
-                "op": str(change.get("op", "add")),
-                "value": change.get("value", change.get("magnitude")),
-                "start_tick": change.get("start_tick", 0),
-                "end_tick": change.get("end_tick"),
-                "release_policy": str(change.get("release_policy", "retain")),
-            }
+    from_value = change.get("value") if isinstance(change, dict) else None
+    from_magnitude = change.get("magnitude") if isinstance(change, dict) else None
+    cp_raw_val = from_value if is_number(from_value) else from_magnitude
+    if isinstance(change, dict) and change.get("target") and is_number(cp_raw_val):
+        cp_id = str(change.get("id", "intervention:change-point"))
+        cp_target = str(change["target"])
+        if change.get("release_policy") == "reset_baseline" and ("op" not in change or change.get("op") is None):
+            raise ValueError("change_point release_policy='reset_baseline' requires explicit op='set'")
+        cp_op = str(change.get("op", "add"))
+        cp_val = float(cp_raw_val)
+        cp_start = int(change.get("start_tick", 0)) if isinstance(change.get("start_tick", 0), int) and not isinstance(change.get("start_tick", 0), bool) else 0
+        cp_end = change.get("end_tick")
+        duplicate = any(
+            str(item.get("id", "")) == cp_id
+            or (
+                str(item.get("target", "")) == cp_target
+                and str(item.get("op", "set")) == cp_op
+                and item.get("start_tick", 0) == cp_start
+                and item.get("end_tick") == cp_end
+                and isinstance(item.get("value"), (int, float))
+                and not isinstance(item.get("value"), bool)
+                and math.isfinite(float(item["value"]))
+                and math.isfinite(cp_val)
+                and math.isclose(float(item["value"]), cp_val, abs_tol=1e-12, rel_tol=1e-9)
+            )
+            for item in interventions
         )
+        if not duplicate:
+            skip_template_stub = False
+            if cp_target == "factor:example" and cp_id == "intervention:change-point":
+                explicit_has_cp = any(
+                    isinstance(item, dict) and str(item.get("id", "")) == "intervention:change-point"
+                    for item in interventions
+                )
+                if not explicit_has_cp:
+                    node_relative = str(artifact_paths.get("nodes", "nodes.json"))
+                    node_path, node_issues = resolve_in_workspace(
+                        workspace, node_relative, must_exist=False, require_file=False
+                    )
+                    if not node_issues and node_path is not None and node_path.is_file():
+                        raw_nodes = _load_json_or_raise(node_path)
+                        if isinstance(raw_nodes, list):
+                            node_ids = {
+                                str(node.get("id"))
+                                for node in raw_nodes
+                                if isinstance(node, dict) and isinstance(node.get("id"), str) and node.get("id")
+                            }
+                            if "factor:example" not in node_ids:
+                                skip_template_stub = True
+            if not skip_template_stub:
+                interventions.append(
+                    {
+                        "id": cp_id,
+                        "target": cp_target,
+                        "op": cp_op,
+                        "value": cp_raw_val,
+                        "start_tick": cp_start,
+                        "end_tick": cp_end,
+                        "release_policy": str(change.get("release_policy", "retain")),
+                    }
+                )
     return interventions
 
 
@@ -97,13 +154,21 @@ def resolve_workspace_formula_version(workspace: Path, manifest: dict[str, Any])
             "computational_model",
             "simulation-model.json",
             "model_version",
-            {"aleph-engine-2.0": LEGACY_FORMULA_VERSION, "aleph-engine-2.1": FORMULA_VERSION},
+            {
+                "aleph-engine-2.0": LEGACY_FORMULA_VERSION,
+                "aleph-engine-2.1": FORMULA_VERSION,
+                "aleph-engine-2.2": FORMULA_VERSION_2_2,
+            },
         ),
         (
             "run_ledger",
             "simulation-run.json",
             "run_contract_version",
-            {"aleph-run-2.0": LEGACY_FORMULA_VERSION, "aleph-run-2.1": FORMULA_VERSION},
+            {
+                "aleph-run-2.0": LEGACY_FORMULA_VERSION,
+                "aleph-run-2.1": FORMULA_VERSION,
+                "aleph-run-2.2": FORMULA_VERSION_2_2,
+            },
         ),
     )
     for key, default, generation_field, generation_map in json_artifacts:
@@ -186,11 +251,11 @@ def compile_workspace(workspace: Path, *, formula_version: str | None = None) ->
     edge_path, edge_issues = resolve_in_workspace(workspace, edge_relative, must_exist=True)
     if node_issues or edge_issues or node_path is None or edge_path is None:
         raise ValueError("manifest-declared node or edge artifact is unavailable")
-    nodes = _load_json_or_raise(node_path)
-    edges = _load_json_or_raise(edge_path)
+    nodes = _unwrap_graph_list(_load_json_or_raise(node_path), "nodes")
+    edges = _unwrap_graph_list(_load_json_or_raise(edge_path), "edges")
     model = compile_model(
-        nodes if isinstance(nodes, list) else [],
-        edges if isinstance(edges, list) else [],
+        nodes,
+        edges,
         load_interventions(workspace, manifest if isinstance(manifest, dict) else {}),
         formula_version=resolved_formula_version,
     )
@@ -208,13 +273,15 @@ def compile_workspace(workspace: Path, *, formula_version: str | None = None) ->
     if intervention_path.is_file():
         source_hashes[intervention_relative.replace("\\", "/")] = sha256_file(intervention_path)
     if manifest_path.is_file() and isinstance(manifest, dict):
-        source_hashes["simulation-manifest.json"] = canonical_hash(manifest_integrity_payload(manifest))
+        source_hashes["simulation-manifest.json"] = canonical_hash(manifest_model_contract_payload(manifest))
     return {
         "schema_version": "2.0.0",
         "model_version": (
-            "aleph-engine-2.1"
-            if resolved_formula_version != LEGACY_FORMULA_VERSION
-            else "aleph-engine-2.0"
+            "aleph-engine-2.0"
+            if resolved_formula_version == LEGACY_FORMULA_VERSION
+            else "aleph-engine-2.2"
+            if resolved_formula_version == FORMULA_VERSION_2_2
+            else "aleph-engine-2.1"
         ),
         "formula_version": resolved_formula_version,
         "model_hash": model_hash(model),

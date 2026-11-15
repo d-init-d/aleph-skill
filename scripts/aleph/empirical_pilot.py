@@ -195,6 +195,375 @@ def audit_temporal_cutoff(
     }
 
 
+def _filter_available_observations(
+    origin_ts: str,
+    all_observations: list[dict[str, Any]],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    origin_dt = _parse_utc_iso(origin_ts)
+    available: list[dict[str, Any]] = []
+    for obs in all_observations:
+        rel_ts = obs.get("official_release_date")
+        vintage_ts = obs.get("vintage_date") or rel_ts
+        if rel_ts and vintage_ts and max(_parse_utc_iso(str(rel_ts)), _parse_utc_iso(str(vintage_ts))) <= origin_dt:
+            value = obs.get("value")
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise ValueError("CPI observations require finite numeric values")
+            available.append(obs)
+    available.sort(
+        key=lambda obs: (
+            str(obs.get("period") or obs.get("date") or obs.get("official_release_date")),
+            _parse_utc_iso(str(obs.get("vintage_date") or obs.get("official_release_date"))),
+        )
+    )
+    by_period: dict[str, dict[str, Any]] = {}
+    for obs in available:
+        key = str(obs.get("period") or obs.get("date") or obs.get("official_release_date"))
+        if key in by_period:
+            previous = by_period[key]
+            same_vintage = _parse_utc_iso(str(obs.get("vintage_date") or obs["official_release_date"])) == _parse_utc_iso(
+                str(previous.get("vintage_date") or previous["official_release_date"])
+            )
+            if same_vintage and obs["value"] != previous["value"]:
+                raise ValueError("conflicting values for the same period/vintage")
+        by_period[key] = obs
+    filtered = list(by_period.values())
+    if not filtered:
+        raise ValueError(f"No observations available prior to origin {origin_ts}")
+    return filtered[-1], filtered
+
+
+def _fit_causal_ridge_ar1_delta(
+    values: list[float],
+    fit_window: int = 8,
+    ridge_prior: float = 0.25,
+    prior_reg: float = 4.0,
+) -> float:
+    if len(values) < 3:
+        return round(ridge_prior, 6)
+    deltas = [values[i] - values[i - 1] for i in range(1, len(values))]
+    start = max(1, len(deltas) - max(2, int(fit_window)))
+    pairs = [(deltas[i - 1], deltas[i]) for i in range(start, len(deltas))]
+    if not pairs:
+        return round(ridge_prior, 6)
+    scale = sum(dx * dx + dy * dy for dx, dy in pairs) / (2.0 * len(pairs))
+    if scale <= 1e-18:
+        return 0.05
+    num = prior_reg * scale * ridge_prior + sum(dx * dy for dx, dy in pairs)
+    den = prior_reg * scale + sum(dx * dx for dx, _ in pairs)
+    phi = max(0.02, min(0.85, num / den))
+    return round(phi, 6)
+
+
+def execute_engine_point_forecast(
+    origin_ts: str,
+    all_observations: list[dict[str, Any]],
+    *,
+    formula_version: str = "2.0.0",
+    model_type: str = "adaptive",
+    fit_window: int = 8,
+    damping: float = 0.30,
+    reversion_weight: float = 0.25,
+    output_decimals: int = 6,
+) -> dict[str, Any]:
+    """Execute a genuine causal Aleph structural model for 1-step-ahead point forecasting.
+
+    Supports model_type in {'momentum', 'damped_trend', 'mean_reversion', 'adaptive'}.
+    All parameters and model selections are fitted strictly on available observations
+    with release/vintage timestamps <= origin_ts (zero lookahead).
+    """
+    valid_models = {"momentum", "damped_trend", "mean_reversion", "adaptive"}
+    if model_type not in valid_models:
+        raise ValueError(f"unsupported point forecast model_type: {model_type!r}")
+    last_obs, available = _filter_available_observations(origin_ts, all_observations)
+    last_val = float(last_obs["value"])
+    baseline_prediction = last_val
+    values = [float(o["value"]) for o in available]
+    n = len(values)
+
+    selected_spec = model_type
+    fitted_params: dict[str, Any] = {}
+
+    if model_type == "adaptive":
+        phi = _fit_causal_ridge_ar1_delta(values, fit_window=fit_window)
+        selected_spec = "damped_trend"
+        fitted_params["phi"] = phi
+        if n >= 8:
+            # Causally check whether stationary mean reversion strongly beats damped AR1 & persistence
+            eval_start = max(4, n - max(4, int(fit_window)))
+            sq_ar1, sq_mr, sq_pers = 0.0, 0.0, 0.0
+            cnt = 0
+            for j in range(eval_start, n):
+                sub = values[:j]
+                y = values[j]
+                sub_phi = _fit_causal_ridge_ar1_delta(sub, fit_window=fit_window)
+                pred_ar1 = sub[-1] + sub_phi * (sub[-1] - sub[-2])
+                w_sub = sub[-min(6, len(sub)):]
+                pred_mr = sub[-1] + reversion_weight * ((sum(w_sub) / len(w_sub)) - sub[-1])
+                sq_ar1 += (pred_ar1 - y) ** 2
+                sq_mr += (pred_mr - y) ** 2
+                sq_pers += (sub[-1] - y) ** 2
+                cnt += 1
+            if cnt >= 4 and sq_mr < 0.90 * min(sq_ar1, sq_pers):
+                selected_spec = "mean_reversion"
+                fitted_params = {"reversion_weight": float(reversion_weight), "window": min(6, n)}
+        damping = phi if selected_spec == "damped_trend" else damping
+
+    if n < 2:
+        used_observations = [last_obs]
+        nodes = [
+            {
+                "id": "factor:cpi_base",
+                "type": "factor",
+                "role": "exogenous",
+                "scale": "level",
+                "initial_value": last_val,
+                "baseline": last_val,
+            },
+            {
+                "id": "factor:cpi_forecast",
+                "type": "outcome",
+                "role": "endogenous",
+                "scale": "level",
+                "initial_value": 0.0,
+                "baseline": 0.0,
+            },
+        ]
+        edges = [
+            {
+                "id": "causal:base_to_forecast",
+                "source": "factor:cpi_base",
+                "target": "factor:cpi_forecast",
+                "sign": 1,
+                "strength": 1.0,
+                "lag_ticks": 0,
+                "transform": "linear",
+                "transform_parameters": {},
+            }
+        ]
+        input_bindings = {
+            "factor:cpi_base": {"operation": "identity", "evidence_indices": [0]},
+        }
+    elif selected_spec == "mean_reversion":
+        win = min(6, n)
+        used_observations = available[-win:]
+        rev_gap = (sum(values[-win:]) / win) - last_val
+        rev_strength = max(1e-6, min(1.0, float(reversion_weight)))
+        fitted_params.setdefault("reversion_weight", rev_strength)
+        nodes = [
+            {
+                "id": "factor:cpi_base",
+                "type": "factor",
+                "role": "exogenous",
+                "scale": "level",
+                "initial_value": last_val,
+                "baseline": last_val,
+            },
+            {
+                "id": "factor:reversion_gap",
+                "type": "driver",
+                "role": "exogenous",
+                "scale": "level",
+                "initial_value": rev_gap,
+                "baseline": rev_gap,
+            },
+            {
+                "id": "factor:cpi_forecast",
+                "type": "outcome",
+                "role": "endogenous",
+                "scale": "level",
+                "initial_value": 0.0,
+                "baseline": 0.0,
+            },
+        ]
+        edges = [
+            {
+                "id": "causal:base_to_forecast",
+                "source": "factor:cpi_base",
+                "target": "factor:cpi_forecast",
+                "sign": 1,
+                "strength": 1.0,
+                "lag_ticks": 0,
+                "transform": "linear",
+                "transform_parameters": {},
+            },
+            {
+                "id": "causal:reversion_to_forecast",
+                "source": "factor:reversion_gap",
+                "target": "factor:cpi_forecast",
+                "sign": 1,
+                "strength": rev_strength,
+                "lag_ticks": 0,
+                "transform": "linear",
+                "transform_parameters": {},
+            },
+        ]
+        input_bindings = {
+            "factor:cpi_base": {"operation": "identity", "evidence_indices": [win - 1]},
+            "factor:reversion_gap": {"operation": "trailing_mean_deviation", "evidence_indices": list(range(win))},
+        }
+    elif selected_spec == "damped_trend":
+        used_observations = available[-2:]
+        momentum = values[-1] - values[-2]
+        damp_strength = max(1e-6, min(1.0, float(damping)))
+        fitted_params.setdefault("damping", damp_strength)
+        nodes = [
+            {
+                "id": "factor:cpi_base",
+                "type": "factor",
+                "role": "exogenous",
+                "scale": "level",
+                "initial_value": last_val,
+                "baseline": last_val,
+            },
+            {
+                "id": "factor:momentum",
+                "type": "driver",
+                "role": "exogenous",
+                "scale": "level",
+                "initial_value": momentum,
+                "baseline": momentum,
+            },
+            {
+                "id": "factor:cpi_forecast",
+                "type": "outcome",
+                "role": "endogenous",
+                "scale": "level",
+                "initial_value": 0.0,
+                "baseline": 0.0,
+            },
+        ]
+        edges = [
+            {
+                "id": "causal:base_to_forecast",
+                "source": "factor:cpi_base",
+                "target": "factor:cpi_forecast",
+                "sign": 1,
+                "strength": 1.0,
+                "lag_ticks": 0,
+                "transform": "linear",
+                "transform_parameters": {},
+            },
+            {
+                "id": "causal:momentum_to_forecast",
+                "source": "factor:momentum",
+                "target": "factor:cpi_forecast",
+                "sign": 1,
+                "strength": damp_strength,
+                "lag_ticks": 0,
+                "transform": "linear",
+                "transform_parameters": {},
+            },
+        ]
+        input_bindings = {
+            "factor:cpi_base": {"operation": "identity", "evidence_indices": [1]},
+            "factor:momentum": {"operation": "mean_difference", "evidence_indices": [0, 1]},
+        }
+    else:  # "momentum"
+        win = 4 if n >= 4 else 2
+        used_observations = available[-win:]
+        momentum = sum(values[-k] - values[-k - 1] for k in range(1, win)) / (win - 1)
+        nodes = [
+            {
+                "id": "factor:cpi_base",
+                "type": "factor",
+                "role": "exogenous",
+                "scale": "level",
+                "initial_value": last_val,
+                "baseline": last_val,
+            },
+            {
+                "id": "factor:momentum",
+                "type": "driver",
+                "role": "exogenous",
+                "scale": "level",
+                "initial_value": momentum,
+                "baseline": momentum,
+            },
+            {
+                "id": "factor:cpi_forecast",
+                "type": "outcome",
+                "role": "endogenous",
+                "scale": "level",
+                "initial_value": 0.0,
+                "baseline": 0.0,
+            },
+        ]
+        edges = [
+            {
+                "id": "causal:base_to_forecast",
+                "source": "factor:cpi_base",
+                "target": "factor:cpi_forecast",
+                "sign": 1,
+                "strength": 1.0,
+                "lag_ticks": 0,
+                "transform": "linear",
+                "transform_parameters": {},
+            },
+            {
+                "id": "causal:momentum_to_forecast",
+                "source": "factor:momentum",
+                "target": "factor:cpi_forecast",
+                "sign": 1,
+                "strength": 1.0,
+                "lag_ticks": 0,
+                "transform": "linear",
+                "transform_parameters": {},
+            },
+        ]
+        input_bindings = {
+            "factor:cpi_base": {"operation": "identity", "evidence_indices": [win - 1]},
+            "factor:momentum": {"operation": "mean_difference", "evidence_indices": list(range(win))},
+        }
+
+    model: ComputationalModel = compile_model(nodes, edges, formula_version=formula_version)
+    compiled_model_hash = model_hash(model)
+    config = EngineConfig(mode="deterministic")
+    config_dict = {
+        "mode": config.mode,
+        "seed": config.seed,
+        "formula_version": formula_version,
+    }
+    model_config_hash = canonical_hash(config_dict)
+    run_result = run_deterministic(model, config, ticks=1)
+    if not run_result["ok"]:
+        raise RuntimeError("Aleph simulation engine failed to converge")
+    simulated_val = float(run_result["payload"]["final_state"]["factor:cpi_forecast"])
+    candidate_prediction = round(simulated_val, output_decimals)
+
+    return {
+        "candidate_prediction": candidate_prediction,
+        "baseline_prediction": baseline_prediction,
+        "last_available_observation": last_obs,
+        "available_observations_count": len(available),
+        "model_hash": compiled_model_hash,
+        "model_config_hash": model_config_hash,
+        "formula_version": formula_version,
+        "compiled_model": model,
+        "available_observations": available,
+        "used_observations": used_observations,
+        "selected_model_spec": selected_spec,
+        "fitted_parameters": fitted_params,
+        "model_execution": {
+            "contract_version": "aleph-case-replay-1",
+            "nodes": nodes,
+            "edges": edges,
+            "interventions": [],
+            "config": config_payload(config),
+            "ticks": 1,
+            "result_hash": canonical_hash(run_result),
+            "output_variable": "factor:cpi_forecast",
+            "baseline_variable": "factor:cpi_base",
+            "output_decimals": output_decimals,
+            "input_bindings": input_bindings,
+            "model_type": model_type,
+            "selected_model_spec": selected_spec,
+            "fitted_parameters": fitted_params,
+        },
+        "historical_vintage_assurance": "requires_external_source_review",
+        "simulation_converged": True,
+    }
+
+
 def execute_engine_cpi_forecast(
     origin_ts: str,
     all_observations: list[dict[str, Any]],

@@ -4,7 +4,48 @@
       "id": "mech:climate:pass_through",
       "relation": "increases",
       "sign": 1,
-      "description": "Core climate transmission mechanism template for validated packs."
+      "transform": "linear",
+      "lag_ticks": 1,
+      "typical_strength": 0.45,
+      "description": "Atmospheric forcing and physical hazard pass-through into downstream weather severity and damage indicators."
+    },
+    {
+      "id": "mech:climate:enso_monsoon_drought",
+      "relation": "decreases",
+      "sign": -1,
+      "transform": "threshold",
+      "lag_ticks": 2,
+      "typical_strength": 0.55,
+      "description": "Positive El Nino Southern Oscillation anomalies weaken monsoon precipitation over tropical basins with multi-month lag."
+    },
+    {
+      "id": "mech:climate:drought_agricultural_shock",
+      "relation": "decreases",
+      "sign": -1,
+      "transform": "logistic",
+      "lag_ticks": 1,
+      "typical_strength": 0.65,
+      "description": "Sustained soil-moisture deficit crosses crop stress threshold, depressing staple grain yield and livestock carrying capacity."
+    },
+    {
+      "id": "mech:climate:compound_flood_infrastructure_failure",
+      "relation": "inhibits",
+      "sign": -1,
+      "transform": "linear",
+      "lag_ticks": 0,
+      "typical_strength": 0.70,
+      "gate_pattern": "all(rainfall > flood_stage AND soil_saturation > threshold)",
+      "description": "Compound extreme precipitation over already-saturated watersheds incapacitates road, rail, and power transmission corridors."
+    },
+    {
+      "id": "mech:climate:adaptation_infrastructure_buffer",
+      "relation": "inhibits",
+      "sign": -1,
+      "transform": "linear",
+      "saturation": 1.0,
+      "lag_ticks": 1,
+      "typical_strength": 0.40,
+      "description": "Irrigation storage, flood levees, and grid hardening attenuate marginal physical hazard transmission into economic output loss."
     }
   ]
 }

@@ -6,7 +6,7 @@ import math
 import re
 from typing import Any
 
-from . import LEGACY_FORMULA_VERSION
+from . import FORMULA_VERSION_2_2, LEGACY_FORMULA_VERSION
 from .engine import (
     ComputationalModel,
     EngineConfig,
@@ -16,7 +16,12 @@ from .engine import (
     sampled_retention_factor,
     sampled_transform_parameters,
 )
-from .formula import evaluate_output_effect, nearly_equal
+from .formula import (
+    compute_effective_input,
+    evaluate_edge_gate,
+    evaluate_output_effect,
+    nearly_equal,
+)
 from .io import canonical_hash
 from .issues import Issue, issue
 from .schema import parse_time
@@ -24,6 +29,7 @@ from .schema import parse_time
 RUN_REF_RE = re.compile(r"^run:(\d{1,20})$")
 BINDING_V1 = "aleph-trace-execution-binding-v1"
 BINDING_V2 = "aleph-trace-execution-binding-v2"
+BINDING_V3 = "aleph-trace-execution-binding-v3"
 
 
 def _trajectory_value_equal(actual: Any, expected: Any) -> bool:
@@ -79,16 +85,26 @@ def _hysteresis_timeline(
             source_state = state.get(edge.source)
             if isinstance(source_state, bool) or not isinstance(source_state, (int, float)):
                 raise ValueError(f"missing numeric source state for {edge.source} at tick {tick}")
+            source_baseline = (
+                float(model.variables[edge.source].baseline)
+                if edge.source in model.variables
+                else 0.0
+            )
+            effective_input = compute_effective_input(
+                edge.input_mode, float(source_state), source_baseline
+            )
+            gate_mult = evaluate_edge_gate(edge.gate, state) if edge.gate is not None else 1.0
             _, next_active = evaluate_output_effect(
                 base_strength=sampled_strength,
                 sign=edge.sign,
                 context_mult=edge.context_multiplier,
-                input_effect=float(source_state),
+                input_effect=effective_input,
                 transform=edge.transform,
                 transform_parameters=resolved_parameters,
                 saturation=edge.saturation,
                 formula_version=model.formula_version,
                 threshold_active=before,
+                gate_multiplier=gate_mult,
             )
             if next_active is None:
                 raise ValueError(f"edge {edge.id} did not produce a hysteresis latch transition")
@@ -110,9 +126,14 @@ def build_trace_execution_binding(
 ) -> tuple[dict[str, Any] | None, list[Issue]]:
     """Verify trace inputs against engine histories and return a hashed binding."""
     problems: list[Issue] = []
-    expected_version = BINDING_V1 if model.formula_version == LEGACY_FORMULA_VERSION else BINDING_V2
+    if model.formula_version == LEGACY_FORMULA_VERSION:
+        expected_version = BINDING_V1
+    elif model.formula_version == FORMULA_VERSION_2_2:
+        expected_version = BINDING_V3
+    else:
+        expected_version = BINDING_V2
     version = binding_version or expected_version
-    if version not in {BINDING_V1, BINDING_V2}:
+    if version not in {BINDING_V1, BINDING_V2, BINDING_V3}:
         return None, [issue("TRACE_EXECUTION_BINDING", message="unsupported execution binding version", actual=version)]
     if version != expected_version:
         return None, [
@@ -124,12 +145,15 @@ def build_trace_execution_binding(
                 actual=version,
             )
         ]
+    is_engine_container = isinstance(rows, dict) and "steps" in rows
     if isinstance(rows, dict):
         rows = rows.get("steps", [])
     if not isinstance(rows, list):
         return None, [issue("TRACE_EXECUTION_BINDING", message="trace rows must be a list")]
 
-    is_engine_trace = bool(rows and isinstance(rows[0], dict) and ("sample_id" in rows[0] or "emission_tick" in rows[0]))
+    is_engine_trace = is_engine_container or bool(
+        rows and isinstance(rows[0], dict) and ("sample_id" in rows[0] or "emission_tick" in rows[0])
+    )
 
     frame = manifest.get("temporal_frame")
     start = parse_time(frame.get("simulation_start")) if isinstance(frame, dict) else None
@@ -255,7 +279,18 @@ def build_trace_execution_binding(
                 problems.append(issue("TRACE_EXECUTION_BINDING", pointer=f"{pointer}/time", message="time is off the engine timestep grid"))
                 continue
 
-        if _target_is_blocked(model, edge.target, effect_tick):
+        is_blocked_engine_step = (
+            is_engine_trace
+            and _target_is_blocked(model, edge.target, effect_tick)
+            and isinstance(row.get("state_transitions"), dict)
+            and row["state_transitions"].get("intervention_type") == "do_set"
+            and _trajectory_value_equal(row["state_transitions"].get("delta"), 0.0)
+            and (
+                row.get("integrated_effect") is None
+                or _trajectory_value_equal(row.get("integrated_effect"), 0.0)
+            )
+        )
+        if _target_is_blocked(model, edge.target, effect_tick) and not is_blocked_engine_step:
             problems.append(
                 issue(
                     "TRACE_EXECUTION_BINDING",
@@ -276,6 +311,28 @@ def build_trace_execution_binding(
             continue
         source_state = history[source_tick].get(edge.source)
         target_state = history[effect_tick].get(edge.target)
+        source_baseline = (
+            float(model.variables[edge.source].baseline)
+            if edge.source in model.variables
+            else 0.0
+        )
+        try:
+            expected_input_effect = (
+                compute_effective_input(edge.input_mode, float(source_state), source_baseline)
+                if source_state is not None
+                else 0.0
+            )
+        except ValueError as exc:
+            if not is_blocked_engine_step:
+                problems.append(
+                    issue(
+                        "TRACE_EXECUTION_BINDING",
+                        pointer=pointer,
+                        message=f"effective input computation failed: {exc}",
+                    )
+                )
+                continue
+            expected_input_effect = 0.0
 
         checks: tuple[tuple[str, Any, Any], ...]
         if is_engine_trace:
@@ -294,7 +351,7 @@ def build_trace_execution_binding(
                 ("source_state", row.get("source_state"), source_state),
                 ("target_state", row.get("target_state"), target_state),
                 ("sampled_strength", row.get("sampled_strength"), strength),
-                ("input_effect", row.get("input_effect"), source_state),
+                ("input_effect", row.get("input_effect"), expected_input_effect),
                 ("noise", row.get("noise"), 0.0),
             )
         row_ok = True
@@ -324,7 +381,7 @@ def build_trace_execution_binding(
                 "run_hash": run.get("run_hash"),
                 "history_hash": (run.get("payload") or {}).get("history_hash"),
             }
-            if version == BINDING_V2:
+            if version in {BINDING_V2, BINDING_V3}:
                 declared_parameters = row.get("resolved_transform_parameters")
                 if declared_parameters is None and is_engine_trace:
                     declared_parameters = resolved_parameters
@@ -373,6 +430,44 @@ def build_trace_execution_binding(
                         )
                     )
                     continue
+                if version == BINDING_V3:
+                    declared_input_mode = row.get("input_mode")
+                    if declared_input_mode is not None and declared_input_mode != edge.input_mode:
+                        problems.append(
+                            issue(
+                                "TRACE_EXECUTION_BINDING",
+                                pointer=f"{pointer}/input_mode",
+                                expected=edge.input_mode,
+                                actual=declared_input_mode,
+                            )
+                        )
+                        continue
+                    declared_source_baseline = row.get("source_baseline")
+                    if declared_source_baseline is not None and not _trajectory_value_equal(
+                        declared_source_baseline, source_baseline
+                    ):
+                        problems.append(
+                            issue(
+                                "TRACE_EXECUTION_BINDING",
+                                pointer=f"{pointer}/source_baseline",
+                                expected=source_baseline,
+                                actual=declared_source_baseline,
+                            )
+                        )
+                        continue
+                    declared_input_effect = row.get("input_effect")
+                    if declared_input_effect is not None and not _trajectory_value_equal(
+                        declared_input_effect, expected_input_effect
+                    ):
+                        problems.append(
+                            issue(
+                                "TRACE_EXECUTION_BINDING",
+                                pointer=f"{pointer}/input_effect",
+                                expected=expected_input_effect,
+                                actual=declared_input_effect,
+                            )
+                        )
+                        continue
                 bound_row.update(
                     {
                         "formula_version": model.formula_version,
@@ -386,6 +481,48 @@ def build_trace_execution_binding(
                         "dynamics_hash": (run.get("payload") or {}).get("dynamics_hash"),
                     }
                 )
+                if version == BINDING_V3:
+                    bound_row["input_mode"] = edge.input_mode
+                    bound_row["source_baseline"] = source_baseline
+                    bound_row["input_effect"] = expected_input_effect
+                if edge.gate is not None or "gate_multiplier" in row:
+                    try:
+                        expected_gate_multiplier = evaluate_edge_gate(edge.gate, history[source_tick])
+                    except ValueError as exc:
+                        problems.append(
+                            issue(
+                                "TRACE_EXECUTION_BINDING",
+                                pointer=f"{pointer}/gate_multiplier",
+                                message=f"gate evaluation failed: {exc}",
+                            )
+                        )
+                        continue
+                    declared_gate = row.get("gate_multiplier")
+                    if declared_gate is None and edge.gate is not None:
+                        problems.append(
+                            issue(
+                                "TRACE_EXECUTION_BINDING",
+                                pointer=f"{pointer}/gate_multiplier",
+                                expected=expected_gate_multiplier,
+                                message="trace row on a gated edge must record gate_multiplier",
+                            )
+                        )
+                        continue
+                    if declared_gate is not None and not _trajectory_value_equal(
+                        declared_gate, expected_gate_multiplier
+                    ):
+                        problems.append(
+                            issue(
+                                "TRACE_EXECUTION_BINDING",
+                                pointer=f"{pointer}/gate_multiplier",
+                                expected=expected_gate_multiplier,
+                                actual=declared_gate,
+                                message="trace gate_multiplier differs from addressed engine state",
+                            )
+                        )
+                        continue
+                    if edge.gate is not None:
+                        bound_row["gate_multiplier"] = expected_gate_multiplier
                 is_hysteresis = (
                     edge.transform == "threshold"
                     and resolved_parameters.get("mode", "above") == "hysteresis"
@@ -450,7 +587,7 @@ def build_trace_execution_binding(
         "ticks": ticks,
         "rows": bound_rows,
     }
-    if version == BINDING_V2:
+    if version in {BINDING_V2, BINDING_V3}:
         body["formula_version"] = model.formula_version
         body["dynamics_hashes"] = {
             f"run:{run_id}": (run.get("payload") or {}).get("dynamics_hash")
@@ -465,6 +602,14 @@ def build_trace_execution_binding(
                     "sampled_lag_ticks": row["sampled_lag_ticks"],
                     "transform_parameters": row["resolved_transform_parameters"],
                     "target_retention_factor": row["target_retention_factor"],
+                    **(
+                        {
+                            "input_mode": row["input_mode"],
+                            "source_baseline": row["source_baseline"],
+                        }
+                        if version == BINDING_V3
+                        else {}
+                    ),
                 }
                 for row in bound_rows
             ]

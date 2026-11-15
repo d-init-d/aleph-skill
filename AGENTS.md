@@ -15,21 +15,26 @@ Core behavior:
 7. Build causal edges only with mechanism, evidence/assumption, lag, context modifiers, and effect parameters. Keep effect size separate from evidence confidence.
 8. For material actors: select `actor_basis: evidence|mixed|assumption`; freeze dossier → temporal knowledge packet → sealed roleplay → adjudicator. Evidence/mixed routes keep distinct research and roleplay executions; assumption-only routes never fabricate research. Roleplay never emits probability or new evidence.
 9. Record human tracks and receipts; prose claims of separation are insufficient.
-10. Initialize schema `2.0.0` artifacts before research; migrate legacy `1.2.0` with `sim:migrate`. No protocol speed profiles, source caps, or elapsed-time caps. Checkpoint each research wave; if a host limit interrupts before saturation, persist `execution.research_control.next_wave_queue`, set `research_quality: limited`, and hand off an unsaturated partial result with unresolved gaps and no final assurance tier.
-11. Validate with formula replay, finalize atomically, and score with assurance tiers (`experimental|limited|verified|calibrated`). Diagnostic score cannot override hard gates. `excellent` is legacy display only.
+10. Initialize schema `2.0.0` artifacts before research (`formula_version: 2.2.0` default for new numerical runs, retaining `2.1.0`/`2.0.0` replay); migrate legacy `1.2.0` with `sim:migrate`. No protocol speed profiles, source caps, or elapsed-time caps. Checkpoint each research wave; if a host limit interrupts before saturation, persist `execution.research_control.next_wave_queue`, set `research_quality: limited`, and hand off an unsaturated partial result with unresolved gaps and no final assurance tier.
+11. Validate with formula replay, finalize atomically, and score with assurance tiers (`experimental|limited|verified|calibrated`). Pass `--offline-provisional` to `init_simulation_workspace.py` or `quickstart_quant.py` when running offline without external research to keep assurance capped honestly at `limited`. Diagnostic score cannot override hard gates. `excellent` is legacy display only.
 
-Useful commands:
+Useful commands (use `python3` on POSIX or `python` on Windows):
 
-- `python "<ALEPH_SKILL_ROOT>/scripts/preflight.py" --json`
-- `python "<ALEPH_SKILL_ROOT>/scripts/research_gateway.py" research:preflight`
-- `python "<ALEPH_SKILL_ROOT>/scripts/init_simulation_workspace.py" --slug <slug> --change-point "..." --time <date> --horizon <duration> --observation-cutoff <date> --out-dir <user-workspace>`
-- `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <1.2-dir> --out <sibling-v2>`
-- `python "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <ws> --bind-bundled-d-research --check`
-- `python "<ALEPH_SKILL_ROOT>/scripts/validate_simulation_artifacts.py" --workspace <run-dir> --mode final --require-report`
-- `python "<ALEPH_SKILL_ROOT>/scripts/run_simulation.py" --workspace <run-dir> --mode deterministic --seed <seed>`
-- `python "<ALEPH_SKILL_ROOT>/scripts/evaluate_simulation_quality.py" --workspace <run-dir>`
-- `python "<ALEPH_SKILL_ROOT>/scripts/validate_domain_packs.py"`
-- `python "<ALEPH_SKILL_ROOT>/scripts/check_adapters.py"`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/preflight.py" --json`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/research_gateway.py" research:preflight`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/init_simulation_workspace.py" --slug <slug> --change-point "..." --time <date> --horizon <duration> --observation-cutoff <date> --out-dir <user-workspace> [--offline-provisional]`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/quickstart_quant.py" --out-dir <output-parent> --slug <slug> --change-point "..." --time <date> --horizon <duration> --observation-cutoff <date> [--offline-provisional]`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/repair_model_schema.py" --workspace <run-dir> --in-place`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <1.2-dir> --out <sibling-v2>`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <ws> --bind-bundled-d-research --check`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/validate_simulation_artifacts.py" --workspace <run-dir> --mode final --require-report`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/run_simulation.py" --workspace <run-dir> --mode deterministic --seed <seed>`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/evaluate_point_forecasts.py" --data <series.csv> --out <eval-dir> --model adaptive`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/calibrate_intervals.py" --evaluation-dir <eval-dir> --out <intervals.json>`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/run_offline_backtest.py" --data <archive.json> --series <names> --out-dir <backtest-dir>`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/evaluate_simulation_quality.py" --workspace <run-dir>`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/validate_domain_packs.py"`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/check_adapters.py"`
 
 Output standards:
 

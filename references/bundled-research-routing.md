@@ -35,7 +35,7 @@ labels: do not impose a fixed source count or elapsed-time cap.
 Use a persistent workspace for real work:
 
 ```text
-python "$ALEPH_SKILL_ROOT/scripts/research_gateway.py" \
+python3 "$ALEPH_SKILL_ROOT/scripts/research_gateway.py" \
   research:evidence-ledger --workspace "$RUN" -- --help
 ```
 
@@ -47,10 +47,10 @@ directory. Any output in it is deleted when the command finishes.
 Run these before any network operation:
 
 ```text
-python "$ALEPH_SKILL_ROOT/scripts/preflight.py" --json
-python "$ALEPH_SKILL_ROOT/scripts/research_gateway.py" research:preflight --json
-python "$ALEPH_SKILL_ROOT/scripts/research_gateway.py" research:manifest --json
-python "$ALEPH_SKILL_ROOT/scripts/research_gateway.py" research:route --json
+python3 "$ALEPH_SKILL_ROOT/scripts/preflight.py" --json
+python3 "$ALEPH_SKILL_ROOT/scripts/research_gateway.py" research:preflight --json
+python3 "$ALEPH_SKILL_ROOT/scripts/research_gateway.py" research:manifest --json
+python3 "$ALEPH_SKILL_ROOT/scripts/research_gateway.py" research:route --json
 ```
 
 The mandatory fallback order is:
@@ -116,7 +116,7 @@ Helper arguments go after `--`. Gateway options may appear before or after the
 route, but putting them before `--` avoids name collisions:
 
 ```text
-python "$ALEPH_SKILL_ROOT/scripts/research_gateway.py" \
+python3 "$ALEPH_SKILL_ROOT/scripts/research_gateway.py" \
   research:api-fetch --workspace "$RUN" --network -- \
   --url "https://example.org/public.json" --out "api/result.json"
 ```
@@ -170,7 +170,7 @@ The bundle wins by default. `D_RESEARCH_SKILL` never silently overrides it.
 An external component requires both an explicit path and opt-in:
 
 ```text
-python "$ALEPH_SKILL_ROOT/scripts/research_gateway.py" \
+python3 "$ALEPH_SKILL_ROOT/scripts/research_gateway.py" \
   research:preflight --allow-external --external-d-research "/path/to/d-research"
 ```
 

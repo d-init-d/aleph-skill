@@ -10,16 +10,36 @@ from __future__ import annotations
 
 import hashlib
 import math
-from dataclasses import asdict, dataclass, field, replace
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import datetime, timezone
 from typing import Any, cast
 
-from . import FORMULA_VERSION, LEGACY_FORMULA_VERSION, SUPPORTED_FORMULA_VERSIONS
-from .formula import evaluate_output_effect, expected_output_effect
+from . import (
+    FORMULA_VERSION,
+    FORMULA_VERSION_2_2,
+    LEGACY_FORMULA_VERSION,
+    SUPPORTED_FORMULA_VERSIONS,
+)
+from .formula import (
+    compute_effective_input,
+    evaluate_edge_gate,
+    evaluate_output_effect,
+    expected_output_effect,
+)
 from .io import canonical_hash, canonical_json_bytes
 from .issues import Issue, issue
 from .rng import normal01, sample_triangular, sample_uniform, uniform01
-from .schema import TRANSFORMS, parse_duration_seconds
+from .schema import (
+    GATE_COMPARE_OPS,
+    GATE_CONDITION_FIELDS,
+    GATE_FIELDS,
+    GATE_OPS,
+    INPUT_MODES,
+    RETENTION_UNITS,
+    TRANSFORMS,
+    parse_duration_seconds,
+)
 
 
 @dataclass
@@ -40,6 +60,7 @@ class EngineConfig:
     max_invalid_fraction: float = 0.01
     workers: int = 1
     scc_solver: str = "jacobi"
+    divergence_threshold: float = 1e12
 
 
 @dataclass
@@ -52,10 +73,12 @@ class Variable:
     baseline: float = 0.0
     bounds: tuple[float | None, float | None] = (None, None)
     retention: float | None = None
+    retention_unit: str = "per_day"
     retention_distribution: dict[str, Any] | None = None
     decay_rate: float | None = None
     decay_rate_distribution: dict[str, Any] | None = None
     value: float = 0.0
+    initial_value: float | None = None
 
 
 @dataclass
@@ -75,8 +98,10 @@ class ModelEdge:
     context_multiplier: float = 1.0
     saturation: float | None = None
     integration: str = "impulse"
+    input_mode: str = "level"
     shock_group: str | None = None
     shock_correlation: float = 0.0
+    gate: dict[str, Any] | None = None
 
 
 @dataclass
@@ -87,7 +112,9 @@ class ComputationalModel:
     formula_version: str = FORMULA_VERSION
 
     def __post_init__(self) -> None:
-        if self.formula_version == "2.1":
+        if self.formula_version == "2.2":
+            self.formula_version = "2.2.0"
+        elif self.formula_version == "2.1":
             self.formula_version = "2.1.0"
         elif self.formula_version == "2.0":
             self.formula_version = "2.0.0"
@@ -317,6 +344,41 @@ def _representative_lag(distribution: dict[str, Any]) -> int:
     return max(low, min(high, math.ceil(mean)))
 
 
+def _normalise_edge_gate(raw_gate: Any, edge_id: str, valid_nodes: set[str]) -> dict[str, Any] | None:
+    """Validate and canonicalise an optional conjunction/veto edge gate."""
+    if raw_gate is None:
+        return None
+    if not isinstance(raw_gate, Mapping):
+        raise ValueError(f"edge {edge_id} gate must be an object")
+    unknown = set(raw_gate) - GATE_FIELDS
+    if unknown:
+        raise ValueError(f"edge {edge_id} gate has unsupported fields {sorted(unknown)}")
+    op = str(raw_gate.get("op", ""))
+    if op not in GATE_OPS:
+        raise ValueError(f"edge {edge_id} gate op must be one of {sorted(GATE_OPS)}")
+    raw_conditions = raw_gate.get("conditions")
+    if not isinstance(raw_conditions, list) or not raw_conditions:
+        raise ValueError(f"edge {edge_id} gate requires a non-empty conditions array")
+    normalised_conditions: list[dict[str, Any]] = []
+    for index, cond in enumerate(raw_conditions):
+        if not isinstance(cond, Mapping):
+            raise ValueError(f"edge {edge_id} gate condition {index} must be an object")
+        unknown_cond = set(cond) - GATE_CONDITION_FIELDS
+        if unknown_cond:
+            raise ValueError(f"edge {edge_id} gate condition {index} has unsupported fields {sorted(unknown_cond)}")
+        node_id = str(cond.get("node", ""))
+        if not node_id or node_id not in valid_nodes:
+            raise ValueError(f"edge {edge_id} gate condition {index} node '{node_id}' must reference a model variable")
+        cmp_op = str(cond.get("op", ""))
+        if cmp_op not in GATE_COMPARE_OPS:
+            raise ValueError(f"edge {edge_id} gate condition {index} op must be one of {sorted(GATE_COMPARE_OPS)}")
+        raw_val = cond.get("value")
+        if not _is_finite_number(raw_val):
+            raise ValueError(f"edge {edge_id} gate condition {index} value must be finite")
+        normalised_conditions.append({"node": node_id, "op": cmp_op, "value": float(cast(int | float, raw_val))})
+    return {"op": op, "conditions": normalised_conditions}
+
+
 def compile_model(
     nodes: list[dict[str, Any]],
     edges: list[dict[str, Any]],
@@ -349,15 +411,28 @@ def compile_model(
             lo = _finite_number(raw_bounds[0]) if raw_bounds[0] is not None else None
             hi = _finite_number(raw_bounds[1]) if raw_bounds[1] is not None else None
             bounds = (lo, hi)
+        initial_value: float | None = None
+        if "initial_value" in node and node["initial_value"] is not None:
+            if not _is_finite_number(node["initial_value"]):
+                raise ValueError(f"node {node_id} initial_value must be finite")
+            initial_value = float(cast(int | float, node["initial_value"]))
+            if (bounds[0] is not None and initial_value < bounds[0]) or (
+                bounds[1] is not None and initial_value > bounds[1]
+            ):
+                raise ValueError(f"node {node_id} initial_value must lie within declared bounds")
         scale = str(node.get("scale", "level"))
         if scale not in {"level", "flow", "stock"}:
             raise ValueError(f"node {node_id} scale must be level, flow, or stock")
         if scale != "stock" and any(
-            key in node for key in ("retention", "retention_distribution", "decay_rate", "decay_rate_distribution")
+            key in node
+            for key in ("retention", "retention_unit", "retention_distribution", "decay_rate", "decay_rate_distribution")
         ):
             raise ValueError(f"node {node_id} stock dynamics are only valid for stock variables")
         if "retention" in node and "decay_rate" in node:
             raise ValueError(f"node {node_id} cannot declare both retention and decay_rate")
+        retention_unit = str(node.get("retention_unit", "per_day"))
+        if retention_unit not in RETENTION_UNITS:
+            raise ValueError(f"node {node_id} retention_unit must be per_day or per_tick")
         retention: float | None = None
         retention_distribution: dict[str, Any] | None = None
         decay_rate: float | None = None
@@ -391,10 +466,12 @@ def compile_model(
             baseline=baseline,
             bounds=bounds,
             retention=retention,
+            retention_unit=retention_unit,
             retention_distribution=retention_distribution,
             decay_rate=decay_rate,
             decay_rate_distribution=decay_rate_distribution,
-            value=baseline,
+            value=initial_value if initial_value is not None else baseline,
+            initial_value=initial_value,
         )
 
     for raw in edges:
@@ -456,6 +533,27 @@ def compile_model(
         shock_correlation = _finite_number(raw.get("shock_correlation", 0.0), 0.0)
         if not -1.0 <= shock_correlation <= 1.0:
             raise ValueError(f"edge {edge_id} shock_correlation must be in [-1, 1]")
+        raw_transform = raw.get("transform", "linear")
+        edge_transform = "linear" if raw_transform is None else str(raw_transform)
+        if model.formula_version == FORMULA_VERSION_2_2:
+            default_input_mode = "log_ratio" if edge_transform == "elasticity" else "deviation"
+        else:
+            default_input_mode = "level"
+        raw_input_mode = raw.get("input_mode")
+        input_mode = default_input_mode if raw_input_mode is None else str(raw_input_mode)
+        if input_mode not in INPUT_MODES:
+            raise ValueError(f"edge {edge_id} input_mode must be one of {sorted(INPUT_MODES)}")
+        if input_mode == "log_ratio":
+            src_baseline = model.variables[source].baseline
+            if not math.isfinite(src_baseline) or src_baseline <= 0.0:
+                if model.formula_version == FORMULA_VERSION_2_2 and edge_transform == "elasticity" and raw_input_mode is None:
+                    raise ValueError(
+                        f"edge {edge_id} elasticity transform defaults to input_mode='log_ratio' in formula_version 2.2.0 and requires positive baseline on source {source}"
+                    )
+                raise ValueError(
+                    f"edge {edge_id} log_ratio input_mode requires positive baseline on source {source}"
+                )
+        gate = _normalise_edge_gate(raw.get("gate"), edge_id, set(model.variables))
         model.edges.append(
             ModelEdge(
                 id=edge_id,
@@ -473,8 +571,10 @@ def compile_model(
                 context_multiplier=context_multiplier,
                 saturation=saturation,
                 integration=integration,
+                input_mode=input_mode,
                 shock_group=shock_group,
                 shock_correlation=shock_correlation,
+                gate=gate,
             )
         )
 
@@ -491,7 +591,14 @@ def compile_model(
         if intervention_id in intervention_ids:
             raise ValueError(f"duplicate intervention id {intervention_id}")
         intervention_ids.add(intervention_id)
-        op = str(raw.get("op", "set"))
+        if "op" not in raw or raw.get("op") is None:
+            if model.formula_version == FORMULA_VERSION_2_2:
+                raise ValueError(
+                    f"intervention {intervention_id} op is required in formula_version 2.2.0 (set, add, or multiply)"
+                )
+            op = "set"
+        else:
+            op = str(raw.get("op"))
         if op not in {"set", "add", "multiply"}:
             raise ValueError(f"intervention {intervention_id} op must be set, add, or multiply")
         raw_value = raw.get("value")
@@ -502,10 +609,10 @@ def compile_model(
         if isinstance(raw_start, bool) or not isinstance(raw_start, int) or raw_start < 0:
             raise ValueError(f"intervention {intervention_id} start_tick must be a non-negative integer")
         if raw_end is not None and (
-            isinstance(raw_end, bool) or not isinstance(raw_end, int) or raw_end < raw_start
+            isinstance(raw_end, bool) or not isinstance(raw_end, int) or raw_end <= raw_start
         ):
             raise ValueError(
-                f"intervention {intervention_id} end_tick must be null or an integer at least start_tick"
+                f"intervention {intervention_id} end_tick must be null or an integer greater than start_tick"
             )
         release_policy = str(raw.get("release_policy", "retain"))
         if release_policy not in {"retain", "reset_baseline"}:
@@ -540,11 +647,15 @@ def model_payload(model: ComputationalModel) -> dict[str, Any]:
             "baseline": var.baseline,
             "bounds": list(var.bounds),
         }
+        if var.initial_value is not None:
+            payload["initial_value"] = var.initial_value
         if var.scale == "stock":
             if var.retention_distribution is not None:
                 payload["retention_distribution"] = var.retention_distribution
             elif var.retention is not None:
                 payload["retention"] = var.retention
+            if var.retention_unit != "per_day":
+                payload["retention_unit"] = var.retention_unit
             if var.decay_rate_distribution is not None:
                 payload["decay_rate_distribution"] = var.decay_rate_distribution
             elif var.decay_rate is not None:
@@ -572,10 +683,14 @@ def model_payload(model: ComputationalModel) -> dict[str, Any]:
             payload["transform_parameters"] = edge.transform_parameters
         if model.formula_version != LEGACY_FORMULA_VERSION and model.variables[edge.target].scale == "stock":
             payload["integration"] = edge.integration
+        if model.formula_version == FORMULA_VERSION_2_2 or edge.input_mode != "level":
+            payload["input_mode"] = edge.input_mode
         if edge.shock_group is not None:
             payload["shock_group"] = edge.shock_group
         if edge.shock_correlation != 0.0:
             payload["shock_correlation"] = edge.shock_correlation
+        if edge.gate is not None:
+            payload["gate"] = edge.gate
         edges.append(payload)
 
     interventions_payload: list[dict[str, Any]] = []
@@ -592,6 +707,62 @@ def model_payload(model: ComputationalModel) -> dict[str, Any]:
     }
 
 
+def model_from_dict(
+    payload: Mapping[str, Any],
+    *,
+    formula_version: str | None = None,
+) -> ComputationalModel:
+    """Reconstruct a ``ComputationalModel`` from a ``model_payload`` dictionary safely."""
+    var_fields = {item.name for item in fields(Variable)}
+    edge_fields = {item.name for item in fields(ModelEdge)}
+    raw_variables = payload.get("variables")
+    raw_edges = payload.get("edges")
+    raw_interventions = payload.get("interventions")
+
+    variables: dict[str, Variable] = {}
+    if isinstance(raw_variables, Mapping):
+        for key, raw_var in raw_variables.items():
+            if not isinstance(raw_var, Mapping):
+                continue
+            cleaned = {k: v for k, v in raw_var.items() if k in var_fields}
+            cleaned.setdefault("id", str(key))
+            cleaned.setdefault("role", "endogenous")
+            raw_bounds = cleaned.get("bounds")
+            if isinstance(raw_bounds, list) and len(raw_bounds) == 2:
+                cleaned["bounds"] = (raw_bounds[0], raw_bounds[1])
+            elif not isinstance(raw_bounds, tuple):
+                cleaned["bounds"] = (None, None)
+            if "value" not in cleaned:
+                init_val = cleaned.get("initial_value")
+                cleaned["value"] = init_val if init_val is not None else cleaned.get("baseline", 0.0)
+            variables[str(key)] = Variable(**cleaned)
+
+    edges: list[ModelEdge] = []
+    if isinstance(raw_edges, list):
+        for raw_edge in raw_edges:
+            if not isinstance(raw_edge, Mapping):
+                continue
+            cleaned_edge = {k: v for k, v in raw_edge.items() if k in edge_fields}
+            if "source" not in cleaned_edge and "from" in raw_edge:
+                cleaned_edge["source"] = raw_edge["from"]
+            if "target" not in cleaned_edge and "to" in raw_edge:
+                cleaned_edge["target"] = raw_edge["to"]
+            edges.append(ModelEdge(**cleaned_edge))
+
+    interventions = (
+        [dict(item) for item in raw_interventions if isinstance(item, Mapping)]
+        if isinstance(raw_interventions, list)
+        else []
+    )
+    resolved_formula = formula_version or str(payload.get("formula_version") or FORMULA_VERSION)
+    return ComputationalModel(
+        variables=variables,
+        edges=edges,
+        interventions=interventions,
+        formula_version=resolved_formula,
+    )
+
+
 def model_hash(model: ComputationalModel) -> str:
     return canonical_hash(model_payload(model))
 
@@ -601,6 +772,8 @@ def config_payload(config: EngineConfig) -> dict[str, Any]:
     payload.pop("workers", None)
     if payload.get("scc_solver") == "jacobi":
         payload.pop("scc_solver", None)
+    if payload.get("divergence_threshold") == 1e12:
+        payload.pop("divergence_threshold", None)
     return payload
 
 
@@ -726,6 +899,16 @@ def _config_errors(config: EngineConfig) -> list[Issue]:
                 expected=["jacobi", "linear_auto", "bounded_affine"],
             )
         )
+    div_thresh = getattr(config, "divergence_threshold", 1e12)
+    if not _is_finite_number(div_thresh) or div_thresh <= 0:
+        problems.append(
+            issue(
+                "RANGE",
+                pointer="/config/divergence_threshold",
+                actual=div_thresh,
+                message="finite positive value required",
+            )
+        )
     return problems
 
 
@@ -848,6 +1031,7 @@ def sampled_retention_factor(
     """Resolve timestep-invariant stock decay for one addressed run."""
     if variable.scale != "stock":
         return 1.0
+    per_tick = getattr(variable, "retention_unit", "per_day") == "per_tick"
     decay_rate: float | None
     if variable.decay_rate_distribution is not None:
         decay_rate = _sample_distribution(
@@ -858,7 +1042,7 @@ def sampled_retention_factor(
     if decay_rate is not None:
         if not math.isfinite(decay_rate) or decay_rate < 0:
             raise ValueError(f"sampled decay rate for {variable.id} must be non-negative")
-        return math.exp(-decay_rate * float(config.timestep))
+        return math.exp(-decay_rate) if per_tick else math.exp(-decay_rate * float(config.timestep))
     retention: float | None
     if variable.retention_distribution is not None:
         retention = _sample_distribution(
@@ -870,7 +1054,7 @@ def sampled_retention_factor(
         return 1.0
     if not math.isfinite(retention) or not 0 <= retention <= 1:
         raise ValueError(f"sampled retention for {variable.id} must be in [0,1]")
-    return float(retention ** float(config.timestep))
+    return float(retention) if per_tick else float(retention ** float(config.timestep))
 
 
 def _lag_days_to_ticks(days: int | float, timestep: int | float) -> int:
@@ -946,44 +1130,75 @@ def sampled_edge_parameters(
     return _sample_strength(edge, config, run_id), _sample_lag(edge, config, run_id), exists
 
 
+def _edge_input_nodes(edge: ModelEdge) -> list[str]:
+    nodes = [edge.source]
+    if isinstance(edge.gate, Mapping):
+        conditions = edge.gate.get("conditions")
+        if isinstance(conditions, list):
+            for cond in conditions:
+                if isinstance(cond, Mapping):
+                    node_id = cond.get("node")
+                    if isinstance(node_id, str) and node_id not in nodes:
+                        nodes.append(node_id)
+    return nodes
+
+
 def _edge_effect(
     edge: ModelEdge,
     strength: float,
     source_value: float,
     *,
+    source_baseline: float = 0.0,
     formula_version: str,
     threshold_active: bool | None = None,
+    state_map: Mapping[str, float] | None = None,
 ) -> tuple[float, bool | None]:
+    effective = compute_effective_input(edge.input_mode, source_value, source_baseline)
+    gate_mult = evaluate_edge_gate(edge.gate, state_map) if edge.gate is not None else 1.0
     return evaluate_output_effect(
         base_strength=strength,
         sign=edge.sign,
         context_mult=edge.context_multiplier,
-        input_effect=source_value,
+        input_effect=effective,
         transform=edge.transform,
         transform_parameters=edge.transform_parameters,
         saturation=edge.saturation,
         formula_version=formula_version,
         threshold_active=threshold_active,
+        gate_multiplier=gate_mult,
     )
 
 
-def _edge_effect_value(edge: ModelEdge, strength: float, source_value: float, *, formula_version: str) -> float:
+def _edge_effect_value(
+    edge: ModelEdge,
+    strength: float,
+    source_value: float,
+    *,
+    source_baseline: float = 0.0,
+    formula_version: str,
+    state_map: Mapping[str, float] | None = None,
+) -> float:
+    effective = compute_effective_input(edge.input_mode, source_value, source_baseline)
+    gate_mult = evaluate_edge_gate(edge.gate, state_map) if edge.gate is not None else 1.0
     return expected_output_effect(
         base_strength=strength,
         sign=edge.sign,
         context_mult=edge.context_multiplier,
-        input_effect=source_value,
+        input_effect=effective,
         transform=edge.transform,
         transform_parameters=edge.transform_parameters,
         saturation=edge.saturation,
         formula_version=formula_version,
+        gate_multiplier=gate_mult,
     )
 
 
 def _tarjan(nodes: list[str], edges: list[ModelEdge]) -> list[list[str]]:
     graph: dict[str, list[str]] = {node: [] for node in nodes}
     for edge in edges:
-        graph[edge.source].append(edge.target)
+        for src in _edge_input_nodes(edge):
+            if src in graph and edge.target in graph:
+                graph[src].append(edge.target)
     index = 0
     stack: list[str] = []
     on_stack: set[str] = set()
@@ -1025,10 +1240,14 @@ def _component_order(nodes: list[str], edges: list[ModelEdge]) -> list[list[str]
     outgoing: dict[int, set[int]] = {idx: set() for idx in range(len(components))}
     indegree = {idx: 0 for idx in range(len(components))}
     for edge in edges:
-        source, target = owner[edge.source], owner[edge.target]
-        if source != target and target not in outgoing[source]:
-            outgoing[source].add(target)
-            indegree[target] += 1
+        target = owner[edge.target]
+        for dep in _edge_input_nodes(edge):
+            if dep not in owner:
+                continue
+            source = owner[dep]
+            if source != target and target not in outgoing[source]:
+                outgoing[source].add(target)
+                indegree[target] += 1
     ready = sorted((idx for idx, degree in indegree.items() if degree == 0), key=lambda idx: components[idx])
     order: list[list[str]] = []
     while ready:
@@ -1054,7 +1273,10 @@ def _invalid_run_result(
     payload = {
         "model_hash": model_hash(model),
         "config_hash": _diagnostic_hash(configuration),
-        "final_state": {key: value.baseline for key, value in sorted(model.variables.items())},
+        "final_state": {
+            key: (value.initial_value if value.initial_value is not None else value.baseline)
+            for key, value in sorted(model.variables.items())
+        },
         "ticks": ticks,
         "events": 0,
         "unresolved": True,
@@ -1136,10 +1358,14 @@ def _is_affine_eligible(
         if not allow_bounds and var.bounds != (None, None):
             return False, f"node {node} has finite bounds {var.bounds}"
     for edge in internal:
+        if edge.input_mode == "log_ratio":
+            return False, f"edge {edge.id} has non-linear input_mode '{edge.input_mode}'"
         if edge.transform not in {"linear", "identity"}:
             return False, f"edge {edge.id} has non-linear transform '{edge.transform}'"
         if edge.saturation is not None:
             return False, f"edge {edge.id} has finite saturation {edge.saturation}"
+        if edge.gate is not None:
+            return False, f"edge {edge.id} has conditional gate"
     return True, "affine_eligible"
 
 
@@ -1148,6 +1374,7 @@ def _build_affine_scc_system(
     internal: list[ModelEdge],
     component_base: dict[str, float],
     strengths: dict[str, float],
+    model: ComputationalModel | None = None,
 ) -> tuple[list[list[float]], list[float]]:
     """Build linear system matrix W and RHS b for x = b + W x within an SCC."""
     n = len(component)
@@ -1158,7 +1385,10 @@ def _build_affine_scc_system(
         src_idx = idx_map[edge.source]
         tgt_idx = idx_map[edge.target]
         coeff = 1.0 if edge.transform == "identity" else strengths[edge.id]
-        W[tgt_idx][src_idx] += float(edge.sign) * float(coeff) * float(edge.context_multiplier)
+        weight = float(edge.sign) * float(coeff) * float(edge.context_multiplier)
+        W[tgt_idx][src_idx] += weight
+        if edge.input_mode == "deviation" and model is not None and edge.source in model.variables:
+            b[tgt_idx] -= weight * float(model.variables[edge.source].baseline)
     return W, b
 
 
@@ -1175,7 +1405,7 @@ def _solve_scc_bounded_affine(
     sample_id: int | str,
 ) -> tuple[dict[str, float], bool, list[Issue], dict[str, Any]]:
     """Solve box-constrained linear zero-lag SCC via active-set Newton + damped projection."""
-    W, b = _build_affine_scc_system(component, internal, component_base, strengths)
+    W, b = _build_affine_scc_system(component, internal, component_base, strengths, model=model)
     n = len(component)
 
     def clamp_idx(idx: int, val: float) -> float:
@@ -1286,7 +1516,9 @@ def _solve_scc(
     sample_id: int | str = 0,
 ) -> tuple[dict[str, float], bool, list[Issue], dict[str, Any]]:
     """Unified zero-lag SCC solver supporting Jacobi iteration and direct linear solve."""
-    cyclic = len(component) > 1 or any(edge.source == edge.target for edge in internal)
+    cyclic = len(component) > 1 or any(
+        src == edge.target for edge in internal for src in _edge_input_nodes(edge)
+    )
     if not cyclic:
         node = component[0]
         val = component_base[node]
@@ -1310,17 +1542,22 @@ def _solve_scc(
     for _iteration in range(max(1, config.jacobi_max_iter)):
         iterations_used = _iteration + 1
         candidate = dict(component_base)
+        eval_state = {**current, **x}
         try:
             for edge in internal:
                 output, _ = _edge_effect(
                     edge,
                     strengths[edge.id],
                     x[edge.source],
+                    source_baseline=model.variables[edge.source].baseline,
                     formula_version=active_formula,
                     threshold_active=gate_before.get(edge.id),
+                    state_map=eval_state,
                 )
                 candidate[edge.target] += _integrate_edge_output(model, edge, output, config)
         except (OverflowError, ValueError):
+            break
+        if any(not math.isfinite(val) for val in candidate.values()):
             break
 
         residual = max((abs(candidate[node] - x[node]) for node in component), default=0.0)
@@ -1351,7 +1588,7 @@ def _solve_scc(
     if solver_choice in {"linear_auto", "bounded_affine"}:
         eligible_unbounded, reason = _is_affine_eligible(component, internal, model, allow_bounds=False)
         if solver_choice == "linear_auto" and eligible_unbounded:
-            W, b = _build_affine_scc_system(component, internal, component_base, strengths)
+            W, b = _build_affine_scc_system(component, internal, component_base, strengths, model=model)
             n = len(component)
             A = [[0.0] * n for _ in range(n)]
             for i in range(n):
@@ -1450,6 +1687,29 @@ def _solve_scc(
     }
 
 
+def _divergence_limit(model: ComputationalModel, config: EngineConfig) -> float:
+    configured = float(getattr(config, "divergence_threshold", 1e12))
+    if configured != 1e12:
+        return configured
+    scale_floor = max(
+        [
+            1.0,
+            *(abs(var.baseline) for var in model.variables.values() if math.isfinite(var.baseline)),
+            *(
+                abs(float(item["value"]))
+                for item in model.interventions
+                if isinstance(item, dict)
+                and item.get("op") in {"set", "add"}
+                and _is_finite_number(item.get("value"))
+            ),
+        ]
+    )
+    if scale_floor > 1e295:
+        return float("inf")
+    limit = 1e12 * scale_floor
+    return limit if math.isfinite(limit) else float("inf")
+
+
 def run_deterministic(
 
     model: ComputationalModel,
@@ -1464,7 +1724,10 @@ def run_deterministic(
         issues.append(issue("RANGE", pointer="/ticks", actual=ticks, message="non-negative integer required"))
     if issues:
         return _invalid_run_result(model, config, ticks=ticks, run_id=run_id, issues=issues)
-    state = {key: var.baseline for key, var in model.variables.items()}
+    state = {
+        key: (var.initial_value if var.initial_value is not None else var.baseline)
+        for key, var in model.variables.items()
+    }
     history: list[dict[str, float]] = []
     dynamics_history: list[dict[str, Any]] = []
     scheduled: dict[int, list[tuple[str, float, str]]] = {}
@@ -1533,7 +1796,11 @@ def run_deterministic(
                     "interventions": [],
                 }
             else:
-                base[key] = variable.baseline
+                base[key] = (
+                    variable.initial_value
+                    if tick == 0 and variable.initial_value is not None
+                    else variable.baseline
+                )
         active = _active_interventions(model, tick)
         blocked = {str(value["target"]) for value in active if value.get("op") == "set"}
         for target, delta, edge_id in scheduled.pop(tick, []):
@@ -1574,8 +1841,10 @@ def run_deterministic(
                         edge,
                         strengths[edge.id],
                         current[edge.source],
+                        source_baseline=model.variables[edge.source].baseline,
                         formula_version=model.formula_version,
                         threshold_active=gate_before.get(edge.id),
+                        state_map=current,
                     )
                     component_base[edge.target] += _integrate_edge_output(model, edge, output, config)
                 except (OverflowError, ValueError) as exc:
@@ -1606,12 +1875,29 @@ def run_deterministic(
         for intervention in active:
             if intervention["op"] == "set":
                 current[str(intervention["target"])] = float(intervention["value"])
+        divergence_limit = _divergence_limit(model, config)
+        diverged = False
         for node, value in list(current.items()):
             if not math.isfinite(value):
                 unresolved = True
+                diverged = True
                 issues.append(issue("NON_FINITE", pointer=node, actual=value, message="non-finite state"))
                 value = model.variables[node].baseline
-            current[node] = _apply_bounds(model.variables[node], value)
+            else:
+                value = _apply_bounds(model.variables[node], value)
+                if math.isfinite(divergence_limit) and abs(value) > divergence_limit:
+                    unresolved = True
+                    diverged = True
+                    issues.append(
+                        issue(
+                            "STATE_DIVERGENCE",
+                            pointer=node,
+                            actual=value,
+                            expected={"limit": divergence_limit},
+                            message=f"state magnitude {value} exceeds divergence limit {divergence_limit}",
+                        )
+                    )
+            current[node] = value
         state = current
 
         # Latches advance once from the converged source state, never once per
@@ -1622,8 +1908,10 @@ def run_deterministic(
                     edge,
                     strengths[edge.id],
                     state[edge.source],
+                    source_baseline=model.variables[edge.source].baseline,
                     formula_version=model.formula_version,
                     threshold_active=gate_before.get(edge.id),
+                    state_map=state,
                 )
                 if next_gate is not None:
                     edge_gate_state[edge.id] = next_gate
@@ -1645,8 +1933,10 @@ def run_deterministic(
                     edge,
                     strength,
                     state[edge.source],
+                    source_baseline=model.variables[edge.source].baseline,
                     formula_version=model.formula_version,
                     threshold_active=edge_gate_state.get(edge.id),
+                    state_map=state,
                 )
                 if next_gate is not None:
                     edge_gate_state[edge.id] = next_gate
@@ -1671,7 +1961,7 @@ def run_deterministic(
                 or high is not None and math.isclose(state[node_id], high)
             )
             dynamics_history.append(audit)
-        if event_storm:
+        if event_storm or diverged:
             break
 
     model_digest = model_hash(model)
@@ -1721,13 +2011,23 @@ def _quantile(values: list[float], probability: float) -> float:
     return values[low] * (high - position) + values[high] * (position - low)
 
 
-def _regime(value: float, scale: float) -> str:
+def _regime(value: float, scale: float, *, legacy: bool = False) -> str:
     threshold = max(1e-12, abs(scale) * 1e-9)
     if abs(value) <= threshold:
         return "0"
-    magnitude = int(math.floor(math.log2(max(abs(value) / max(abs(scale), 1e-12), 1e-12))))
+    ratio = abs(value) / max(abs(scale), 1e-12)
+    magnitude = int(math.floor(math.log2(max(ratio, 1e-12))))
     magnitude = max(-40, min(40, magnitude))
-    return f"{'+' if value > 0 else '-'}{magnitude}"
+    prefix = "+" if value > 0 else "-"
+    if magnitude < 0 and not legacy:
+        if magnitude >= -2:
+            bucket = "sub_mid"
+        elif magnitude >= -5:
+            bucket = "sub_low"
+        else:
+            bucket = "sub_micro"
+        return f"{prefix}{bucket}"
+    return f"{prefix}{magnitude}"
 
 
 def _signature(
@@ -1737,24 +2037,27 @@ def _signature(
     *,
     timestep: float = 1.0,
 ) -> str:
+    legacy = model is not None and model.formula_version != FORMULA_VERSION_2_2
     tokens: list[str] = []
     for key, value in sorted(result.items()):
-        baseline = model.variables[key].baseline if model is not None and key in model.variables else 0.0
+        var = model.variables.get(key) if model is not None else None
+        baseline = var.baseline if var is not None else 0.0
+        init_delta = (var.initial_value - baseline) if (var is not None and var.initial_value is not None) else 0.0
         scale = max(1.0, abs(baseline))
-        tokens.append(f"{key}:final={_regime(value - baseline, scale)}")
-        if model is not None and history and model.variables.get(key) is not None and model.variables[key].scale == "stock":
+        tokens.append(f"{key}:final={_regime(value - baseline, scale, legacy=legacy)}")
+        if model is not None and history and var is not None and var.scale == "stock":
             sampled_deltas = [float(row[key]) - baseline for row in history if key in row]
             if sampled_deltas:
                 # Include the initial state in extrema and integrate exposure
                 # over physical time so clustering is not an artifact of tick
                 # resolution. History contains end-of-step samples.
-                extrema_deltas = [0.0, *sampled_deltas]
+                extrema_deltas = [init_delta, *sampled_deltas]
                 exposure = sum(abs(item) for item in sampled_deltas) * float(timestep)
                 tokens.extend(
                     (
-                        f"{key}:peak={_regime(max(extrema_deltas), scale)}",
-                        f"{key}:trough={_regime(min(extrema_deltas), scale)}",
-                        f"{key}:exposure={_regime(exposure, scale)}",
+                        f"{key}:peak={_regime(max(extrema_deltas), scale, legacy=legacy)}",
+                        f"{key}:trough={_regime(min(extrema_deltas), scale, legacy=legacy)}",
+                        f"{key}:exposure={_regime(exposure, scale, legacy=legacy)}",
                     )
                 )
     return "|".join(tokens)
@@ -1767,9 +2070,28 @@ def _branch_weights(signatures: list[str], total_runs: int) -> dict[str, float]:
     return {key: count / total_runs for key, count in counts.items()} if total_runs else {}
 
 
+def _select_branch_representative(members: list[tuple[int, dict[str, float]]]) -> tuple[int, dict[str, float]]:
+    medians = {
+        key: _quantile(sorted(value[key] for _, value in members), 0.5)
+        for key in sorted(members[0][1])
+    }
+    return min(
+        members,
+        key=lambda value: (
+            sum(
+                abs(value[1][key] - median) / max(1.0, abs(median))
+                for key, median in medians.items()
+            ),
+            value[0],
+        ),
+    )
+
+
 def _cluster_relative(
     results: list[tuple[int, dict[str, float], str]],
     total_runs: int,
+    *,
+    max_branches: int | None = 12,
 ) -> list[dict[str, Any]]:
     if not results or total_runs <= 0:
         return []
@@ -1778,21 +2100,11 @@ def _cluster_relative(
         buckets.setdefault(signature, []).append((run_id, result))
     ordered = sorted(buckets.items(), key=lambda item: (-len(item[1]), item[0]))
     branches: list[dict[str, Any]] = []
-    for index, (signature, members) in enumerate(ordered):
-        medians = {
-            key: _quantile(sorted(value[key] for _, value in members), 0.5)
-            for key in sorted(members[0][1])
-        }
-        representative_run_id, representative = min(
-            members,
-            key=lambda value: (
-                sum(
-                    abs(value[1][key] - median) / max(1.0, abs(median))
-                    for key, median in medians.items()
-                ),
-                value[0],
-            ),
-        )
+    limit = len(ordered) if max_branches is None else max(1, max_branches)
+    head_buckets = ordered if len(ordered) <= limit else ordered[: max(0, limit - 1)]
+    tail_buckets = [] if len(ordered) <= limit else ordered[max(0, limit - 1) :]
+    for index, (signature, members) in enumerate(head_buckets):
+        representative_run_id, representative = _select_branch_representative(members)
         branches.append(
             {
                 "id": f"branch:cluster-{index}",
@@ -1802,6 +2114,20 @@ def _cluster_relative(
                 "representative": representative,
                 "representative_run": f"run:{representative_run_id}",
                 "signature": signature,
+            }
+        )
+    if tail_buckets:
+        tail_members = [member for _, members in tail_buckets for member in members]
+        representative_run_id, representative = _select_branch_representative(tail_members)
+        branches.append(
+            {
+                "id": f"branch:cluster-{len(head_buckets)}",
+                "relative_weight": len(tail_members) / total_runs,
+                "probability": None,
+                "member_count": len(tail_members),
+                "representative": representative,
+                "representative_run": f"run:{representative_run_id}",
+                "signature": f"tail_consolidated:{len(tail_buckets)}_regimes",
             }
         )
     return branches
@@ -1888,7 +2214,11 @@ def run_monte_carlo(model: ComputationalModel, config: EngineConfig, *, ticks: i
         for key in sorted(valid_results[0][1]):
             values = sorted(result[key] for _, result, _signature_value in valid_results if key in result)
             quantiles[key] = {"p05": _quantile(values, 0.05), "p50": _quantile(values, 0.5), "p95": _quantile(values, 0.95)}
-    branches = _cluster_relative(valid_results, n_runs)
+    branches = _cluster_relative(
+        valid_results,
+        n_runs,
+        max_branches=12 if model.formula_version == FORMULA_VERSION_2_2 else None,
+    )
     weight_sum = sum(float(branch["relative_weight"]) for branch in branches)
     mass_error = abs((weight_sum + unresolved_mass) - 1.0)
     threshold_exceeded = unresolved_mass > config.max_invalid_fraction
@@ -1962,8 +2292,25 @@ def _populate_trace_step_details(
     config: EngineConfig,
     gate_before_step: bool,
     gate_after_step: bool,
+    active_formula: str | None = None,
+    gate_multiplier: float | None = None,
 ) -> None:
     """Attach stock-flow integration metrics and transform mode metadata to a trace step."""
+    formula = active_formula or model.formula_version
+    if edge.gate is not None and gate_multiplier is not None:
+        step_dict["gate_multiplier"] = float(gate_multiplier)
+    if formula == FORMULA_VERSION_2_2 or edge.input_mode != "level":
+        source_baseline = float(model.variables[edge.source].baseline) if edge.source in model.variables else 0.0
+        step_dict["input_mode"] = edge.input_mode
+        step_dict["source_baseline"] = source_baseline
+        try:
+            step_dict["input_effect"] = compute_effective_input(
+                edge.input_mode,
+                float(step_dict.get("source_state", source_baseline)),
+                source_baseline,
+            )
+        except ValueError:
+            step_dict["input_effect"] = 0.0
     if edge.target in model.variables and model.variables[edge.target].scale == "stock":
         ret_factor = float(retention_factors.get(edge.target, 1.0))
         explicit_decay = model.variables[edge.target].decay_rate
@@ -2023,7 +2370,10 @@ def generate_numerical_execution_trace(
     if isinstance(ticks, bool) or not isinstance(ticks, int) or ticks < 0:
         issues.append(issue("RANGE", pointer="/ticks", actual=ticks, message="non-negative integer required"))
 
-    state = {key: var.baseline for key, var in sorted(model.variables.items())}
+    state = {
+        key: (var.initial_value if var.initial_value is not None else var.baseline)
+        for key, var in sorted(model.variables.items())
+    }
     history: list[dict[str, float]] = []
     scheduled: dict[int, list[dict[str, Any]]] = {}
     unresolved = False
@@ -2059,8 +2409,10 @@ def generate_numerical_execution_trace(
             edge_strengths[edge.id] = strength
 
     edge_gate_state: dict[str, bool] = {}
+    divergence_limit = _divergence_limit(model, config)
 
     for tick in range(ticks_int):
+        tick_steps_start = len(steps)
         released_resets = _reset_releases(model, tick)
         base: dict[str, float] = {}
         for key, variable in sorted(model.variables.items()):
@@ -2071,7 +2423,11 @@ def generate_numerical_execution_trace(
                 retained_state = variable.baseline if reset else previous_state * retention_factor
                 base[key] = retained_state
             else:
-                base[key] = variable.baseline
+                base[key] = (
+                    variable.initial_value
+                    if tick == 0 and variable.initial_value is not None
+                    else variable.baseline
+                )
 
         active = _active_interventions(model, tick)
         blocked = {str(value["target"]) for value in active if value.get("op") == "set"}
@@ -2094,6 +2450,7 @@ def generate_numerical_execution_trace(
             output = delayed_item["output"]
             gate_before_step = delayed_item["gate_before"]
             gate_after_step = delayed_item["gate_after"]
+            delayed_gate_multiplier = delayed_item.get("gate_multiplier")
 
             target_blocked = target in blocked
             actual_delta = 0.0 if target_blocked else delta
@@ -2141,13 +2498,15 @@ def generate_numerical_execution_trace(
                 step_dict,
                 model=model,
                 edge=edge,
-                output=output,
+                output=0.0 if target_blocked else output,
                 target_state_before=target_state_before,
                 target_state_after=target_state_after,
                 retention_factors=retention_factors,
                 config=config,
                 gate_before_step=gate_before_step,
                 gate_after_step=gate_after_step,
+                active_formula=active_formula,
+                gate_multiplier=delayed_gate_multiplier,
             )
             steps.append(step_dict)
             step_counter += 1
@@ -2176,8 +2535,10 @@ def generate_numerical_execution_trace(
                         edge,
                         edge_strengths[edge.id],
                         current[edge.source],
+                        source_baseline=model.variables[edge.source].baseline,
                         formula_version=active_formula,
                         threshold_active=gate_before.get(edge.id),
+                        state_map=current,
                     )
                     component_base[edge.target] += _integrate_edge_output(model, edge, output, config)
                 except (OverflowError, ValueError) as exc:
@@ -2206,32 +2567,54 @@ def generate_numerical_execution_trace(
         for intervention in active:
             if intervention["op"] == "set":
                 current[str(intervention["target"])] = float(intervention["value"])
+        diverged = False
         for node, val in list(current.items()):
             if not math.isfinite(val):
                 unresolved = True
+                diverged = True
                 issues.append(issue("NON_FINITE", pointer=node, actual=val, message="non-finite state"))
                 val = model.variables[node].baseline
-            current[node] = _apply_bounds(model.variables[node], val)
+            else:
+                val = _apply_bounds(model.variables[node], val)
+                if math.isfinite(divergence_limit) and abs(val) > divergence_limit:
+                    unresolved = True
+                    diverged = True
+                    issues.append(
+                        issue(
+                            "STATE_DIVERGENCE",
+                            pointer=node,
+                            actual=val,
+                            expected={"limit": divergence_limit},
+                            message=f"state magnitude {val} exceeds divergence limit {divergence_limit}",
+                        )
+                    )
+            current[node] = val
         state = current
 
         # Record zero-lag edges
         all_zero = [edge for edge in sampled_edges if edge.lag_ticks == 0]
         for edge in all_zero:
             edge_is_blocked = edge.target in blocked
+            edge_gate_mult: float | None = None
             try:
-                output, next_gate = _edge_effect(
-                    edge,
-                    edge_strengths[edge.id],
-                    state[edge.source],
-                    formula_version=active_formula,
-                    threshold_active=gate_before.get(edge.id),
-                )
-                if next_gate is not None:
-                    edge_gate_state[edge.id] = next_gate
+                if edge.gate is not None:
+                    edge_gate_mult = evaluate_edge_gate(edge.gate, state)
                 if edge_is_blocked:
                     output = 0.0
                     delta = 0.0
+                    next_gate = None
                 else:
+                    output, next_gate = _edge_effect(
+                        edge,
+                        edge_strengths[edge.id],
+                        state[edge.source],
+                        source_baseline=model.variables[edge.source].baseline,
+                        formula_version=active_formula,
+                        threshold_active=gate_before.get(edge.id),
+                        state_map=state,
+                    )
+                    if next_gate is not None:
+                        edge_gate_state[edge.id] = next_gate
                     delta = _integrate_edge_output(model, edge, output, config)
             except (OverflowError, ValueError) as exc:
                 unresolved = True
@@ -2287,22 +2670,40 @@ def generate_numerical_execution_trace(
                 config=config,
                 gate_before_step=bool(gate_before.get(edge.id, False)),
                 gate_after_step=bool(edge_gate_state.get(edge.id, False)),
+                active_formula=active_formula,
+                gate_multiplier=edge_gate_mult,
             )
             steps.append(step_dict)
             step_counter += 1
+
+        # Synchronize all steps delivered on this tick to the realized end-of-tick
+        # state (covers delayed arrivals followed by zero-lag updates, interventions,
+        # multi-edge fan-in, and bounds clipping).
+        for step_entry in steps[tick_steps_start:]:
+            target_id = step_entry.get("node_id")
+            if isinstance(target_id, str) and target_id in state:
+                final_val = state[target_id]
+                step_entry["target_state_after"] = final_val
+                if isinstance(step_entry.get("state_transitions"), dict):
+                    step_entry["state_transitions"]["new_value"] = final_val
+                if isinstance(step_entry.get("stock_flow_integrations"), dict):
+                    step_entry["stock_flow_integrations"]["integrated_level"] = final_val
 
         # Schedule delayed edges for future ticks
         for edge in sampled_edges:
             if edge.lag_ticks <= 0:
                 continue
             gate_before_step = edge_gate_state.get(edge.id, False)
+            edge_gate_mult = evaluate_edge_gate(edge.gate, state) if edge.gate is not None else None
             try:
                 output, next_gate = _edge_effect(
                     edge,
                     edge_strengths[edge.id],
                     state[edge.source],
+                    source_baseline=model.variables[edge.source].baseline,
                     formula_version=active_formula,
                     threshold_active=edge_gate_state.get(edge.id),
+                    state_map=state,
                 )
                 if next_gate is not None:
                     edge_gate_state[edge.id] = next_gate
@@ -2323,6 +2724,7 @@ def generate_numerical_execution_trace(
                     "output": output,
                     "gate_before": gate_before_step,
                     "gate_after": edge_gate_state.get(edge.id, False),
+                    "gate_multiplier": edge_gate_mult,
                 }
             )
             events += 1
@@ -2333,6 +2735,8 @@ def generate_numerical_execution_trace(
             issues.append(issue("EVENT_STORM", actual=events, expected=config.max_events, message="event limit exceeded"))
             break
         history.append(dict(sorted(state.items())))
+        if diverged:
+            break
 
     # Calculate hash_chain
     prev_hash = "0" * 64
@@ -2355,7 +2759,7 @@ def generate_numerical_execution_trace(
         seed_int = abs(hash(str(raw_seed))) % (2**31)
 
     trace = {
-        "schema_version": "2.1.0" if active_formula == FORMULA_VERSION else "2.0.0",
+        "schema_version": "2.1.0" if active_formula in {FORMULA_VERSION, FORMULA_VERSION_2_2} else "2.0.0",
         "run_id": f"run:{run_id}",
         "model_id": model_id,
         "formula_version": active_formula,
@@ -2404,4 +2808,101 @@ def stream_numerical_execution_trace(
         "steps_per_second": (len(trace["steps"]) / (elapsed_ms / 1000.0)) if elapsed_ms > 0 else 0.0,
     }
     return trace
+
+
+def inspect_execution_health(
+    model: ComputationalModel,
+    config: EngineConfig,
+    *,
+    ticks: int,
+    run_id: int = 0,
+    result: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Inspect model/config/result for structural execution warnings without altering core semantics."""
+    warnings: list[dict[str, Any]] = []
+    if ticks <= 0:
+        return warnings
+    lags: list[tuple[str, int]] = []
+    for edge in model.edges:
+        try:
+            _strength, lag_ticks, exists = sampled_edge_parameters(edge, config, run_id)
+        except (OverflowError, TypeError, ValueError, ZeroDivisionError):
+            continue
+        if not exists:
+            continue
+        lags.append((edge.id, int(lag_ticks)))
+        if lag_ticks >= ticks:
+            warnings.append(
+                issue(
+                    "LAG_EXCEEDS_HORIZON",
+                    pointer=f"/edges/{edge.id}/lag_ticks",
+                    severity="warning",
+                    actual=int(lag_ticks),
+                    expected={"ticks": int(ticks)},
+                    message=f"edge lag_ticks ({lag_ticks}) >= simulation ticks ({ticks}); causal signal never lands within horizon",
+                ).to_dict()
+            )
+    if lags and all(lag >= ticks for _, lag in lags):
+        warnings.append(
+            issue(
+                "ENGINE_FROZEN",
+                pointer="/edges",
+                severity="warning",
+                actual={"ticks": int(ticks), "min_lag_ticks": min(lag for _, lag in lags)},
+                message="every active causal edge has lag_ticks >= ticks so no edge effect can arrive",
+            ).to_dict()
+        )
+    baseline_result = result
+    if (
+        model.interventions
+        and model.formula_version == FORMULA_VERSION_2_2
+        and len(model.variables) <= 64
+        and ticks <= 120
+    ):
+        baseline_model = ComputationalModel(
+            variables=dict(model.variables),
+            edges=list(model.edges),
+            interventions=[],
+            formula_version=model.formula_version,
+        )
+        try:
+            baseline_result = run_deterministic(
+                baseline_model,
+                config,
+                ticks=int(ticks),
+                run_id=int(run_id),
+            )
+        except (OverflowError, TypeError, ValueError, ZeroDivisionError):
+            baseline_result = None
+    has_explicit_initial_offset = any(
+        var.initial_value is not None
+        and not math.isclose(float(var.initial_value), float(var.baseline), rel_tol=1e-9, abs_tol=1e-12)
+        for var in model.variables.values()
+    )
+    if (
+        (not model.interventions or model.formula_version == FORMULA_VERSION_2_2)
+        and isinstance(baseline_result, dict)
+        and not has_explicit_initial_offset
+    ):
+        payload = baseline_result.get("payload")
+        raw_state = payload.get("final_state") if isinstance(payload, dict) else None
+        final_state = raw_state if isinstance(raw_state, dict) else {}
+        drifting = [
+            node_id
+            for node_id, var in sorted(model.variables.items())
+            if node_id in final_state
+            and _is_finite_number(final_state[node_id])
+            and abs(float(final_state[node_id]) - float(var.baseline)) > 1e-6 * max(1.0, abs(float(var.baseline)))
+        ]
+        if drifting and model.formula_version == FORMULA_VERSION_2_2:
+            warnings.append(
+                issue(
+                    "ZERO_INTERVENTION_DRIFT",
+                    pointer="/variables",
+                    severity="warning",
+                    actual=drifting,
+                    message="non-intervention run drifted from declared baselines under Formula 2.2.0",
+                ).to_dict()
+            )
+    return warnings
 

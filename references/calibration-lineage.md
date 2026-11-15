@@ -6,8 +6,9 @@ Keep normal simulations in `relative_weight` when calibration is unavailable.
 
 ## Retrospective point evaluation
 
-Run `python "<ALEPH_SKILL_ROOT>/scripts/evaluate_point_forecasts.py" --data
-"<absolute-csv>" --out "<new-output-directory>"`. The CSV requires `period` (or
+Run `python3 "<ALEPH_SKILL_ROOT>/scripts/evaluate_point_forecasts.py" --data
+"<absolute-csv>" --out "<new-output-directory>" --model adaptive --fit-window 8`
+(available models: `adaptive`, `damped_trend`, `mean_reversion`, and legacy `momentum`; see `references/offline-backtest.md` for `calibrate_intervals.py` and batch `run_offline_backtest.py`). The CSV requires `period` (or
 `date`), numeric `value`, and `official_release_date`; include `vintage_date`
 when values were revised. The command preserves the raw bytes, saves each
 model/config/result binding, commits predictions separately from outcomes, and
@@ -40,7 +41,7 @@ Execution JSON uses `contract_version: aleph-case-replay-1`, source `nodes`,
 `output_variable`, `baseline_variable`, optional `output_decimals`, and a
 `result_hash` of `run_deterministic`'s complete return value. `input_bindings`
 maps every exogenous variable and every graph-root variable to `evidence_indices`
-with `identity` or ordered `mean_difference`. Renaming a root as endogenous does
+with `identity`, `mean_difference`, `damped_difference`, or `trailing_mean_deviation` (over sorted distinct periods). Renaming a root as endogenous does
 not remove this obligation. Node/edge identities must be unique and all edge
 endpoints must exist; records silently discarded by generic compilation are not
 valid replay evidence. The compiled model hash and replayed forecast must match the

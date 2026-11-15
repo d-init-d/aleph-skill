@@ -15,12 +15,32 @@ from pathlib import Path
 from typing import Any
 
 from aleph.calibration_lineage import forecast_payload, utc, verify_lineage
-from aleph.empirical_pilot import compute_authentic_evaluation_metrics, execute_engine_cpi_forecast
+from aleph.empirical_pilot import (
+    compute_authentic_evaluation_metrics,
+    execute_engine_cpi_forecast,
+    execute_engine_point_forecast,
+)
 from aleph.io import ResourceLimitError, canonical_hash, sha256_file, write_json_atomic
 from aleph.issues import Issue
 
+_RECIPE_BY_MODEL = {
+    "momentum": "trailing-three-difference-plus-last-level",
+    "damped_trend": "causal-damped-first-difference-plus-last-level",
+    "mean_reversion": "causal-trailing-mean-reversion-plus-last-level",
+}
 
-def evaluate(source: Path, output: Path) -> dict[str, Any]:
+
+def evaluate(
+    source: Path,
+    output: Path,
+    *,
+    model_type: str = "momentum",
+    fit_window: int = 8,
+) -> dict[str, Any]:
+    if model_type not in {"momentum", "damped_trend", "mean_reversion", "adaptive"}:
+        raise ValueError(f"unsupported model_type: {model_type!r}")
+    if isinstance(fit_window, bool) or not isinstance(fit_window, int) or fit_window < 2:
+        raise ValueError("fit_window must be an integer >= 2")
     source = source.resolve(strict=True)
     sha256_file(source)  # Enforce the same raw-file resource bound as replay.
     with source.open(encoding="utf-8-sig", newline="") as handle:
@@ -52,18 +72,30 @@ def evaluate(source: Path, output: Path) -> dict[str, Any]:
         previous = min((observations[i] for i in grouped[previous_period]), key=lambda row: utc(row["official_release_date"]))
         target = min(grouped[target_period], key=lambda i: utc(observations[i].get("vintage_date") or observations[i]["official_release_date"]))
         origin = (utc(previous["official_release_date"])+timedelta(seconds=1)).isoformat().replace("+00:00", "Z")
-        forecast = execute_engine_cpi_forecast(origin, observations)
-        available = forecast["available_observations"]
-        used = available[-4:]
+        if model_type == "momentum":
+            forecast = execute_engine_cpi_forecast(origin, observations)
+            available = forecast["available_observations"]
+            used = available[-4:]
+            if len(used) != 4 or used[-1]["period"] != previous_period:
+                raise ValueError("release order does not support the declared one-period forecast")
+            execution = forecast["model_execution"]
+            execution["input_bindings"] = {
+                "factor:cpi_base": {"operation": "identity", "evidence_indices": [3]},
+                "factor:momentum": {"operation": "mean_difference", "evidence_indices": [0, 1, 2, 3]},
+            }
+        else:
+            forecast = execute_engine_point_forecast(
+                origin,
+                observations,
+                model_type=model_type,
+                fit_window=fit_window,
+            )
+            used = forecast["used_observations"]
+            if not used or used[-1]["period"] != previous_period:
+                raise ValueError("release order does not support the declared one-period forecast")
+            execution = forecast["model_execution"]
         indices = [observations.index(row) for row in used]
-        if len(used) != 4 or used[-1]["period"] != previous_period:
-            raise ValueError("release order does not support the declared one-period forecast")
         cid = f"case-{position-3:03d}"
-        execution = forecast["model_execution"]
-        execution["input_bindings"] = {
-            "factor:cpi_base": {"operation": "identity", "evidence_indices": [3]},
-            "factor:momentum": {"operation": "mean_difference", "evidence_indices": [0, 1, 2, 3]},
-        }
         path = output / "executions" / (cid + ".json")
         write_json_atomic(path, execution)
         evidence = [{"file_path": raw.name, "sha256": raw_digest, "record_index": i,
@@ -76,8 +108,10 @@ def evaluate(source: Path, output: Path) -> dict[str, Any]:
                 "execution": {"file_path": path.relative_to(output).as_posix(), "sha256": sha256_file(path)}}
         cases.append(case)
         write_json_atomic(output / "hindcast" / (cid + ".json"), case)
+    recipe = _RECIPE_BY_MODEL.get(model_type) or f"causal-adaptive-ridge-ar1-fitw-{fit_window}"
     policy = {"policy_locked": True, "precommitted": False, "commitment_phase": "retrospective_replay",
-              "baseline": "persistence", "recipe": "trailing-three-difference-plus-last-level",
+              "baseline": "persistence", "recipe": recipe,
+              "model_type": model_type,
               "outcome_selection": "first_supplied_vintage",
               "case_commitments": {c["case_id"]: canonical_hash(c) for c in cases},
               "forecast_commitments": {c["case_id"]: canonical_hash(forecast_payload(c)) for c in cases}}
@@ -87,6 +121,8 @@ def evaluate(source: Path, output: Path) -> dict[str, Any]:
     lineage = verify_lineage(output, cases, policy, {}, issues)
     report = {"status": "pass" if lineage["execution_verified"] else "fail",
               "scope": "retrospective_computational_replay", "source_sha256": raw_digest,
+              "model_type": model_type,
+              "fit_window": fit_window,
               "lineage": lineage, "metrics": compute_authentic_evaluation_metrics(cases),
               "historical_vintage_validity": "not_established", "preregistration": "not_established",
               "probability_calibration_verified": False, "causal_validity": "not_established",
@@ -99,9 +135,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--model", choices=["momentum", "damped_trend", "mean_reversion", "adaptive"], default="momentum")
+    parser.add_argument("--fit-window", type=int, default=8)
     args = parser.parse_args()
     try:
-        report = evaluate(args.data, args.out)
+        report = evaluate(args.data, args.out, model_type=args.model, fit_window=args.fit_window)
     except (ResourceLimitError, ValueError, KeyError, TypeError, OverflowError, OSError) as exc:
         report = {"status": "fail", "issues": [{"severity": "error", "code": "INVALID_DATA", "message": str(exc)}]}
     print(json.dumps(report, indent=2, allow_nan=False))

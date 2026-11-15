@@ -429,6 +429,8 @@ def evaluate_hindcast_case(case: dict[str, Any], *, policy: dict[str, Any] | Non
         "model_version": (
             "aleph-engine-2.0"
             if model.formula_version == LEGACY_FORMULA_VERSION
+            else "aleph-engine-2.2"
+            if model.formula_version == "2.2.0"
             else "aleph-engine-2.1"
         ),
         "formula_version": model.formula_version,
@@ -537,6 +539,39 @@ def validate_pack(pack_dir: Path) -> dict[str, Any]:
         hindcast_results.append({"path": path.name, **result})
         if not result.get("ok"):
             issues.append(issue("PACK_MATURITY", artifact=str(path), message="hindcast case failed"))
+    non_synth_ok = [
+        value for value in hindcast_results
+        if value.get("ok") and not str(value.get("case_id", "")).endswith(":synthetic-001")
+    ]
+    if len(non_synth_ok) >= 2:
+        all_zero_pred = all(
+            all(abs(float(val)) <= 1e-12 for val in (value.get("predictions") or {}).values())
+            for value in non_synth_ok
+        )
+        max_obs = max(
+            (abs(float(val)) for value in non_synth_ok for val in (value.get("observations") or {}).values()),
+            default=0.0,
+        )
+        if all_zero_pred and max_obs > 1.0:
+            issues.append(
+                issue(
+                    "PACK_MATURITY",
+                    pointer="/hindcast",
+                    message="non-synthetic hindcast predictions collapsed to zero across all cases",
+                )
+            )
+        mean_mae = sum(float((value.get("metrics") or {}).get("mae", 0.0)) for value in non_synth_ok) / len(non_synth_ok)
+        mean_bmae = sum(float((value.get("metrics") or {}).get("baseline_mae", 0.0)) for value in non_synth_ok) / len(non_synth_ok)
+        if mean_mae > max(1.0, mean_bmae * 2.5):
+            issues.append(
+                issue(
+                    "PACK_MATURITY",
+                    pointer="/hindcast",
+                    actual=mean_mae,
+                    expected=mean_bmae,
+                    message=f"aggregate hindcast MAE ({mean_mae:.3f}) severely underperforms baseline MAE ({mean_bmae:.3f})",
+                )
+            )
 
     semantic_ok = not any(value.severity == "error" for value in issues)
     validated_gate = semantic_ok and datasets_ok and all(fixture_results.values())
