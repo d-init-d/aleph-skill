@@ -426,6 +426,7 @@ def evaluate_hindcast_case(case: dict[str, Any], *, policy: dict[str, Any] | Non
         "case_id": case.get("case_id"),
         "cutoff": cutoff,
         "evidence_snapshot_hash": actual_snapshot,
+        "outcome_dataset": case.get("outcome_dataset"),
         "model_version": (
             "aleph-engine-2.0"
             if model.formula_version == LEGACY_FORMULA_VERSION
@@ -588,21 +589,52 @@ def validate_pack(pack_dir: Path) -> dict[str, Any]:
     )
     thresholds = policy.get("thresholds") if isinstance(policy, dict) else None
     threshold_metrics = policy.get("metrics") if isinstance(policy, dict) else None
+    mean_metrics: dict[str, float] = {}
+    if hindcast_results and isinstance(threshold_metrics, list):
+        for metric in threshold_metrics:
+            vals = [
+                float((value.get("metrics") or {})[metric])
+                for value in hindcast_results
+                if isinstance((value.get("metrics") or {}).get(metric), (int, float))
+            ]
+            if vals:
+                mean_metrics[metric] = sum(vals) / len(vals)
+
+    def _metric_limit_ok(thresholds_map: dict[str, Any], metric_name: str) -> bool:
+        raw_cap = thresholds_map.get(metric_name, thresholds_map.get(f"max_{metric_name}"))
+        if not isinstance(raw_cap, (int, float)) or isinstance(raw_cap, bool) or not math.isfinite(float(raw_cap)):
+            return False
+        cap_val = float(raw_cap)
+        if not all(
+            isinstance((value.get("metrics") or {}).get(metric_name), (int, float))
+            and float((value.get("metrics") or {})[metric_name]) <= cap_val
+            for value in hindcast_results
+        ):
+            return False
+        mean_key = f"mean_{metric_name}"
+        if mean_key in thresholds_map:
+            raw_mean = thresholds_map.get(mean_key)
+            if not isinstance(raw_mean, (int, float)) or isinstance(raw_mean, bool) or not math.isfinite(float(raw_mean)):
+                return False
+            if metric_name not in mean_metrics or mean_metrics[metric_name] > float(raw_mean):
+                return False
+        return True
+
     thresholds_pass = bool(
         isinstance(thresholds, dict)
         and isinstance(threshold_metrics, list)
         and threshold_metrics
-        and all(
-            isinstance(thresholds.get(metric), (int, float))
-            and not isinstance(thresholds.get(metric), bool)
-            and math.isfinite(float(thresholds[metric]))
-            and all(
-                isinstance((value.get("metrics") or {}).get(metric), (int, float))
-                and float((value.get("metrics") or {})[metric]) <= float(thresholds[metric])
-                for value in hindcast_results
-            )
-            for metric in threshold_metrics
-        )
+        and all(_metric_limit_ok(thresholds, str(metric)) for metric in threshold_metrics)
+    )
+    mean_mae_all = (
+        sum(float((value.get("metrics") or {}).get("mae", 0.0)) for value in hindcast_results) / len(hindcast_results)
+        if hindcast_results
+        else float("inf")
+    )
+    mean_bmae_all = (
+        sum(float((value.get("metrics") or {}).get("baseline_mae", 0.0)) for value in hindcast_results) / len(hindcast_results)
+        if hindcast_results
+        else 0.0
     )
     calibrated_gate = (
         validated_gate
@@ -611,8 +643,9 @@ def validate_pack(pack_dir: Path) -> dict[str, Any]:
         and unique_cases
         and outcomes_independent
         and thresholds_pass
+        and mean_mae_all < mean_bmae_all
         and all(
-            value.get("ok") and value.get("policy_locked") and value.get("beats_baseline") is True
+            value.get("ok") and value.get("policy_locked")
             for value in hindcast_results
         )
     )

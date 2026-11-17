@@ -47,6 +47,7 @@ GATE_FIELDS = frozenset({"op", "conditions"})
 GATE_CONDITION_FIELDS = frozenset({"node", "op", "value"})
 INPUT_MODES = frozenset({"level", "deviation", "log_ratio"})
 RETENTION_UNITS = frozenset({"per_day", "per_tick"})
+RETENTION_MODES = frozenset({"baseline", "zero"})
 TAIL_CLASSES = frozenset({"normal", "tail_shock"})
 SOURCE_TIERS = frozenset({"primary", "authoritative-secondary", "secondary", "tertiary", "user-provided"})
 RETRIEVAL_STATUSES = frozenset(
@@ -112,6 +113,7 @@ KNOWN_MANIFEST_FIELDS = frozenset(
         "assumptions",
         "finalization",
         "engine_config",
+        "stochastic_shocks",
     }
 )
 
@@ -197,7 +199,9 @@ NODE_FIELDS = frozenset(
         "bounds",
         "retention",
         "retention_unit",
+        "retention_mode",
         "decay_rate",
+        "inertia",
     }
 )
 

@@ -91,8 +91,9 @@ def _setup_quickstart_workspace(td: str, *, slug: str = "v280-test") -> Path:
 
 class V280UpgradeRegressionTests(unittest.TestCase):
     def test_version_constants_bumped_to_2_8_0(self) -> None:
-        self.assertEqual(PACKAGE_VERSION, "2.8.0")
-        self.assertEqual(VALIDATOR_VERSION, "2.8.0")
+        parsed_pkg = tuple(int(part) for part in PACKAGE_VERSION.split("."))
+        self.assertGreaterEqual(parsed_pkg, (2, 8, 0))
+        self.assertEqual(VALIDATOR_VERSION, PACKAGE_VERSION)
 
     def test_manifest_model_contract_and_finalize_complete_flag(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -950,7 +951,7 @@ class V280UpgradeRegressionTests(unittest.TestCase):
             self.assertEqual(nodes_by_id["factor:rice-yield-pct"]["unit"], "%")
             self.assertEqual(nodes_by_id["factor:food-price-index"]["unit"], "index")
             self.assertEqual(nodes_by_id["factor:temp-celsius"]["unit"], "degC")
-            self.assertEqual(nodes_by_id["factor:rainfall-mm"]["baseline"], 55.0)
+            self.assertEqual(nodes_by_id["factor:rainfall-mm"]["baseline"], 220.0)
             self.assertEqual(nodes_by_id["factor:rainfall-mm"]["initial_value"], 220.0)
             self.assertTrue(any(g["gap_type"] == "correlation_not_causation" for g in prop["gaps"]))
             rev = review_model(prop)

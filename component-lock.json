@@ -5,39 +5,39 @@
     "d-research": {
       "uri": "aleph-component://d-research",
       "package_name": "d-research-skill-tools",
-      "version": "3.7.0",
+      "version": "3.8.0",
       "source_repository": "https://github.com/d-init-d/d-research-skill",
-      "source_tag": "v3.7.0",
-      "upstream_tag_object": "bb2c9ea5d934a6a56c5d902774b37b041be1ee67",
-      "upstream_commit": "be8db69f0bd2ad11e8024bcca3895e9a3f760c24",
-      "upstream_tree": "8b5bdd2c83f9036a1ff4e03f67519df5d4ff998b",
+      "source_tag": "v3.8.0",
+      "upstream_tag_object": "4571db76c8b15fecdaf09baebae881b4b59a55ef",
+      "upstream_commit": "c287715b6a30540f8e7909b58e7f2b8642e74bce",
+      "upstream_tree": "b8deb0670029edcba259916740542e547f9108e0",
       "source_archive_format": "git-archive-tar",
-      "source_archive_sha256": "sha256:0066140f2c944d5339d34cdb07a8d83e13d78a078e8c7982fb9fef0224b99388",
+      "source_archive_sha256": "sha256:48ee506b516db23b94fc589204ad6403c7e6e2631da2ac13924ce61381256fea",
       "source_artifacts": {
         "full_profile": {
-          "name": "d-research-3.7.0-full.tar.gz",
-          "sha256": "sha256:fa97567128a78c90a4110fc734dd1be286ebc70db1296d584189e9110a530b8c",
-          "manifest_name": "d-research-3.7.0-full.manifest.json",
-          "manifest_sha256": "sha256:91324d4e463f3fa418b10ddea01e5d1e73d4ce570fe6282a8a8f14cd32f5a709",
-          "file_count": 841
+          "name": "d-research-3.8.0-full.tar.gz",
+          "sha256": "sha256:1f7420f20b5555bf007cc4569d4716f4c7af8065416e0ce44b1378d0f5a13350",
+          "manifest_name": "d-research-3.8.0-full.manifest.json",
+          "manifest_sha256": "sha256:94e3233bdc415d2c3cdf727e668008c0102dcef43d4d9bdd09369dc5f56b250b",
+          "file_count": 846
         },
         "runtime_profile": {
-          "name": "d-research-3.7.0-runtime.tar.gz",
-          "sha256": "sha256:1eec8ebdf0fb87769552917459cbf242eeb7cdd9fe4b004ac9085c436b6daac6",
-          "manifest_name": "d-research-3.7.0-runtime.manifest.json",
-          "manifest_sha256": "sha256:77e7a7734f70242990092ea351d06522f95af5a4e6ef76a32d03ee1a45337e03",
-          "file_count": 245,
-          "tree_sha256": "sha256:a6a76a88db52cb0da0a0ba48274246e9e741354730bce97a120aadecc66fe2b3",
-          "ordered_paths_sha256": "sha256:6eef691629d16799b034ee58aec33e7c2ad0ca4cb638abfee51a7ddecfff7b23"
+          "name": "d-research-3.8.0-runtime.tar.gz",
+          "sha256": "sha256:34a72a8d2476a79b7d401392820efc28cef2edce425abe3ca78822a370ac5062",
+          "manifest_name": "d-research-3.8.0-runtime.manifest.json",
+          "manifest_sha256": "sha256:5190e185f79bd51f306c8a5a2ebad12e7d023a4e51973b2a36e084a7484944d2",
+          "file_count": 247,
+          "tree_sha256": "sha256:88c61c44214a7b258acb17cab07100215b442d9d636368349e862c39318cbfb4",
+          "ordered_paths_sha256": "sha256:23020f5223a30df3a9a8d3e9a4436e52e363dee185271cf9eaee0fa6d192fd32"
         },
         "workflow_source": {
-          "name": "d-research-skill-v3.7.0.tar.gz",
-          "sha256": "sha256:ff3fbd3ac972ebc17ebc804d558c9cdee73876b647682b904bc4ed094d6a1965"
+          "name": "d-research-skill-v3.8.0.tar.gz",
+          "sha256": "sha256:1849566118a1551015a42c19dd4f1ab79030a058b27d8ed323edd56c59f5729c"
         },
         "interop_contract": {
           "path": "templates/interop-contract.json",
-          "source_sha256": "sha256:99fa2d0348f235c9a6926aa37d367f0622a87c29a8e91514227c70589c59cb25",
-          "normalized_sha256": "sha256:99fa2d0348f235c9a6926aa37d367f0622a87c29a8e91514227c70589c59cb25"
+          "source_sha256": "sha256:f76852560e1d0cdaffab64e5278b021ac7cca36d4df384e4db4f924e4653756e",
+          "normalized_sha256": "sha256:f76852560e1d0cdaffab64e5278b021ac7cca36d4df384e4db4f924e4653756e"
         }
       },
       "snapshot_recipe": {
@@ -604,6 +604,9 @@
           "release-evidence/v3.7.0/local-verification.json",
           "release-evidence/v3.7.0/maintainer-override.json",
           "release-evidence/v3.7.0/owner-direction.md",
+          "release-evidence/v3.8.0/local-verification.json",
+          "release-evidence/v3.8.0/maintainer-override.json",
+          "release-evidence/v3.8.0/owner-direction.md",
           "tests/fixtures/correction_pairs_fixtures.json",
           "tests/fixtures/dynamic_site/app.js",
           "tests/fixtures/dynamic_site/empirical_challenger_test.mjs",
@@ -669,18 +672,36 @@
           {
             "path": "package.json",
             "transform": "runtime-package-v1",
-            "source_sha256": "sha256:3cd3c2ef6e9fec2c3a909ea0eeebc4c1668b24e5a6e59848064f0acf5328f815",
-            "output_sha256": "sha256:0704abbfcfb9be3a7261c9192caf6f3836704c1e4bad1c11e248fd27d424af1f"
+            "source_sha256": "sha256:5d004dd093a3500093e0125c2a265b76580296b670cb8083d8bd0d4c8c96929b",
+            "output_sha256": "sha256:71fbb213f30473242621d388b2d18eecfd4175a2568cf8f87b3e01e83f66cb03"
           }
         ]
       },
-      "tree_sha256": "sha256:be3bec55263be70467b8347bea2d0d3dd7f7e37c69cbbaf484e34bdca10104cd",
-      "file_count": 245,
+      "tree_sha256": "sha256:e74760aa1950b44d50df9405f47ec444bb13648bb092f745aa35d7af136a14dd",
+      "file_count": 247,
       "entrypoints": [
+        "scripts/api_fetch.mjs",
+        "scripts/browser_interaction.mjs",
+        "scripts/build_release_artifacts.py",
+        "scripts/check_contract.py",
+        "scripts/embed_corpus.py",
         "scripts/evidence_ledger.py",
+        "scripts/execution_evidence.py",
+        "scripts/harvest_terms.py",
         "scripts/investigation_policy.py",
+        "scripts/lineage_tracker.py",
+        "scripts/playwright_crawl.mjs",
+        "scripts/playwright_extract.mjs",
+        "scripts/playwright_probe.mjs",
+        "scripts/reconciliation.py",
+        "scripts/release_verify.py",
+        "scripts/report_render.py",
+        "scripts/research_controller.py",
         "scripts/research_plan.py",
-        "scripts/playwright_probe.mjs"
+        "scripts/run_dogfood.py",
+        "scripts/social_snapshot.py",
+        "scripts/source_grounding.py",
+        "scripts/web_search.mjs"
       ],
       "files": [
         {
@@ -690,8 +711,8 @@
         },
         {
           "path": "CHANGELOG.md",
-          "size": 83903,
-          "sha256": "sha256:2bc412552fdd6bc7a9a0cafcabe0943d060ebdb3339488354085f83f5f21b7bc"
+          "size": 87537,
+          "sha256": "sha256:0960cacb497b44134f3520ce3818041b62ab79265c03607014bba8428220e29e"
         },
         {
           "path": "CONTRIBUTING.md",
@@ -706,12 +727,12 @@
         {
           "path": "README.md",
           "size": 62746,
-          "sha256": "sha256:631f942943d3229fa178ad75a460bebb1497891d5b0c3b4bb451f39084492cd8"
+          "sha256": "sha256:17f6500ba22776bce933284af2cd4fe71d5a4f40d954c3e9dff2f2ac79b78a48"
         },
         {
           "path": "README.vi.md",
           "size": 28384,
-          "sha256": "sha256:34e7f064b8286efae45b15fb2ef1a644c44c1ddbf17e94806e6594c4faad3714"
+          "sha256": "sha256:4a60d2f7bdf15ddcab027ff6143b4a64cfb2f6476da98a83030ba3c5c629f22c"
         },
         {
           "path": "SKILL.md",
@@ -944,6 +965,16 @@
           "sha256": "sha256:84b8e36648729d138b614cbf39e3a5c5655b49a366a0e5ca93a3ddba972029fd"
         },
         {
+          "path": "docs/release-v3.8.0-rc.1.md",
+          "size": 2501,
+          "sha256": "sha256:be6db302452b00f0c9228536f907321b9c2154d5b92b0992c777445305418761"
+        },
+        {
+          "path": "docs/release-v3.8.0.md",
+          "size": 6975,
+          "sha256": "sha256:70ab75332bb193baa2da8909e14b66b6d74c877e5b79ffea3a77cd88247669e8"
+        },
+        {
           "path": "docs/ssrf-helper-inventory.md",
           "size": 11774,
           "sha256": "sha256:7188b087e625f12af279e29e9ee3e6631a6d8beb5b331fe77fdd46b130124064"
@@ -951,7 +982,7 @@
         {
           "path": "docs/upgrade-completion.md",
           "size": 1753,
-          "sha256": "sha256:0543401105139d3ca3da70cd7b7dc1faf6ea49e9e7ef1ce840af58b89b60d371"
+          "sha256": "sha256:65b4a8855d9273c0cd1459a40f544aa6b1f9f038d724f486a0df2c6d1e0e6236"
         },
         {
           "path": "docs/upgrade-v3.1.1-to-v3.2.0.md",
@@ -1161,17 +1192,17 @@
         {
           "path": "package-lock.json",
           "size": 1777,
-          "sha256": "sha256:1af616f985011fd274cb6b71db6d1f12196b34487952e1734df59696921a62fd"
+          "sha256": "sha256:d234081c45c6891b403c9a1d3fc57436c2a4ae83247c4a482caf0d458d3e24ea"
         },
         {
           "path": "package.json",
           "size": 9253,
-          "sha256": "sha256:0704abbfcfb9be3a7261c9192caf6f3836704c1e4bad1c11e248fd27d424af1f"
+          "sha256": "sha256:71fbb213f30473242621d388b2d18eecfd4175a2568cf8f87b3e01e83f66cb03"
         },
         {
           "path": "pyproject.toml",
           "size": 3063,
-          "sha256": "sha256:1e084d90be91986ee0aa75a5cb0118c293d684b938a3e93eea0e008aab2b12fa"
+          "sha256": "sha256:b50ad43196b292a7b46e12ede6cf84ec0dc3e29b72a0ac7ea4bd9f5f47468dd2"
         },
         {
           "path": "references/academic-databases.md",
@@ -1530,8 +1561,8 @@
         },
         {
           "path": "scripts/check_contract.py",
-          "size": 224272,
-          "sha256": "sha256:3768ea9d550dcbc0539b56bf0b77f4a28f980ee45f398b6a0433bf64e691fa01"
+          "size": 224461,
+          "sha256": "sha256:c04d671c03782757061a04c6f66b3f5df752f881a5cb205828e4a9b3f3936719"
         },
         {
           "path": "scripts/check_doc_examples.py",
@@ -1590,8 +1621,8 @@
         },
         {
           "path": "scripts/embed_corpus.py",
-          "size": 55166,
-          "sha256": "sha256:47cfa74fa749e5f9fb2e9cf0b5a384667d2a44b5d5116c1b168eb008c7487314"
+          "size": 59306,
+          "sha256": "sha256:e4cb7fce055adb82813e0b6b4cef27d51de779232308b7c655501b62df546143"
         },
         {
           "path": "scripts/eval_harness.py",
@@ -1625,8 +1656,8 @@
         },
         {
           "path": "scripts/harvest_terms.py",
-          "size": 13336,
-          "sha256": "sha256:ccf7e0b19c577bbe2da8e1b73a93b8e41d3241a8aa605f658211679f640fac16"
+          "size": 15465,
+          "sha256": "sha256:e4170993823d7a434b269d32851c0431497b6ccdd4197b7bfbe9f1fcf927f6b6"
         },
         {
           "path": "scripts/http_cache.py",
@@ -1680,8 +1711,8 @@
         },
         {
           "path": "scripts/lineage_tracker.py",
-          "size": 18146,
-          "sha256": "sha256:018043b9d62c647964e71107d6cf98ba66b8819e876fada35565d9aa7e6498c6"
+          "size": 28154,
+          "sha256": "sha256:0a599732fa798cfcbeb8c73521211e95b4bb1aece84d8c2ca5d49a3e970293d5"
         },
         {
           "path": "scripts/multi_extract.py",
@@ -1730,8 +1761,8 @@
         },
         {
           "path": "scripts/reconciliation.py",
-          "size": 23055,
-          "sha256": "sha256:3aee3e00a457e8339326d634322e3ef9fc1af3afb573fd10ec7cd9a1c72d1d11"
+          "size": 32299,
+          "sha256": "sha256:94a83825d540a4af71d65f6a219063ee0b8e8603a78a6c9d6c0db4ac7bb6fb3e"
         },
         {
           "path": "scripts/release_verify.py",
@@ -1795,8 +1826,8 @@
         },
         {
           "path": "scripts/source_grounding.py",
-          "size": 6712,
-          "sha256": "sha256:959d294c88f1a36594135ad119d232f32f121280183ccbf78626086e2c0b2891"
+          "size": 16486,
+          "sha256": "sha256:0fec6ef8e6fe7469fdbc2435165a96c7b036ec58f60f2bbcb2b40c698984733a"
         },
         {
           "path": "scripts/translate.py",
@@ -1810,8 +1841,8 @@
         },
         {
           "path": "scripts/web_search.mjs",
-          "size": 61677,
-          "sha256": "sha256:4cf3dd5d1727a34ef047479f99d3f928268268aac138fae80419a8646faf113b"
+          "size": 75309,
+          "sha256": "sha256:2609d506fa8d42b5279d183807fdd8450e75207ef109368d478a13256fbe0369"
         },
         {
           "path": "scripts/wikidata.py",
@@ -1860,8 +1891,8 @@
         },
         {
           "path": "templates/interop-contract.json",
-          "size": 1656,
-          "sha256": "sha256:99fa2d0348f235c9a6926aa37d367f0622a87c29a8e91514227c70589c59cb25"
+          "size": 1935,
+          "sha256": "sha256:f76852560e1d0cdaffab64e5278b021ac7cca36d4df384e4db4f924e4653756e"
         },
         {
           "path": "templates/investigation-scope.json",
@@ -1895,8 +1926,8 @@
         },
         {
           "path": "templates/route-manifest.json",
-          "size": 35655,
-          "sha256": "sha256:1cd1843498586a24212aa0f88b332cdb7cf272227ab2a7776070e1c107a90ce1"
+          "size": 37019,
+          "sha256": "sha256:970824656ee5beeaf43184ca951222321818f43b389869b87e9a227d98c0ed2e"
         },
         {
           "path": "templates/screening-log.csv",
@@ -1909,7 +1940,7 @@
           "sha256": "sha256:743b8c25836a152470d13c117d01212cfa5c95f76c39c65b342792e523e1ad39"
         }
       ],
-      "tree_hash": "sha256:be3bec55263be70467b8347bea2d0d3dd7f7e37c69cbbaf484e34bdca10104cd",
+      "tree_hash": "sha256:e74760aa1950b44d50df9405f47ec444bb13648bb092f745aa35d7af136a14dd",
       "file_manifest": [
         {
           "path": "AGENTS.md",
@@ -1918,8 +1949,8 @@
         },
         {
           "path": "CHANGELOG.md",
-          "size": 83903,
-          "sha256": "sha256:2bc412552fdd6bc7a9a0cafcabe0943d060ebdb3339488354085f83f5f21b7bc"
+          "size": 87537,
+          "sha256": "sha256:0960cacb497b44134f3520ce3818041b62ab79265c03607014bba8428220e29e"
         },
         {
           "path": "CONTRIBUTING.md",
@@ -1934,12 +1965,12 @@
         {
           "path": "README.md",
           "size": 62746,
-          "sha256": "sha256:631f942943d3229fa178ad75a460bebb1497891d5b0c3b4bb451f39084492cd8"
+          "sha256": "sha256:17f6500ba22776bce933284af2cd4fe71d5a4f40d954c3e9dff2f2ac79b78a48"
         },
         {
           "path": "README.vi.md",
           "size": 28384,
-          "sha256": "sha256:34e7f064b8286efae45b15fb2ef1a644c44c1ddbf17e94806e6594c4faad3714"
+          "sha256": "sha256:4a60d2f7bdf15ddcab027ff6143b4a64cfb2f6476da98a83030ba3c5c629f22c"
         },
         {
           "path": "SKILL.md",
@@ -2172,6 +2203,16 @@
           "sha256": "sha256:84b8e36648729d138b614cbf39e3a5c5655b49a366a0e5ca93a3ddba972029fd"
         },
         {
+          "path": "docs/release-v3.8.0-rc.1.md",
+          "size": 2501,
+          "sha256": "sha256:be6db302452b00f0c9228536f907321b9c2154d5b92b0992c777445305418761"
+        },
+        {
+          "path": "docs/release-v3.8.0.md",
+          "size": 6975,
+          "sha256": "sha256:70ab75332bb193baa2da8909e14b66b6d74c877e5b79ffea3a77cd88247669e8"
+        },
+        {
           "path": "docs/ssrf-helper-inventory.md",
           "size": 11774,
           "sha256": "sha256:7188b087e625f12af279e29e9ee3e6631a6d8beb5b331fe77fdd46b130124064"
@@ -2179,7 +2220,7 @@
         {
           "path": "docs/upgrade-completion.md",
           "size": 1753,
-          "sha256": "sha256:0543401105139d3ca3da70cd7b7dc1faf6ea49e9e7ef1ce840af58b89b60d371"
+          "sha256": "sha256:65b4a8855d9273c0cd1459a40f544aa6b1f9f038d724f486a0df2c6d1e0e6236"
         },
         {
           "path": "docs/upgrade-v3.1.1-to-v3.2.0.md",
@@ -2389,17 +2430,17 @@
         {
           "path": "package-lock.json",
           "size": 1777,
-          "sha256": "sha256:1af616f985011fd274cb6b71db6d1f12196b34487952e1734df59696921a62fd"
+          "sha256": "sha256:d234081c45c6891b403c9a1d3fc57436c2a4ae83247c4a482caf0d458d3e24ea"
         },
         {
           "path": "package.json",
           "size": 9253,
-          "sha256": "sha256:0704abbfcfb9be3a7261c9192caf6f3836704c1e4bad1c11e248fd27d424af1f"
+          "sha256": "sha256:71fbb213f30473242621d388b2d18eecfd4175a2568cf8f87b3e01e83f66cb03"
         },
         {
           "path": "pyproject.toml",
           "size": 3063,
-          "sha256": "sha256:1e084d90be91986ee0aa75a5cb0118c293d684b938a3e93eea0e008aab2b12fa"
+          "sha256": "sha256:b50ad43196b292a7b46e12ede6cf84ec0dc3e29b72a0ac7ea4bd9f5f47468dd2"
         },
         {
           "path": "references/academic-databases.md",
@@ -2758,8 +2799,8 @@
         },
         {
           "path": "scripts/check_contract.py",
-          "size": 224272,
-          "sha256": "sha256:3768ea9d550dcbc0539b56bf0b77f4a28f980ee45f398b6a0433bf64e691fa01"
+          "size": 224461,
+          "sha256": "sha256:c04d671c03782757061a04c6f66b3f5df752f881a5cb205828e4a9b3f3936719"
         },
         {
           "path": "scripts/check_doc_examples.py",
@@ -2818,8 +2859,8 @@
         },
         {
           "path": "scripts/embed_corpus.py",
-          "size": 55166,
-          "sha256": "sha256:47cfa74fa749e5f9fb2e9cf0b5a384667d2a44b5d5116c1b168eb008c7487314"
+          "size": 59306,
+          "sha256": "sha256:e4cb7fce055adb82813e0b6b4cef27d51de779232308b7c655501b62df546143"
         },
         {
           "path": "scripts/eval_harness.py",
@@ -2853,8 +2894,8 @@
         },
         {
           "path": "scripts/harvest_terms.py",
-          "size": 13336,
-          "sha256": "sha256:ccf7e0b19c577bbe2da8e1b73a93b8e41d3241a8aa605f658211679f640fac16"
+          "size": 15465,
+          "sha256": "sha256:e4170993823d7a434b269d32851c0431497b6ccdd4197b7bfbe9f1fcf927f6b6"
         },
         {
           "path": "scripts/http_cache.py",
@@ -2908,8 +2949,8 @@
         },
         {
           "path": "scripts/lineage_tracker.py",
-          "size": 18146,
-          "sha256": "sha256:018043b9d62c647964e71107d6cf98ba66b8819e876fada35565d9aa7e6498c6"
+          "size": 28154,
+          "sha256": "sha256:0a599732fa798cfcbeb8c73521211e95b4bb1aece84d8c2ca5d49a3e970293d5"
         },
         {
           "path": "scripts/multi_extract.py",
@@ -2958,8 +2999,8 @@
         },
         {
           "path": "scripts/reconciliation.py",
-          "size": 23055,
-          "sha256": "sha256:3aee3e00a457e8339326d634322e3ef9fc1af3afb573fd10ec7cd9a1c72d1d11"
+          "size": 32299,
+          "sha256": "sha256:94a83825d540a4af71d65f6a219063ee0b8e8603a78a6c9d6c0db4ac7bb6fb3e"
         },
         {
           "path": "scripts/release_verify.py",
@@ -3023,8 +3064,8 @@
         },
         {
           "path": "scripts/source_grounding.py",
-          "size": 6712,
-          "sha256": "sha256:959d294c88f1a36594135ad119d232f32f121280183ccbf78626086e2c0b2891"
+          "size": 16486,
+          "sha256": "sha256:0fec6ef8e6fe7469fdbc2435165a96c7b036ec58f60f2bbcb2b40c698984733a"
         },
         {
           "path": "scripts/translate.py",
@@ -3038,8 +3079,8 @@
         },
         {
           "path": "scripts/web_search.mjs",
-          "size": 61677,
-          "sha256": "sha256:4cf3dd5d1727a34ef047479f99d3f928268268aac138fae80419a8646faf113b"
+          "size": 75309,
+          "sha256": "sha256:2609d506fa8d42b5279d183807fdd8450e75207ef109368d478a13256fbe0369"
         },
         {
           "path": "scripts/wikidata.py",
@@ -3088,8 +3129,8 @@
         },
         {
           "path": "templates/interop-contract.json",
-          "size": 1656,
-          "sha256": "sha256:99fa2d0348f235c9a6926aa37d367f0622a87c29a8e91514227c70589c59cb25"
+          "size": 1935,
+          "sha256": "sha256:f76852560e1d0cdaffab64e5278b021ac7cca36d4df384e4db4f924e4653756e"
         },
         {
           "path": "templates/investigation-scope.json",
@@ -3123,8 +3164,8 @@
         },
         {
           "path": "templates/route-manifest.json",
-          "size": 35655,
-          "sha256": "sha256:1cd1843498586a24212aa0f88b332cdb7cf272227ab2a7776070e1c107a90ce1"
+          "size": 37019,
+          "sha256": "sha256:970824656ee5beeaf43184ca951222321818f43b389869b87e9a227d98c0ed2e"
         },
         {
           "path": "templates/screening-log.csv",
@@ -3139,14 +3180,14 @@
       ],
       "pin_note": "Published D Research stable release; immutable signed tag and exact runtime-profile projection.",
       "upstream_repo": "repos/d-research-skill",
-      "synced_at": "2026-11-14",
+      "synced_at": "2026-11-18",
       "provenance": {
         "mode": "upstream_release"
       }
     }
   },
   "upstream_repo": "repos/d-research-skill",
-  "upstream_commit": "be8db69f0bd2ad11e8024bcca3895e9a3f760c24",
-  "synced_at": "2026-11-14",
-  "version": "3.7.0"
+  "upstream_commit": "c287715b6a30540f8e7909b58e7f2b8642e74bce",
+  "synced_at": "2026-11-18",
+  "version": "3.8.0"
 }

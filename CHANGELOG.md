@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.9.0 - 2026-11-18
+
+### Added
+
+- Upstream-attested D Research `3.8.0` bundle (`component-lock.json`, 247 runtime files) unlocking `scripts/execution_evidence.py` (`research:execution-evidence`) and `scripts/source_grounding.py` (`research:grounding`) through `scripts/research_gateway.py`.
+- Formula `2.2.0` stock equilibrium default `retention_mode: "baseline"` (`baseline + r^dt * (state - baseline) + flow * dt`, preserving `retention_mode: "zero"` opt-in and `2.0.0`/`2.1.0` bit-identical replay), optional level-node `inertia` in `[0.0, 1.0)`, and deterministic Bernoulli `stochastic_shocks` Monte Carlo tail-shock generation (`tail_class: "tail_shock"`) across schemas, compiler, engine, validator, and runner.
+- End-to-end turn-key orchestrator `scripts/run_pipeline.py` (and `npm run sim:pipeline`) linking `init -> import -> propose -> review -> apply --into-initialized -> compile -> simulate -> replay -> validate -> render-report`, with `--self-test`.
+- Roleplay `objectives`-synthesized `state_weights` (auto-parameterizing payoffs when `utility_table` is omitted) and `simulate-branches` action-profile exploration in `scripts/aleph/interactive_roleplay.py` and `scripts/interactive_roleplay.py`.
+
+### Changed & Fixed
+
+- Fixed wide CSV time-series chronological baseline ordering (`vals_a[0]` / `vals_b[0]`) and added `_compact_factor_phrase()` clause compaction (retaining full clause text in `description`) in `scripts/aleph/auto_causal.py`.
+- Calibrated `packs/economics` to `maturity: "calibrated"` (`can_emit_probability: true`) across 30 real empirical hindcast cases (`case-001`..`case-030`, removing synthetic `public-sample.json`) with per-case and portfolio `mean_mae` / `mean_rmse` gate verification in `scripts/aleph/packs.py`.
+
+See [release notes](.github/release-notes/v2.9.0.md) for compatibility, upgrade instructions, and verification details.
+
 ## 2.8.0 - 2026-11-15
 
 ### Added

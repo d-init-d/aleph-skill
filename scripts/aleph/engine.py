@@ -36,6 +36,7 @@ from .schema import (
     GATE_FIELDS,
     GATE_OPS,
     INPUT_MODES,
+    RETENTION_MODES,
     RETENTION_UNITS,
     TRANSFORMS,
     parse_duration_seconds,
@@ -74,9 +75,11 @@ class Variable:
     bounds: tuple[float | None, float | None] = (None, None)
     retention: float | None = None
     retention_unit: str = "per_day"
+    retention_mode: str | None = None
     retention_distribution: dict[str, Any] | None = None
     decay_rate: float | None = None
     decay_rate_distribution: dict[str, Any] | None = None
+    inertia: float | None = None
     value: float = 0.0
     initial_value: float | None = None
 
@@ -110,6 +113,7 @@ class ComputationalModel:
     edges: list[ModelEdge] = field(default_factory=list)
     interventions: list[dict[str, Any]] = field(default_factory=list)
     formula_version: str = FORMULA_VERSION
+    stochastic_shocks: list[dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.formula_version == "2.2":
@@ -379,12 +383,73 @@ def _normalise_edge_gate(raw_gate: Any, edge_id: str, valid_nodes: set[str]) -> 
     return {"op": op, "conditions": normalised_conditions}
 
 
+def _normalise_stochastic_shocks(
+    raw_shocks: Any, variables: Mapping[str, Variable]
+) -> list[dict[str, Any]]:
+    if raw_shocks is None:
+        return []
+    if not isinstance(raw_shocks, list):
+        raise ValueError("stochastic_shocks must be an array")
+    normalised: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for index, raw in enumerate(raw_shocks):
+        if not isinstance(raw, Mapping):
+            raise ValueError(f"stochastic_shocks[{index}] must be an object")
+        allowed = {"id", "target", "op", "probability_per_tick", "magnitude", "start_tick", "end_tick", "duration_ticks"}
+        unknown = set(raw) - allowed
+        if unknown:
+            raise ValueError(f"stochastic_shocks[{index}] unknown fields: {', '.join(sorted(unknown))}")
+        shock_id = str(raw.get("id", ""))
+        if not shock_id:
+            raise ValueError(f"stochastic_shocks[{index}] id is required")
+        if shock_id in seen_ids:
+            raise ValueError(f"duplicate stochastic shock id {shock_id}")
+        seen_ids.add(shock_id)
+        target = str(raw.get("target", ""))
+        if target not in variables:
+            raise ValueError(f"stochastic shock {shock_id} target {target!r} must reference a model variable")
+        op = str(raw.get("op", "add"))
+        if op not in {"add", "multiply", "set"}:
+            raise ValueError(f"stochastic shock {shock_id} op must be add, multiply, or set")
+        raw_prob = raw.get("probability_per_tick")
+        if not _is_finite_number(raw_prob):
+            raise ValueError(f"stochastic shock {shock_id} probability_per_tick must be finite")
+        prob = float(cast(int | float, raw_prob))
+        if not 0.0 <= prob <= 1.0:
+            raise ValueError(f"stochastic shock {shock_id} probability_per_tick must be in [0, 1]")
+        if "magnitude" not in raw:
+            raise ValueError(f"stochastic shock {shock_id} magnitude is required")
+        magnitude = _normalise_scalar_parameter(raw["magnitude"], label=f"stochastic shock {shock_id} magnitude")
+        start_tick = raw.get("start_tick", 0)
+        if isinstance(start_tick, bool) or not isinstance(start_tick, int) or start_tick < 0:
+            raise ValueError(f"stochastic shock {shock_id} start_tick must be a non-negative integer")
+        end_tick = raw.get("end_tick")
+        if end_tick is not None and (isinstance(end_tick, bool) or not isinstance(end_tick, int) or end_tick <= start_tick):
+            raise ValueError(f"stochastic shock {shock_id} end_tick must be null or > start_tick")
+        duration_ticks = raw.get("duration_ticks", 1)
+        if isinstance(duration_ticks, bool) or not isinstance(duration_ticks, int) or duration_ticks < 1:
+            raise ValueError(f"stochastic shock {shock_id} duration_ticks must be an integer >= 1")
+        entry: dict[str, Any] = {
+            "id": shock_id,
+            "target": target,
+            "op": op,
+            "probability_per_tick": prob,
+            "magnitude": magnitude,
+            "start_tick": start_tick,
+            "end_tick": end_tick,
+            "duration_ticks": duration_ticks,
+        }
+        normalised.append(entry)
+    return normalised
+
+
 def compile_model(
     nodes: list[dict[str, Any]],
     edges: list[dict[str, Any]],
     interventions: list[dict[str, Any]] | None = None,
     *,
     formula_version: str = FORMULA_VERSION,
+    stochastic_shocks: list[dict[str, Any]] | None = None,
 ) -> ComputationalModel:
     """Compile public artifacts without treating simulated ``state_after`` as evidence.
 
@@ -425,7 +490,7 @@ def compile_model(
             raise ValueError(f"node {node_id} scale must be level, flow, or stock")
         if scale != "stock" and any(
             key in node
-            for key in ("retention", "retention_unit", "retention_distribution", "decay_rate", "decay_rate_distribution")
+            for key in ("retention", "retention_unit", "retention_mode", "retention_distribution", "decay_rate", "decay_rate_distribution")
         ):
             raise ValueError(f"node {node_id} stock dynamics are only valid for stock variables")
         if "retention" in node and "decay_rate" in node:
@@ -433,6 +498,18 @@ def compile_model(
         retention_unit = str(node.get("retention_unit", "per_day"))
         if retention_unit not in RETENTION_UNITS:
             raise ValueError(f"node {node_id} retention_unit must be per_day or per_tick")
+        retention_mode: str | None = None
+        if "retention_mode" in node and node["retention_mode"] is not None:
+            retention_mode = str(node["retention_mode"])
+            if retention_mode not in RETENTION_MODES:
+                raise ValueError(f"node {node_id} retention_mode must be baseline or zero")
+        inertia: float | None = None
+        if "inertia" in node and node["inertia"] is not None:
+            if not _is_finite_number(node["inertia"]):
+                raise ValueError(f"node {node_id} inertia must be finite")
+            inertia = float(cast(int | float, node["inertia"]))
+            if not 0.0 <= inertia < 1.0:
+                raise ValueError(f"node {node_id} inertia must be in [0, 1)")
         retention: float | None = None
         retention_distribution: dict[str, Any] | None = None
         decay_rate: float | None = None
@@ -467,9 +544,11 @@ def compile_model(
             bounds=bounds,
             retention=retention,
             retention_unit=retention_unit,
+            retention_mode=retention_mode,
             retention_distribution=retention_distribution,
             decay_rate=decay_rate,
             decay_rate_distribution=decay_rate_distribution,
+            inertia=inertia,
             value=initial_value if initial_value is not None else baseline,
             initial_value=initial_value,
         )
@@ -632,6 +711,8 @@ def compile_model(
                 "release_policy": release_policy,
             }
         )
+    if stochastic_shocks is not None:
+        model.stochastic_shocks = _normalise_stochastic_shocks(stochastic_shocks, model.variables)
     return model
 
 
@@ -656,10 +737,14 @@ def model_payload(model: ComputationalModel) -> dict[str, Any]:
                 payload["retention"] = var.retention
             if var.retention_unit != "per_day":
                 payload["retention_unit"] = var.retention_unit
+            if var.retention_mode is not None:
+                payload["retention_mode"] = var.retention_mode
             if var.decay_rate_distribution is not None:
                 payload["decay_rate_distribution"] = var.decay_rate_distribution
             elif var.decay_rate is not None:
                 payload["decay_rate"] = var.decay_rate
+        if var.inertia is not None:
+            payload["inertia"] = var.inertia
         variables[key] = payload
 
     edges: list[dict[str, Any]] = []
@@ -700,11 +785,14 @@ def model_payload(model: ComputationalModel) -> dict[str, Any]:
             payload.pop("release_policy", None)
         interventions_payload.append(payload)
 
-    return {
+    result_payload: dict[str, Any] = {
         "variables": variables,
         "edges": edges,
         "interventions": interventions_payload,
     }
+    if model.stochastic_shocks:
+        result_payload["stochastic_shocks"] = list(model.stochastic_shocks)
+    return result_payload
 
 
 def model_from_dict(
@@ -755,11 +843,14 @@ def model_from_dict(
         else []
     )
     resolved_formula = formula_version or str(payload.get("formula_version") or FORMULA_VERSION)
+    raw_shocks = payload.get("stochastic_shocks")
+    shocks = [dict(item) for item in raw_shocks if isinstance(item, Mapping)] if isinstance(raw_shocks, list) else []
     return ComputationalModel(
         variables=variables,
         edges=edges,
         interventions=interventions,
         formula_version=resolved_formula,
+        stochastic_shocks=shocks,
     )
 
 
@@ -1710,6 +1801,85 @@ def _divergence_limit(model: ComputationalModel, config: EngineConfig) -> float:
     return limit if math.isfinite(limit) else float("inf")
 
 
+def _effective_retention_mode(variable: Variable, formula_version: str) -> str:
+    if variable.retention_mode in {"baseline", "zero"}:
+        return variable.retention_mode
+    return "baseline" if formula_version == FORMULA_VERSION_2_2 else "zero"
+
+
+def _retained_stock_state(
+    variable: Variable,
+    previous_state: float,
+    retention_factor: float,
+    *,
+    formula_version: str,
+    reset: bool,
+) -> float:
+    if reset:
+        return variable.baseline
+    if _effective_retention_mode(variable, formula_version) == "baseline":
+        return variable.baseline + (previous_state - variable.baseline) * retention_factor
+    return previous_state * retention_factor
+
+
+def _sample_run_shocks(
+    model: ComputationalModel,
+    config: EngineConfig,
+    run_id: int,
+    ticks: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Deterministically sample tail shocks for a single addressed simulation trajectory."""
+    if config.mode != "monte_carlo" or not model.stochastic_shocks or ticks <= 0:
+        return [], []
+    interventions: list[dict[str, Any]] = []
+    fired: list[dict[str, Any]] = []
+    for shock in sorted(model.stochastic_shocks, key=lambda item: str(item.get("id", ""))):
+        shock_id = str(shock["id"])
+        target = str(shock["target"])
+        op = str(shock.get("op", "add"))
+        prob = float(shock["probability_per_tick"])
+        raw_mag = shock["magnitude"]
+        start_tick = int(shock.get("start_tick", 0))
+        raw_end = shock.get("end_tick")
+        horizon = min(ticks, int(raw_end)) if raw_end is not None else ticks
+        duration = max(1, int(shock.get("duration_ticks", 1)))
+        active_until = -1
+        for tick in range(max(0, start_tick), max(0, horizon)):
+            if tick < active_until:
+                continue
+            draw = uniform01(config.seed, run_id, shock_id, f"shock_trigger:{tick}")
+            if draw < prob:
+                val = (
+                    _sample_distribution(raw_mag, config, run_id, shock_id, f"shock_mag:{tick}")
+                    if isinstance(raw_mag, dict)
+                    else float(raw_mag)
+                )
+                end_t = tick + duration
+                interventions.append(
+                    {
+                        "id": f"{shock_id}@t{tick}",
+                        "target": target,
+                        "op": op,
+                        "value": val,
+                        "start_tick": tick,
+                        "end_tick": end_t,
+                        "release_policy": "retain",
+                    }
+                )
+                fired.append(
+                    {
+                        "id": shock_id,
+                        "target": target,
+                        "op": op,
+                        "value": val,
+                        "trigger_tick": tick,
+                        "end_tick": end_t,
+                    }
+                )
+                active_until = end_t
+    return interventions, fired
+
+
 def run_deterministic(
 
     model: ComputationalModel,
@@ -1770,10 +1940,14 @@ def run_deterministic(
     if issues:
         return _invalid_run_result(model, config, ticks=ticks, run_id=run_id, issues=issues)
 
+    shock_interventions, triggered_shocks = _sample_run_shocks(model, config, run_id, ticks)
+    diverged = False
+
     for tick in range(max(0, ticks)):
-        # Formula 2.1 uses end-of-step history: stock carry/decay is applied on
+        # Formula 2.1/2.2 use end-of-step history: stock carry/decay is applied on
         # every tick, then delayed inputs, interventions, and zero-lag rates.
-        # Formula 2.0 retains the released level-equation behavior.
+        # Under Formula 2.2.0, un-intervened stocks decay toward baseline by default
+        # (retention_mode='baseline'), preventing zero-intervention baseline collapse.
         released_resets = _reset_releases(model, tick)
         base: dict[str, float] = {}
         stock_audit: dict[str, dict[str, Any]] = {}
@@ -1782,26 +1956,38 @@ def run_deterministic(
                 previous_state = state[key]
                 retention_factor = retention_factors.get(key, 1.0)
                 reset = key in released_resets
-                retained_state = variable.baseline if reset else previous_state * retention_factor
+                retained_state = _retained_stock_state(
+                    variable,
+                    previous_state,
+                    retention_factor,
+                    formula_version=model.formula_version,
+                    reset=reset,
+                )
                 base[key] = retained_state
                 stock_audit[key] = {
                     "tick": tick,
                     "node_id": key,
                     "previous_state": previous_state,
                     "retention_factor": retention_factor,
+                    "retention_mode": _effective_retention_mode(variable, model.formula_version),
                     "retained_state": retained_state,
                     "delayed_input": 0.0,
                     "zero_lag_input": 0.0,
                     "release_policy": "reset_baseline" if reset else None,
                     "interventions": [],
                 }
+            elif tick == 0 and variable.initial_value is not None:
+                base[key] = variable.initial_value
+            elif variable.inertia is not None:
+                base[key] = variable.baseline + variable.inertia * (state[key] - variable.baseline)
             else:
-                base[key] = (
-                    variable.initial_value
-                    if tick == 0 and variable.initial_value is not None
-                    else variable.baseline
-                )
-        active = _active_interventions(model, tick)
+                base[key] = variable.baseline
+        active_shocks = [
+            item
+            for item in shock_interventions
+            if int(item["start_tick"]) <= tick < int(item["end_tick"])
+        ]
+        active = _active_interventions(model, tick) + active_shocks
         blocked = {str(value["target"]) for value in active if value.get("op") == "set"}
         for target, delta, edge_id in scheduled.pop(tick, []):
             if target not in blocked and target in base:
@@ -1982,6 +2168,8 @@ def run_deterministic(
     if model.formula_version != LEGACY_FORMULA_VERSION:
         payload["formula_version"] = model.formula_version
         payload["dynamics_hash"] = canonical_hash(dynamics_history)
+    if triggered_shocks:
+        payload["triggered_shocks"] = triggered_shocks
     digest = canonical_hash(payload)
     response = {
         "ok": not unresolved and not event_storm,
@@ -2036,6 +2224,7 @@ def _signature(
     history: list[dict[str, float]] | None = None,
     *,
     timestep: float = 1.0,
+    triggered_shocks: list[dict[str, Any]] | None = None,
 ) -> str:
     legacy = model is not None and model.formula_version != FORMULA_VERSION_2_2
     tokens: list[str] = []
@@ -2060,6 +2249,10 @@ def _signature(
                         f"{key}:exposure={_regime(exposure, scale, legacy=legacy)}",
                     )
                 )
+    if triggered_shocks:
+        shock_ids = sorted({str(item.get("id", "")) for item in triggered_shocks if item.get("id")})
+        if shock_ids:
+            tokens.append("shock_regime=" + "+".join(shock_ids))
     return "|".join(tokens)
 
 
@@ -2105,31 +2298,37 @@ def _cluster_relative(
     tail_buckets = [] if len(ordered) <= limit else ordered[max(0, limit - 1) :]
     for index, (signature, members) in enumerate(head_buckets):
         representative_run_id, representative = _select_branch_representative(members)
-        branches.append(
-            {
-                "id": f"branch:cluster-{index}",
-                "relative_weight": len(members) / total_runs,
-                "probability": None,
-                "member_count": len(members),
-                "representative": representative,
-                "representative_run": f"run:{representative_run_id}",
-                "signature": signature,
-            }
-        )
+        is_shock_tail = "shock_regime=" in signature
+        branch_entry: dict[str, Any] = {
+            "id": f"branch:cluster-{index}",
+            "relative_weight": len(members) / total_runs,
+            "probability": None,
+            "member_count": len(members),
+            "representative": representative,
+            "representative_run": f"run:{representative_run_id}",
+            "signature": signature,
+        }
+        if is_shock_tail:
+            branch_entry["tail"] = True
+            branch_entry["tail_class"] = "tail_shock"
+        branches.append(branch_entry)
     if tail_buckets:
         tail_members = [member for _, members in tail_buckets for member in members]
         representative_run_id, representative = _select_branch_representative(tail_members)
-        branches.append(
-            {
-                "id": f"branch:cluster-{len(head_buckets)}",
-                "relative_weight": len(tail_members) / total_runs,
-                "probability": None,
-                "member_count": len(tail_members),
-                "representative": representative,
-                "representative_run": f"run:{representative_run_id}",
-                "signature": f"tail_consolidated:{len(tail_buckets)}_regimes",
-            }
-        )
+        tail_has_shock = any("shock_regime=" in sig for sig, _ in tail_buckets)
+        tail_entry: dict[str, Any] = {
+            "id": f"branch:cluster-{len(head_buckets)}",
+            "relative_weight": len(tail_members) / total_runs,
+            "probability": None,
+            "member_count": len(tail_members),
+            "representative": representative,
+            "representative_run": f"run:{representative_run_id}",
+            "signature": f"tail_consolidated:{len(tail_buckets)}_regimes",
+        }
+        if tail_has_shock:
+            tail_entry["tail"] = True
+            tail_entry["tail_class"] = "tail_shock"
+        branches.append(tail_entry)
     return branches
 
 
@@ -2190,6 +2389,7 @@ def run_monte_carlo(model: ComputationalModel, config: EngineConfig, *, ticks: i
                             model,
                             result.get("history"),
                             timestep=config.timestep,
+                            triggered_shocks=result["payload"].get("triggered_shocks"),
                         ),
                     )
                 )
@@ -2312,15 +2512,19 @@ def _populate_trace_step_details(
         except ValueError:
             step_dict["input_effect"] = 0.0
     if edge.target in model.variables and model.variables[edge.target].scale == "stock":
+        target_var = model.variables[edge.target]
         ret_factor = float(retention_factors.get(edge.target, 1.0))
-        explicit_decay = model.variables[edge.target].decay_rate
+        explicit_decay = target_var.decay_rate
         if explicit_decay is not None:
             decay_val = float(explicit_decay)
         elif 0.0 < ret_factor < 1.0:
             decay_val = round(1.0 - ret_factor, 6)
         else:
             decay_val = 0.0
-        outflow_rate = target_state_before * (1.0 - ret_factor) / float(config.timestep)
+        if _effective_retention_mode(target_var, formula) == "baseline":
+            outflow_rate = (target_state_before - target_var.baseline) * (1.0 - ret_factor) / float(config.timestep)
+        else:
+            outflow_rate = target_state_before * (1.0 - ret_factor) / float(config.timestep)
         step_dict["stock_flow_integrations"] = {
             "stock_variable": edge.target,
             "inflow_rate": output,
@@ -2420,14 +2624,20 @@ def generate_numerical_execution_trace(
                 previous_state = state[key]
                 retention_factor = retention_factors.get(key, 1.0)
                 reset = key in released_resets
-                retained_state = variable.baseline if reset else previous_state * retention_factor
-                base[key] = retained_state
-            else:
-                base[key] = (
-                    variable.initial_value
-                    if tick == 0 and variable.initial_value is not None
-                    else variable.baseline
+                retained_state = _retained_stock_state(
+                    variable,
+                    previous_state,
+                    retention_factor,
+                    formula_version=active_formula,
+                    reset=reset,
                 )
+                base[key] = retained_state
+            elif tick == 0 and variable.initial_value is not None:
+                base[key] = variable.initial_value
+            elif variable.inertia is not None:
+                base[key] = variable.baseline + variable.inertia * (state[key] - variable.baseline)
+            else:
+                base[key] = variable.baseline
 
         active = _active_interventions(model, tick)
         blocked = {str(value["target"]) for value in active if value.get("op") == "set"}

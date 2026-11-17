@@ -253,11 +253,19 @@ def compile_workspace(workspace: Path, *, formula_version: str | None = None) ->
         raise ValueError("manifest-declared node or edge artifact is unavailable")
     nodes = _unwrap_graph_list(_load_json_or_raise(node_path), "nodes")
     edges = _unwrap_graph_list(_load_json_or_raise(edge_path), "edges")
+    shocks = manifest.get("stochastic_shocks") if isinstance(manifest, dict) else None
+    if not shocks:
+        cfg_path = workspace / "simulation-config.json"
+        if cfg_path.is_file():
+            cfg_data = _load_json_or_raise(cfg_path)
+            if isinstance(cfg_data, dict) and cfg_data.get("stochastic_shocks"):
+                shocks = cfg_data.get("stochastic_shocks")
     model = compile_model(
         nodes,
         edges,
         load_interventions(workspace, manifest if isinstance(manifest, dict) else {}),
         formula_version=resolved_formula_version,
+        stochastic_shocks=shocks if isinstance(shocks, list) else None,
     )
     body = model_payload(model)
     source_hashes = {

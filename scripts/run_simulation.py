@@ -281,13 +281,18 @@ def main() -> None:
         raise SystemExit(EXIT_USAGE)
     try:
         formula_version = _formula_version(workspace, manifest if isinstance(manifest, dict) else {})
+        config, raw_cfg = _config(workspace, args, manifest if isinstance(manifest, dict) else {})
+        shocks = (
+            raw_cfg.get("stochastic_shocks")
+            or (manifest.get("stochastic_shocks") if isinstance(manifest, dict) else None)
+        )
         model = compile_model(
             nodes if isinstance(nodes, list) else [],
             edges if isinstance(edges, list) else [],
             load_interventions(workspace, manifest if isinstance(manifest, dict) else {}),
             formula_version=formula_version,
+            stochastic_shocks=shocks if isinstance(shocks, list) else None,
         )
-        config, raw_cfg = _config(workspace, args, manifest if isinstance(manifest, dict) else {})
         ticks = args.ticks
         if ticks is None:
             if "ticks" in raw_cfg:

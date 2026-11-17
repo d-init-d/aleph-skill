@@ -88,6 +88,8 @@ bindings. Stable task routes include:
 | Signed-ledger import verification | `research:import` | `scripts/evidence_ledger.py verify` |
 | Research plan and gates | `research:plan` | `scripts/research_plan.py` |
 | Dual-branch controller and evidence-backed fast evaluation | `research:controller`, `research:fast` | `scripts/research_controller.py`, `scripts/fast_evaluator.py` |
+| DRS-1.1 host/browser execution evidence | `research:execution-evidence` | `scripts/execution_evidence.py` |
+| Paraphrase-aware source grounding audit | `research:grounding` | `scripts/source_grounding.py` |
 | Lineage tracking and cross-branch reconciliation | `research:lineage`, `research:reconcile` | `scripts/lineage_tracker.py`, `scripts/reconciliation.py` |
 | Social payload normalization and capability reporting | `research:social-capabilities` | `scripts/social_adapters.py` |
 | Investigation scope and source policy | `research:policy` | `scripts/investigation_policy.py` |

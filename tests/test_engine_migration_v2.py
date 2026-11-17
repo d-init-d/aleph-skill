@@ -285,8 +285,8 @@ class PackV2RegressionTests(unittest.TestCase):
 
     def test_fake_calibrated_claim_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            pack = Path(temporary) / "economics"
-            shutil.copytree(ROOT / "packs" / "economics", pack)
+            pack = Path(temporary) / "policy"
+            shutil.copytree(ROOT / "packs" / "policy", pack)
             manifest_path = pack / "pack-manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["maturity"] = "calibrated"
@@ -295,6 +295,13 @@ class PackV2RegressionTests(unittest.TestCase):
             result = validate_pack(pack)
             self.assertFalse(result["ok"])
             self.assertFalse(result["can_emit_probability"])
+
+    def test_economics_pack_is_calibrated(self) -> None:
+        result = validate_pack(ROOT / "packs" / "economics")
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["maturity"], "calibrated")
+        self.assertTrue(result["can_emit_probability"])
+        self.assertEqual(result["hindcast_cases"], 30)
 
 
 class RunContractRegressionTests(unittest.TestCase):

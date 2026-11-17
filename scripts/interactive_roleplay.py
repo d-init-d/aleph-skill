@@ -23,6 +23,7 @@ from aleph.interactive_roleplay import (
     generate_actor_packets,
     init_roleplay_session,
     replay_roleplay_session,
+    simulate_roleplay_branches,
 )
 from aleph.io import canonical_hash, load_json_secure, write_json_atomic
 
@@ -144,6 +145,23 @@ def cmd_replay(args: argparse.Namespace) -> int:
     return 0 if res.get("ok") else 1
 
 
+def cmd_simulate_branches(args: argparse.Namespace) -> int:
+    session_path = Path(args.session)
+    session = _load_object(session_path)
+    model = _resolve_model(args)
+    res = simulate_roleplay_branches(
+        session,
+        model,
+        _session_config(session),
+        max_branches=args.max_branches,
+        ticks=args.ticks,
+    )
+    if args.out:
+        write_json_atomic(Path(args.out), res)
+    print(json.dumps(res, indent=2))
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Aleph Multi-Actor Interactive Roleplay CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -188,6 +206,15 @@ def main() -> int:
     p_rep.add_argument("--model", help="Path to computational model JSON")
     p_rep.add_argument("--workspace", help="Path to workspace directory containing simulation-model.json")
 
+    # simulate-branches
+    p_sim = subparsers.add_parser("simulate-branches")
+    p_sim.add_argument("--session", required=True, help="Path to session JSON")
+    p_sim.add_argument("--model", help="Path to computational model JSON")
+    p_sim.add_argument("--workspace", help="Path to workspace directory containing simulation-model.json")
+    p_sim.add_argument("--max-branches", type=int, default=6, help="Maximum branches to evaluate")
+    p_sim.add_argument("--ticks", type=int, help="Optional horizon tick override")
+    p_sim.add_argument("--out", help="Optional output path for simulated branch ledger JSON")
+
     args = parser.parse_args()
     if args.command == "init":
         return cmd_init(args)
@@ -201,6 +228,8 @@ def main() -> int:
         return cmd_finalize(args)
     if args.command == "replay":
         return cmd_replay(args)
+    if args.command == "simulate-branches":
+        return cmd_simulate_branches(args)
     return 1
 
 

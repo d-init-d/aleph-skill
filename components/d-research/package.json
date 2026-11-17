@@ -4,8 +4,8 @@
     "projection": "runtime-package-v1",
     "source_package_manifest": {
       "algorithm": "sha256",
-      "file_count": 252,
-      "paths_sha256": "sha256:0b72bc119a4f225eccf28aabeaab21483830c580dcab527906918d892be9cf51",
+      "file_count": 254,
+      "paths_sha256": "sha256:c311340999dd32278c39a53f26ac212b95f389c0858b86a9face35a327ea4c00",
       "schema_version": 1
     }
   },
@@ -145,5 +145,5 @@
     "wikidata:sparql": "node scripts/run_python.mjs scripts/wikidata.py sparql"
   },
   "type": "module",
-  "version": "3.7.0"
+  "version": "3.8.0"
 }

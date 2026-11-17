@@ -774,7 +774,7 @@ class ForecastingCalibrationPacksQualityAndAutoCausalTests(unittest.TestCase):
         econ_dir = ROOT / "packs" / "economics"
         cand_maes: list[float] = []
         base_maes: list[float] = []
-        for idx in range(2, 32):
+        for idx in range(1, 31):
             case = json.loads((econ_dir / "hindcast" / f"case-{idx:03d}.json").read_text(encoding="utf-8"))
             ev = evaluate_hindcast_case(case)
             self.assertTrue(ev["ok"], f"case-{idx:03d}: {ev}")
@@ -789,7 +789,7 @@ class ForecastingCalibrationPacksQualityAndAutoCausalTests(unittest.TestCase):
             bad_pack = Path(td) / "economics"
             shutil.copytree(econ_dir, bad_pack)
             bad_pol = json.loads((bad_pack / "calibration-policy.json").read_text(encoding="utf-8"))
-            for idx in range(2, 32):
+            for idx in range(1, 31):
                 cp = bad_pack / "hindcast" / f"case-{idx:03d}.json"
                 case = json.loads(cp.read_text(encoding="utf-8"))
                 for edge in case["model"]["edges"]:

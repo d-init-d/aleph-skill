@@ -48,6 +48,47 @@ def _slugify(text: str) -> str:
     return cleaned or "unnamed"
 
 
+_COMPACT_STOPWORDS = frozenset(
+    {
+        "the", "a", "an", "of", "in", "on", "at", "for", "with", "across", "among", "during",
+        "các", "những", "việc", "sự", "tại", "trong", "với", "của", "cho",
+    }
+)
+
+
+def _compact_factor_phrase(text: str, *, max_words: int = 6, max_chars: int = 56) -> tuple[str, str]:
+    """Return ``(compact_name, raw_name)`` capping long clause phrases cleanly."""
+    raw_name = re.sub(r"\s+", " ", text).strip(" ,.;:-")
+    if not raw_name:
+        return "unnamed", "unnamed"
+    if len(raw_name) <= max_chars and len(raw_name.split()) <= max_words:
+        return raw_name, raw_name
+
+    # Strip subordinate/relative clauses first to retain the core head noun phrase.
+    head = re.split(
+        r"\b(?:that|which|who|whom|whose|where|when|while|whereas|because|since|although|including|without)\b|"
+        r"(?:\bmà\b|\btrong khi\b|\bnhằm\b|\bđể\b|\bbởi vì\b|\bmặc dù\b|\bbao gồm\b)",
+        raw_name,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0].strip(" ,.;:-")
+    words = head.split() or raw_name.split()
+    if len(words) > max_words:
+        filtered = [w for w in words if w.lower() not in _COMPACT_STOPWORDS]
+        if len(filtered) >= 2:
+            words = filtered
+    selected: list[str] = []
+    total_len = 0
+    for word in words[:max_words]:
+        projected = total_len + (1 if selected else 0) + len(word)
+        if selected and projected > max_chars:
+            break
+        selected.append(word)
+        total_len = projected
+    compact = " ".join(selected) if selected else raw_name[:max_chars].strip()
+    return compact, raw_name
+
+
 # --- Pattern Matching for Bilingual Causal Extraction ---
 
 # English causal verbs / phrases
@@ -638,15 +679,15 @@ def _ingest_wide_timeseries_csv(
                 "observation_time": obs_time_last,
                 "node_measurements": {
                     src_id: {
-                        "baseline": vals_a[-1],
+                        "baseline": vals_a[0],
                         "initial_value": vals_a[0],
-                        "time": obs_time_last,
+                        "time": _normalise_csv_timestamp(obs_time_first),
                         "unit": _infer_series_unit(col_a),
                     },
                     tgt_id: {
-                        "baseline": vals_b[-1],
+                        "baseline": vals_b[0],
                         "initial_value": vals_b[0],
-                        "time": obs_time_last,
+                        "time": _normalise_csv_timestamp(obs_time_first),
                         "unit": _infer_series_unit(col_b),
                     },
                 },
@@ -751,6 +792,8 @@ def propose_model(
                 "source_anchor": quote_text[:120] if quote_text else claim_text[:120],
             }
             continue
+        source_name, raw_source_name = _compact_factor_phrase(source_name)
+        target_name, raw_target_name = _compact_factor_phrase(target_name)
         source_slug = _slugify(source_name)
         target_slug = _slugify(target_name)
 
@@ -759,7 +802,10 @@ def propose_model(
         edge_id = f"causal:{source_slug}-to-{target_slug}"
 
         # Register or update candidate nodes
-        for node_id, node_name in [(source_id, source_name), (target_id, target_name)]:
+        for node_id, node_name, raw_node_name in [
+            (source_id, source_name, raw_source_name),
+            (target_id, target_name, raw_target_name),
+        ]:
             if node_id not in nodes_by_id:
                 scale = _classify_scale(node_name)
                 unit = _detect_unit(combined_text)
@@ -821,6 +867,8 @@ def propose_model(
                     "evidence_ids": [evidence_id],
                     "source_anchor": quote_text[:120] if quote_text else claim_text[:120],
                 }
+                if raw_node_name != node_name:
+                    node_obj["description"] = raw_node_name
                 if _finite_number(measurement.get("initial_value")):
                     node_obj["initial_value"] = float(measurement["initial_value"])
                 if scale == "stock":

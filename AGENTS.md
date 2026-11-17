@@ -24,6 +24,7 @@ Useful commands (use `python3` on POSIX or `python` on Windows):
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/research_gateway.py" research:preflight`
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/init_simulation_workspace.py" --slug <slug> --change-point "..." --time <date> --horizon <duration> --observation-cutoff <date> --out-dir <user-workspace> [--offline-provisional]`
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/quickstart_quant.py" --out-dir <output-parent> --slug <slug> --change-point "..." --time <date> --horizon <duration> --observation-cutoff <date> [--offline-provisional]`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/run_pipeline.py" --out-dir <output-parent> --slug <slug> --change-point "..." --ledger <ledger.csv> --review <review.json> [--offline-provisional]`
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/repair_model_schema.py" --workspace <run-dir> --in-place`
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <1.2-dir> --out <sibling-v2>`
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <ws> --bind-bundled-d-research --check`

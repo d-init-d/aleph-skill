@@ -1,15 +1,15 @@
 {
   "schema_version": "2.0.0",
   "formula_version": "2.2.0",
-  "case_id": "hindcast:economics:macro-brent-2024-06",
-  "cutoff": "2024-06-11T00:00:00Z",
-  "official_release_date": "2024-07-10T13:30:00Z",
-  "evidence_snapshot_hash": "6c95064cb9ef7136ab80a5173c8d6045c5f00562efad5a185f7ed5958bf2726f",
-  "model_hash": "0c253c44f2944ba4bffe2cdc5e1fde4fcd3c5cf72417b57c5ca90fa01b2f9cc9",
+  "case_id": "hindcast:economics:macro-brent-2024-07",
+  "cutoff": "2024-07-11T00:00:00Z",
+  "official_release_date": "2024-08-10T13:30:00Z",
+  "evidence_snapshot_hash": "eb49f37ecb1ea68cf210555349a2c4e21f964b734eed96fa4291a66b253723c3",
+  "model_hash": "f4804cc4288afc9657b6a0b5eb11ac66a1c54693a0c862dd2987670ec6e2d0ba",
   "outcome_dataset": {
     "source": "data/us_macro_2024_2026.json",
     "sha256": "6f6065a4f1abd413b6bd98a9dada614a5501ab3287bbc00220edaa63969bdb1b",
-    "observed_at": "2024-07-10T13:30:00Z"
+    "observed_at": "2024-08-10T13:30:00Z"
   },
   "model": {
     "nodes": [
@@ -18,7 +18,7 @@
         "role": "exogenous",
         "datatype": "continuous",
         "unit": "USD/bbl",
-        "baseline": 81.75,
+        "baseline": 82.25,
         "bounds": [
           0,
           500
@@ -29,7 +29,7 @@
         "role": "exogenous",
         "datatype": "continuous",
         "unit": "USD/bbl",
-        "baseline": -8.189999999999998,
+        "baseline": 0.5,
         "bounds": [
           -200,
           200
@@ -63,7 +63,7 @@
         "from": "economics:brent_delta",
         "to": "economics:brent_forecast",
         "sign": 1,
-        "base_strength": 0.086733,
+        "base_strength": 0.047506,
         "lag_ticks": 0,
         "transform": "linear",
         "input_mode": "level"
@@ -77,10 +77,10 @@
   },
   "ticks": 1,
   "observations": {
-    "economics:brent_forecast": 82.25
+    "economics:brent_forecast": 85.15
   },
   "baselines": {
-    "economics:brent_forecast": 81.75
+    "economics:brent_forecast": 82.25
   },
   "evidence": [
     {
@@ -112,6 +112,12 @@
       "available_at": "2024-06-10T13:30:00Z",
       "vintage_date": "2024-06-10T13:30:00Z",
       "value": 81.75
+    },
+    {
+      "id": "evidence:economics:brent:2024-06",
+      "available_at": "2024-07-10T13:30:00Z",
+      "vintage_date": "2024-07-10T13:30:00Z",
+      "value": 82.25
     }
   ],
   "provenance": "Retrospective Brent regression fixture using estimated monthly release timestamps"

@@ -52,6 +52,15 @@
           "name": {
             "type": "string"
           },
+          "description": {
+            "type": "string"
+          },
+          "initial_value": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "scale": {
             "enum": [
               "level",

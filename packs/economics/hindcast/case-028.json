@@ -1,15 +1,15 @@
 {
   "schema_version": "2.0.0",
   "formula_version": "2.2.0",
-  "case_id": "hindcast:economics:macro-brent-2026-07",
-  "cutoff": "2026-07-11T00:00:00Z",
-  "official_release_date": "2026-08-10T13:30:00Z",
-  "evidence_snapshot_hash": "9cd44a55955920d7d6d540025a3e0ff7a62a0066a296438fcbaa5b9e612e0533",
-  "model_hash": "c0b59bc9306f53623a410e6d401210df11bdf8a1e0874073ac702dd9af82450f",
+  "case_id": "hindcast:economics:macro-brent-2026-08",
+  "cutoff": "2026-08-11T00:00:00Z",
+  "official_release_date": "2026-09-10T13:30:00Z",
+  "evidence_snapshot_hash": "0ba41166ad1866ee169506fb65f4a3880ad392759332b95f33f221abd06f05a1",
+  "model_hash": "2a9b36e88359dcbe4f2e25c436d52c1268c3eeefd8976287b7c7067ea94dac53",
   "outcome_dataset": {
     "source": "data/us_macro_2024_2026.json",
     "sha256": "6f6065a4f1abd413b6bd98a9dada614a5501ab3287bbc00220edaa63969bdb1b",
-    "observed_at": "2026-08-10T13:30:00Z"
+    "observed_at": "2026-09-10T13:30:00Z"
   },
   "model": {
     "nodes": [
@@ -18,7 +18,7 @@
         "role": "exogenous",
         "datatype": "continuous",
         "unit": "USD/bbl",
-        "baseline": 85.4,
+        "baseline": 83.76,
         "bounds": [
           0,
           500
@@ -29,7 +29,7 @@
         "role": "exogenous",
         "datatype": "continuous",
         "unit": "USD/bbl",
-        "baseline": -21.739999999999995,
+        "baseline": -1.6400000000000006,
         "bounds": [
           -200,
           200
@@ -63,7 +63,7 @@
         "from": "economics:brent_delta",
         "to": "economics:brent_forecast",
         "sign": 1,
-        "base_strength": 0.404147,
+        "base_strength": 0.342646,
         "lag_ticks": 0,
         "transform": "linear",
         "input_mode": "level"
@@ -77,18 +77,12 @@
   },
   "ticks": 1,
   "observations": {
-    "economics:brent_forecast": 83.76
+    "economics:brent_forecast": 91.08
   },
   "baselines": {
-    "economics:brent_forecast": 85.4
+    "economics:brent_forecast": 83.76
   },
   "evidence": [
-    {
-      "id": "evidence:economics:brent:2025-11",
-      "available_at": "2025-12-10T13:30:00Z",
-      "vintage_date": "2025-12-10T13:30:00Z",
-      "value": 63.8
-    },
     {
       "id": "evidence:economics:brent:2025-12",
       "available_at": "2026-01-10T13:30:00Z",
@@ -130,6 +124,12 @@
       "available_at": "2026-07-10T13:30:00Z",
       "vintage_date": "2026-07-10T13:30:00Z",
       "value": 85.4
+    },
+    {
+      "id": "evidence:economics:brent:2026-07",
+      "available_at": "2026-08-10T13:30:00Z",
+      "vintage_date": "2026-08-10T13:30:00Z",
+      "value": 83.76
     }
   ],
   "provenance": "Retrospective Brent regression fixture using estimated monthly release timestamps"

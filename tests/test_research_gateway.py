@@ -465,6 +465,16 @@ class ResearchGatewayTests(unittest.TestCase):
         self.assertIn("investigation-policy-self-test", names)
         self.assertNotIn("upstream-repository-contract", names)
 
+    def test_v380_unlocked_execution_evidence_and_grounding_routes(self) -> None:
+        self.assertEqual(COMMAND_ROUTES["research:execution-evidence"]["script"], "scripts/execution_evidence.py")
+        self.assertEqual(COMMAND_ROUTES["research:grounding"]["script"], "scripts/source_grounding.py")
+        with tempfile.TemporaryDirectory() as temporary:
+            ws = Path(temporary)
+            ev = run_command("research:execution-evidence", skill_root=ROOT, extra_args=["verify", "--workspace", str(ws)], workspace=ws)
+            self.assertEqual(ev["exit_code"], 0, ev)
+            gr = run_command("research:grounding", skill_root=ROOT, extra_args=["self-test"], workspace=ws)
+            self.assertEqual(gr["exit_code"], 0, gr)
+
     def test_network_route_without_explicit_capability_is_delegated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             result = run_command(

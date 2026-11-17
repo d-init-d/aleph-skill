@@ -209,8 +209,6 @@ NON_DISPATCHABLE_SCRIPTS = frozenset(
     {
         "scripts/_ssrf_helpers.py",
         "scripts/content_sanitize.py",
-        "scripts/execution_evidence.py",  # imported trust-boundary helper; no CLI
-        "scripts/source_grounding.py",
         "scripts/generate_test_pdf.py",  # hard-codes writes beside __file__
         "scripts/run_python.mjs",  # accepts an arbitrary script path
         "scripts/lib/browser_connector.mjs",
@@ -244,28 +242,33 @@ PATH_OPTIONS = frozenset(
         "--bench",
         "--bib",
         "--cache-path",
+        "--captures",
         "--ci-evidence",
         "--csl",
         "--config",
         "--capture-records",
+        "--coverage-path",
         "--extract-to",
         "--file",
         "--fixture",
         "--findings-ledger",
         "--fixtures",
         "--forward-artifacts",
+        "--from-captures",
         "--graph",
         "--in",
         "--index",
         "--input",
         "--ledger",
         "--ledgers-dir",
+        "--observed-state-ref",
         "--out",
         "--out-dir",
         "--outDir",
         "--out-row",
         "--output-dir",
         "--profiles",
+        "--raw-text-out",
         "--repo",
         "--report",
         "--root",
@@ -278,6 +281,7 @@ PATH_OPTIONS = frozenset(
         "--sig",
         "--source-file",
         "--source-root",
+        "--text-file",
         "--workspace",
         "--workspace-dir",
         "--workflow-path",
@@ -422,7 +426,9 @@ COMMAND_ROUTES: dict[str, dict[str, Any]] = {
     "research:import": _route("scripts/evidence_ledger.py", prefix=("verify",), hmac=True),
     "research:plan": _route("scripts/research_plan.py", hmac=True),
     "research:controller": _route("scripts/research_controller.py"),
+    "research:execution-evidence": _route("scripts/execution_evidence.py"),
     "research:fast": _route("scripts/fast_evaluator.py"),
+    "research:grounding": _route("scripts/source_grounding.py"),
     "research:lineage": _route("scripts/lineage_tracker.py"),
     "research:reconcile": _route("scripts/reconciliation.py"),
     "research:social-capabilities": _route("scripts/social_adapters.py"),
@@ -622,8 +628,8 @@ def _reconcile_component_acceptance(
     # Earlier locked identities remain reconciliable so re-locking an older
     # snapshot never loses capability.
     component_version = str(reconciliation.get("component_version") or "")
-    if component_version in {"3.4.0", "3.4.1", "3.4.2", "3.5.0", "3.6.0-rc.1"} or component_version.startswith(("3.4.", "3.5.", "3.6.", "3.7.")):
-        # Empirically verified on the locked v3.4.x, v3.5.x, v3.6.x, and v3.7.x snapshots: the only
+    if component_version in {"3.4.0", "3.4.1", "3.4.2", "3.5.0", "3.6.0-rc.1"} or component_version.startswith(("3.4.", "3.5.", "3.6.", "3.7.", "3.8.")):
+        # Empirically verified on the locked v3.4.x, v3.5.x, v3.6.x, v3.7.x, and v3.8.x snapshots: the only
         # repository-only failure is check_contract's self-test reading the
         # excluded CI workflow file.
         repo_only_failures = ["23_unsafe_runtime_config"]

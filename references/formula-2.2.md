@@ -44,3 +44,9 @@ When `timestep >= 7` days (for example `P1W`, `P1M`) and a `scale: "stock"` node
 
 - **Node `initial_value`**: Optional finite numeric starting state at `tick = 0` distinct from equilibrium reference `baseline`. Under `deviation` or `log_ratio` inputs, setting `initial_value != baseline` models ongoing pre-cutoff disequilibrium momentum without flagging `ZERO_INTERVENTION_DRIFT`.
 - **Edge `gate`**: Optional conditional block (`{"op": "all" | "any" | "veto", "conditions": [{"node": "<id>", "op": "gt" | "gte" | "lt" | "lte", "value": <number>}]}`). Evaluates against `history[source_tick]` to yield `gate_multiplier` in `[0.0, 1.0]`, blocking instant SCC affine simplification whenever present.
+
+## v2.9.0 Additive Dynamics (`retention_mode`, `inertia`, `stochastic_shocks`)
+
+- **Stock `retention_mode`**: `formula_version: "2.2.0"` defaults `scale: "stock"` nodes to `retention_mode: "baseline"` (`baseline + retention ** dt * (state - baseline) + flow * dt`), keeping stocks resting at `baseline` when net flows are zero (`retention_mode: "zero"` remains opt-in on `2.2.0` and default for `2.0.0`/`2.1.0` replay).
+- **Level `inertia`**: Optional damping coefficient in `[0.0, 1.0)` on `scale: "level"` nodes (`base_state = baseline + inertia * (prev_state - baseline)` before incoming edge effects and interventions) for gradual disequilibrium decay without converting levels into cumulative stocks.
+- **Discrete `stochastic_shocks`**: Optional simulation-level array of deterministic Bernoulli tail-shock rules (`{"id", "target", "op": "add" | "multiply" | "set", "probability_per_tick", "magnitude", "start_tick", "end_tick", "duration_ticks"}`). Sampled deterministically per Monte Carlo run, recorded in run receipts and `tail_class: "tail_shock"` branches without affecting deterministic runs or legacy manifest hashes when omitted.

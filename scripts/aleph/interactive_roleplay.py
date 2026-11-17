@@ -42,6 +42,51 @@ def _verify_execution_identity(
         raise ValueError("SESSION_SPEC_MISMATCH: session specification changed after initialization")
 
 
+def _synthesize_state_weights_from_objectives(
+    raw_objectives: Any,
+    actor: str,
+    model: ComputationalModel | None = None,
+) -> tuple[dict[str, float], list[str]]:
+    """Convert structured actor objectives into signed linear ``state_weights``."""
+    errs: list[str] = []
+    weights: dict[str, float] = {}
+    if isinstance(raw_objectives, dict):
+        for target, val in raw_objectives.items():
+            if not isinstance(target, str) or not target:
+                errs.append(f"Objective target in actor '{actor}' must be non-empty string")
+                continue
+            if not isinstance(val, (int, float)) or isinstance(val, bool) or not math.isfinite(val):
+                errs.append(f"Objective weight for {target} in actor '{actor}' must be finite number")
+                continue
+            if model and target not in model.variables:
+                errs.append(f"Objective target '{target}' in actor '{actor}' not in model variables")
+            weights[target] = float(val)
+        return weights, errs
+    if not isinstance(raw_objectives, list) or not raw_objectives:
+        return {}, [f"Actor '{actor}' objectives must be a non-empty list or object"]
+    for idx, item in enumerate(raw_objectives):
+        if not isinstance(item, dict):
+            errs.append(f"Actor '{actor}' objective[{idx}] must be an object")
+            continue
+        target = item.get("target")
+        direction = str(item.get("direction", "increase")).strip().lower()
+        weight_raw = item.get("weight", 1.0)
+        if not isinstance(target, str) or not target:
+            errs.append(f"Actor '{actor}' objective[{idx}] missing target")
+            continue
+        if direction not in {"increase", "decrease", "maximize", "minimize"}:
+            errs.append(f"Actor '{actor}' objective[{idx}] direction must be increase or decrease")
+            continue
+        if not isinstance(weight_raw, (int, float)) or isinstance(weight_raw, bool) or not math.isfinite(weight_raw):
+            errs.append(f"Actor '{actor}' objective[{idx}] weight must be finite number")
+            continue
+        if model and target not in model.variables:
+            errs.append(f"Objective target '{target}' in actor '{actor}' not in model variables")
+        sign = -1.0 if direction in {"decrease", "minimize"} else 1.0
+        weights[target] = weights.get(target, 0.0) + sign * float(weight_raw)
+    return weights, errs
+
+
 def validate_session_spec(
     spec: dict[str, Any],
     model: ComputationalModel | None = None,
@@ -157,25 +202,33 @@ def validate_session_spec(
         all_actor_actions = [actor_action_map[a] for a in actors]
         expected_profiles = list(itertools.product(*all_actor_actions))
 
+        raw_spec_objectives = spec.get("objectives")
+        spec_objectives: dict[str, Any] = raw_spec_objectives if isinstance(raw_spec_objectives, dict) else {}
         for actor in actors:
             p_conf = payoffs.get(actor)
             if not isinstance(p_conf, dict):
                 errors.append(f"Missing payoff configuration for actor '{actor}'")
                 continue
+            raw_objectives = p_conf.get("objectives", spec_objectives.get(actor))
             state_weights = p_conf.get("state_weights")
+            has_objectives = raw_objectives is not None
             if not isinstance(state_weights, dict):
-                errors.append(f"Actor '{actor}' payoff missing state_weights object")
+                if has_objectives:
+                    _, obj_errs = _synthesize_state_weights_from_objectives(raw_objectives, actor, model)
+                    errors.extend(obj_errs)
+                else:
+                    errors.append(f"Actor '{actor}' payoff missing state_weights object")
             else:
                 for n, w in state_weights.items():
-                    if not isinstance(w, (int, float)) or not math.isfinite(w):
+                    if not isinstance(w, (int, float)) or isinstance(w, bool) or not math.isfinite(w):
                         errors.append(f"state_weight for {n} in actor '{actor}' must be finite number")
                     if model and n not in model.variables:
                         errors.append(f"state_weight node '{n}' in actor '{actor}' not in model variables")
             util_table = p_conf.get("utility_table")
-            has_param_fields = param_payoffs and (
+            has_param_fields = param_payoffs or has_objectives or (
                 "default_utility" in p_conf or "action_weights" in p_conf
             )
-            if has_param_fields:
+            if has_param_fields and ("utility_table" not in p_conf or param_payoffs):
                 if "default_utility" in p_conf:
                     du = p_conf["default_utility"]
                     if not isinstance(du, (int, float)) or isinstance(du, bool) or not math.isfinite(du):
@@ -235,6 +288,15 @@ def init_roleplay_session(
         raise ValueError("Invalid roleplay session spec:\n  " + "\n  ".join(errors))
 
     spec_copy = copy.deepcopy(spec)
+    raw_spec_obj = spec_copy.get("objectives")
+    spec_objectives: dict[str, Any] = raw_spec_obj if isinstance(raw_spec_obj, dict) else {}
+    for actor in spec_copy.get("actors", []):
+        p_conf = spec_copy["payoffs"][actor]
+        if "state_weights" not in p_conf:
+            raw_obj = p_conf.get("objectives", spec_objectives.get(actor))
+            if raw_obj is not None:
+                sw, _ = _synthesize_state_weights_from_objectives(raw_obj, actor, model_obj)
+                p_conf["state_weights"] = sw
     spec_hash = canonical_hash(spec_copy)
     now = _iso_now()
     cfg = config or EngineConfig(seed="42")
@@ -910,4 +972,107 @@ def suggest_round_commitments(
         "best_joint_profile": best_joint_profile,
         "best_joint_payoffs": best_joint_payoffs,
         "recommendations": recommendations,
+    }
+
+
+def simulate_roleplay_branches(
+    session: dict[str, Any],
+    initial_model: ComputationalModel,
+    config: EngineConfig | None = None,
+    *,
+    max_branches: int = 6,
+    ticks: int | None = None,
+) -> dict[str, Any]:
+    """Compare realized roleplay commits against single-actor deviation counterfactual branches."""
+    cfg = config or EngineConfig(seed="42")
+    _verify_execution_identity(session, initial_model, cfg)
+    spec = session["spec"]
+    actors = spec["actors"]
+    decision_ticks = spec["decision_ticks"]
+    eval_horizon = ticks if ticks is not None else (int(decision_ticks[-1]) + 10)
+    rounds = session.get("rounds", [])
+    if not rounds:
+        raise ValueError("Cannot simulate branches without at least one executed round")
+
+    baseline_actions = {a: rounds[-1]["committed_actions"][a] for a in actors}
+    candidate_profiles: list[tuple[str, str, list[dict[str, Any]], dict[str, str]]] = []
+    realized_intervs: list[dict[str, Any]] = []
+    for r in rounds:
+        realized_intervs.extend(r.get("interventions", []))
+    candidate_profiles.append(("branch:committed", "Realized Committed Path", realized_intervs, baseline_actions))
+
+    # Enumerate single-actor counterfactual deviations at the final executed round.
+    last_round = rounds[-1]
+    last_idx = int(last_round["round_index"])
+    last_tick = int(decision_ticks[last_idx])
+    prior_intervs: list[dict[str, Any]] = []
+    for r in rounds[:-1]:
+        prior_intervs.extend(r.get("interventions", []))
+    for actor in actors:
+        for act in spec["allowed_actions"][actor]:
+            aid = act["id"]
+            if aid == baseline_actions[actor]:
+                continue
+            cf_profile = {**baseline_actions, actor: aid}
+            cf_intervs = prior_intervs + _derive_round_interventions(spec, cf_profile, last_idx, last_tick)
+            slug = f"{actor}-{aid}".lower().replace(":", "-").replace("_", "-")
+            candidate_profiles.append(
+                (
+                    f"branch:cf-{slug}",
+                    f"Counterfactual: {actor} chooses {aid}",
+                    cf_intervs,
+                    cf_profile,
+                )
+            )
+            if len(candidate_profiles) >= max(1, int(max_branches)):
+                break
+        if len(candidate_profiles) >= max(1, int(max_branches)):
+            break
+
+    branch_rows: list[dict[str, Any]] = []
+    welfares: list[float] = []
+    for branch_id, name, intervs, profile in candidate_profiles:
+        run_model = copy.deepcopy(initial_model)
+        run_model.interventions = copy.deepcopy(initial_model.interventions) + intervs
+        sim_res = run_deterministic(run_model, config=cfg, ticks=eval_horizon)
+        if not sim_res.get("ok"):
+            continue
+        end_state = sim_res["payload"]["final_state"]
+        costs = _actor_action_costs(spec, profile, actors)
+        payoffs = {
+            a: evaluate_actor_utility(spec["payoffs"][a], profile, actors, end_state, costs.get(a, 0.0), actor_id=a)
+            for a in actors
+        }
+        welfare = sum(payoffs.values())
+        welfares.append(welfare)
+        branch_rows.append(
+            {
+                "id": branch_id,
+                "name": name,
+                "committed_profile": profile,
+                "payoffs": payoffs,
+                "joint_welfare": round(welfare, 6),
+                "end_state": end_state,
+                "interventions": intervs,
+                "run_hash": sim_res["run_hash"],
+                "relative_weight": 0.0,
+                "probability": None,
+            }
+        )
+
+    if branch_rows:
+        max_w = max(welfares)
+        raw_weights = [math.exp(max(-20.0, min(0.0, w - max_w))) for w in welfares]
+        total_w = sum(raw_weights) or 1.0
+        for idx, row in enumerate(branch_rows):
+            row["relative_weight"] = round(raw_weights[idx] / total_w, 6)
+
+    return {
+        "schema_version": ROLEPLAY_SPEC_SCHEMA_VERSION,
+        "session_id": session["session_id"],
+        "simulation_id": session["simulation_id"],
+        "likelihood_mode": "relative_weight",
+        "calibrated": False,
+        "eval_ticks": eval_horizon,
+        "branches": branch_rows,
     }

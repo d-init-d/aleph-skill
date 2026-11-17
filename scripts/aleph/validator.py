@@ -100,6 +100,7 @@ from .schema import (
     RESEARCH_CLAIM_FIELDS,
     RESEARCH_CONTROL_FIELDS,
     RESEARCH_TRACK_FIELDS,
+    RETENTION_MODES,
     RETENTION_UNITS,
     RETRIEVAL_STATUSES,
     ROLEPLAY_HYPOTHESIS_FIELDS,
@@ -1588,6 +1589,36 @@ def validate_nodes(
                         "SCHEMA",
                         pointer=f"{p}/retention_unit",
                         message="retention_unit is only valid for stock variables",
+                    )
+                )
+        if "retention_mode" in raw:
+            retention_mode = raw.get("retention_mode")
+            if not isinstance(retention_mode, str) or retention_mode not in RETENTION_MODES:
+                issues.append(
+                    issue(
+                        "ENUM",
+                        pointer=f"{p}/retention_mode",
+                        message="must be baseline or zero",
+                        actual=retention_mode,
+                    )
+                )
+            if raw.get("scale") != "stock":
+                issues.append(
+                    issue(
+                        "SCHEMA",
+                        pointer=f"{p}/retention_mode",
+                        message="retention_mode is only valid for stock variables",
+                    )
+                )
+        if "inertia" in raw:
+            inertia_val = refuse_string_number(raw.get("inertia"), f"{p}/inertia", issues)
+            if inertia_val is not None and not 0.0 <= inertia_val < 1.0:
+                issues.append(
+                    issue(
+                        "RANGE",
+                        pointer=f"{p}/inertia",
+                        message="must be in [0, 1)",
+                        actual=inertia_val,
                     )
                 )
         has_retention_param = any(
@@ -3646,7 +3677,7 @@ def manifest_model_contract_payload(manifest: dict[str, Any]) -> dict[str, Any]:
         if isinstance(raw_paths, dict)
         else {}
     )
-    return {
+    contract: dict[str, Any] = {
         "schema_version": manifest.get("schema_version"),
         "simulation_id": manifest.get("simulation_id"),
         "formula_version": manifest.get("formula_version"),
@@ -3655,6 +3686,9 @@ def manifest_model_contract_payload(manifest: dict[str, Any]) -> dict[str, Any]:
         "interventions": manifest.get("interventions"),
         "artifact_paths": model_paths,
     }
+    if manifest.get("stochastic_shocks"):
+        contract["stochastic_shocks"] = manifest.get("stochastic_shocks")
+    return contract
 
 
 def manifest_integrity_payload(manifest: dict[str, Any]) -> dict[str, Any]:

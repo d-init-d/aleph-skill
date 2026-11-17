@@ -33,12 +33,14 @@
     "bounds": {"type": "array"},
     "retention": {"oneOf": [{"type": "number", "minimum": 0, "maximum": 1}, {"$ref": "#/$defs/scalarDistribution"}]},
     "retention_unit": {"enum": ["per_day", "per_tick"]},
+    "retention_mode": {"enum": ["baseline", "zero"]},
     "decay_rate": {"oneOf": [{"type": "number", "minimum": 0}, {"$ref": "#/$defs/scalarDistribution"}]},
+    "inertia": {"type": "number", "minimum": 0, "exclusiveMaximum": 1},
     "details": {"type": "object"},
     "extensions": {"type": "object", "propertyNames": {"pattern": "^[A-Za-z0-9_-]+(?:[./][A-Za-z0-9_-]+)+$"}}
   },
   "allOf": [
-    {"if": {"anyOf": [{"required": ["retention"]}, {"required": ["retention_unit"]}, {"required": ["decay_rate"]}]}, "then": {"properties": {"scale": {"const": "stock"}}, "required": ["scale"]}},
+    {"if": {"anyOf": [{"required": ["retention"]}, {"required": ["retention_unit"]}, {"required": ["retention_mode"]}, {"required": ["decay_rate"]}]}, "then": {"properties": {"scale": {"const": "stock"}}, "required": ["scale"]}},
     {"not": {"required": ["retention", "decay_rate"]}},
     {"if": {"properties": {"type": {"const": "entity"}}, "required": ["type"]}, "then": {"properties": {"details": {"$ref": "#/$defs/entityDetails"}}}},
     {"if": {"properties": {"type": {"const": "event"}}, "required": ["type"]}, "then": {"properties": {"details": {"$ref": "#/$defs/eventDetails"}}}},

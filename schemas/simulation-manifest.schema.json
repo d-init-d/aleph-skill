@@ -106,6 +106,24 @@
         "divergence_threshold": {"type": "number", "exclusiveMinimum": 0},
         "max_events": {"type": "integer", "minimum": 1}
       }
+    },
+    "stochastic_shocks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "target", "op", "probability_per_tick", "magnitude"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "target": {"type": "string", "minLength": 1},
+          "op": {"enum": ["add", "multiply", "set"]},
+          "probability_per_tick": {"type": "number", "minimum": 0, "maximum": 1},
+          "magnitude": {"oneOf": [{"type": "number"}, {"type": "object"}]},
+          "start_tick": {"type": "integer", "minimum": 0},
+          "end_tick": {"type": ["integer", "null"], "minimum": 0},
+          "duration_ticks": {"type": "integer", "minimum": 1}
+        }
+      }
     }
   },
   "allOf": [

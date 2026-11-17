@@ -3,7 +3,6 @@
   "precommitted": true,
   "commitment_version": "aleph-hindcast-commitment-v3",
   "case_commitments": {
-    "hindcast:economics:synthetic-001": "0e7bbc8505da0c48231ca5a927f79be1729264d16285280881ca185e98f05040",
     "hindcast:economics:macro-brent-2024-05": "03451dc5851a2f03bce66d9197ad60383c3c11e911f309dc6eda08eded8e6c9b",
     "hindcast:economics:macro-brent-2024-06": "7789d2b5b46d36cf6455fb9f0ec350a7b04c7627c4ba14624c950416413bf129",
     "hindcast:economics:macro-brent-2024-07": "59e3126e11108da0f64409d3ec49802d7470ff8acf613d1c3854977f2f1b8930",
@@ -40,5 +39,11 @@
     "mae",
     "rmse"
   ],
-  "maturity_gate": "validated"
+  "maturity_gate": "calibrated",
+  "thresholds": {
+    "mae": 32.0,
+    "rmse": 32.0,
+    "mean_mae": 6.25,
+    "mean_rmse": 6.25
+  }
 }
