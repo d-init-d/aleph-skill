@@ -10,7 +10,7 @@ resolution-markers = [
 
 [[package]]
 name = "aleph-skill"
-version = "2.9.0"
+version = "2.10.0"
 source = { editable = "." }
 
 [package.optional-dependencies]

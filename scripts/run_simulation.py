@@ -189,6 +189,12 @@ def main() -> None:
     parser.add_argument("--mode", choices=["deterministic", "monte_carlo"])
     parser.add_argument("--seed")
     parser.add_argument("--ticks", type=int)
+    parser.add_argument(
+        "--forecast-steps",
+        type=int,
+        default=None,
+        help="post-cutoff forecast steps (sets ticks = forecast_steps + 1 including tick 0 cutoff state)",
+    )
     parser.add_argument("--timestep", help="timestep duration such as P1M, P7D, 1d, or numeric days")
     parser.add_argument("--runs", type=int, help="minimum Monte Carlo runs")
     parser.add_argument("--max-runs", type=int)
@@ -196,8 +202,27 @@ def main() -> None:
     parser.add_argument("--workers", type=int)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--out", help="workspace-relative run contract; must match the manifest declaration")
+    parser.add_argument(
+        "--regenerate-trace",
+        "--overwrite-trace",
+        dest="regenerate_trace",
+        action="store_true",
+        help="regenerate engine-derived JSON execution trace cleanly on parameter or mode changes",
+    )
+    parser.add_argument(
+        "--sync-manifest-mode",
+        action="store_true",
+        help="synchronize manifest simulation_mode (and upgrade deterministic likelihood_mode on monte_carlo) to --mode",
+    )
     parser.add_argument("--no-sync-branches", action="store_true", help="skip updating branch-ledger trace_hash after cold-start trace generation")
     args = parser.parse_args()
+
+    if args.forecast_steps is not None and args.ticks is not None:
+        print(json.dumps({"ok": False, "error": "--forecast-steps cannot be combined with --ticks"}, indent=2))
+        raise SystemExit(EXIT_USAGE)
+    if args.forecast_steps is not None and args.forecast_steps < 0:
+        print(json.dumps({"ok": False, "error": "--forecast-steps must be non-negative"}, indent=2))
+        raise SystemExit(EXIT_USAGE)
 
     workspace = Path(args.workspace).resolve()
     if not workspace.is_dir():
@@ -205,6 +230,16 @@ def main() -> None:
         raise SystemExit(EXIT_USAGE)
     manifest_path = workspace / "simulation-manifest.json"
     manifest = _load_json_or_exit(manifest_path) if manifest_path.is_file() else {}
+    if getattr(args, "sync_manifest_mode", False) and args.mode and isinstance(manifest, dict) and manifest_path.is_file():
+        manifest_changed = False
+        if manifest.get("simulation_mode") != args.mode:
+            manifest["simulation_mode"] = args.mode
+            manifest_changed = True
+        if args.mode == "monte_carlo" and manifest.get("likelihood_mode") == "deterministic":
+            manifest["likelihood_mode"] = "relative_weight"
+            manifest_changed = True
+        if manifest_changed:
+            write_json_atomic(manifest_path, manifest)
     artifact_paths = manifest.get("artifact_paths") if isinstance(manifest, dict) else None
     node_relative = artifact_paths.get("nodes", "nodes.json") if isinstance(artifact_paths, dict) else "nodes.json"
     edge_relative = artifact_paths.get("edges", "edges.json") if isinstance(artifact_paths, dict) else "edges.json"
@@ -279,6 +314,22 @@ def main() -> None:
     if path_issues or out is None or model_out is None or trace_out is None:
         print(json.dumps({"ok": False, "issues": [value.to_dict() for value in path_issues]}, indent=2))
         raise SystemExit(EXIT_USAGE)
+    if getattr(args, "regenerate_trace", False):
+        if not str(declared_trace).endswith(".json"):
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "code": "TRACE_FORMAT",
+                        "error": "--regenerate-trace requires a .json execution_trace artifact",
+                        "path": str(declared_trace),
+                    },
+                    indent=2,
+                )
+            )
+            raise SystemExit(EXIT_SEMANTIC)
+        if trace_out.exists():
+            trace_out.unlink()
     try:
         formula_version = _formula_version(workspace, manifest if isinstance(manifest, dict) else {})
         config, raw_cfg = _config(workspace, args, manifest if isinstance(manifest, dict) else {})
@@ -293,7 +344,7 @@ def main() -> None:
             formula_version=formula_version,
             stochastic_shocks=shocks if isinstance(shocks, list) else None,
         )
-        ticks = args.ticks
+        ticks = (args.forecast_steps + 1) if args.forecast_steps is not None else args.ticks
         if ticks is None:
             if "ticks" in raw_cfg:
                 raw_ticks = raw_cfg["ticks"]
@@ -359,7 +410,7 @@ def main() -> None:
     )
     if trace_path is not None and trace_path.is_file() and trace_path.stat().st_size and trace_issues:
         print(json.dumps({"ok": False, "code": "TRACE_EMPTY",
-                          "error": "existing trace failed validation; repair it explicitly before rerunning",
+                          "error": "existing trace failed validation; repair it explicitly before rerunning or pass --regenerate-trace to cold-start regenerate",
                           "issues": [value.to_dict() for value in trace_issues]}, indent=2))
         raise SystemExit(EXIT_SEMANTIC)
     is_json_trace = str(declared_trace).endswith(".json")
@@ -533,7 +584,7 @@ def main() -> None:
                     json.dumps(
                         {
                             "ok": False,
-                            "error": "existing execution trace parameters_hash does not match compiled model/config; remove stale execution-trace.json to cold-start regenerate",
+                            "error": "existing execution trace parameters_hash does not match compiled model/config; pass --regenerate-trace (or remove stale execution-trace.json) to cold-start regenerate",
                             "code": "PARAMETERS_HASH_MISMATCH",
                             "expected": expected_trace.get("parameters_hash"),
                             "actual": trace_binding_input.get("parameters_hash"),
@@ -547,7 +598,7 @@ def main() -> None:
                     json.dumps(
                         {
                             "ok": False,
-                            "error": "existing execution trace replay_hash differs from deterministic replay; remove stale execution-trace.json to cold-start regenerate",
+                            "error": "existing execution trace replay_hash differs from deterministic replay; pass --regenerate-trace (or remove stale execution-trace.json) to cold-start regenerate",
                             "code": "REPLAY_MISMATCH",
                             "expected": expected_trace.get("replay_hash"),
                             "actual": trace_binding_input.get("replay_hash"),

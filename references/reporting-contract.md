@@ -4,18 +4,20 @@ Use this structure for final simulation reports.
 
 ## Required professional-report sections
 
-1. Executive summary.
-2. Methodology, adaptive complexity, and temporal framing.
-3. Baseline world state and change point.
-4. Evidence and source-quality assessment.
-5. Causal architecture and propagation.
-6. Timeline branch distribution and likelihood mode.
-7. Future monitoring and likelihood updates for prospective/hybrid work.
-8. Human decision points, including research/roleplay separation.
-9. Sensitivity, contradictions, and limitations.
-10. Validation and audit.
-11. Source appendix.
-12. Warnings and next steps.
+The validator (`validate_report` / `REPORT_SECTIONS`) verifies these exact H2 section headings (matching case-insensitively):
+
+1. `## Executive summary`
+2. `## Methodology and scope`
+3. `## Baseline and change point`
+4. `## Evidence and source quality`
+5. `## Causal architecture and propagation`
+6. `## Scenario branches` (include `### Monte Carlo quantile envelope` when MC `quantiles` are present)
+7. `## Future monitoring and likelihood updates` *(required whenever `temporal_frame.future_projection` is `true`)*
+8. `## Human decision tracks` *(research/roleplay separation and actor audit)*
+9. `## Sensitivity, contradictions, and limitations`
+10. `## Validation and audit`
+11. `## Source appendix`
+12. `## Warnings and next steps`
 
 ## Branch table
 

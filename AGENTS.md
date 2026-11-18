@@ -24,12 +24,12 @@ Useful commands (use `python3` on POSIX or `python` on Windows):
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/research_gateway.py" research:preflight`
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/init_simulation_workspace.py" --slug <slug> --change-point "..." --time <date> --horizon <duration> --observation-cutoff <date> --out-dir <user-workspace> [--offline-provisional]`
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/quickstart_quant.py" --out-dir <output-parent> --slug <slug> --change-point "..." --time <date> --horizon <duration> --observation-cutoff <date> [--offline-provisional]`
-- `python3 "<ALEPH_SKILL_ROOT>/scripts/run_pipeline.py" --out-dir <output-parent> --slug <slug> --change-point "..." --ledger <ledger.csv> --review <review.json> [--offline-provisional]`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/run_pipeline.py" --workspace <run-dir> [--ledger <ledger.csv> | --from-llm-json <bundle.json>] [--mode deterministic|monte_carlo] [--forecast-steps <H>] [--finalize] [--offline-provisional]`
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/repair_model_schema.py" --workspace <run-dir> --in-place`
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <1.2-dir> --out <sibling-v2>`
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/migrate_workspace.py" --source <ws> --bind-bundled-d-research --check`
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/validate_simulation_artifacts.py" --workspace <run-dir> --mode final --require-report`
-- `python3 "<ALEPH_SKILL_ROOT>/scripts/run_simulation.py" --workspace <run-dir> --mode deterministic --seed <seed>`
+- `python3 "<ALEPH_SKILL_ROOT>/scripts/run_simulation.py" --workspace <run-dir> --mode deterministic|monte_carlo --seed <seed> [--forecast-steps <H>] [--sync-manifest-mode] [--regenerate-trace]`
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/evaluate_point_forecasts.py" --data <series.csv> --out <eval-dir> --model adaptive`
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/calibrate_intervals.py" --evaluation-dir <eval-dir> --out <intervals.json>`
 - `python3 "<ALEPH_SKILL_ROOT>/scripts/run_offline_backtest.py" --data <archive.json> --series <names> --out-dir <backtest-dir>`

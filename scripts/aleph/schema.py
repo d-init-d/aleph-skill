@@ -797,8 +797,6 @@ def parse_duration_seconds(value: Any) -> float | None:
     if not match:
         return None
     parts = {name: float(raw or 0) for name, raw in match.groupdict().items()}
-    if not any(parts.values()) and value.strip() not in {"P0D", "PT0S"}:
-        return None
     days = parts["years"] * 365 + parts["months"] * 30 + parts["weeks"] * 7 + parts["days"]
     return days * 86400 + parts["hours"] * 3600 + parts["minutes"] * 60 + parts["seconds"]
 

@@ -40,8 +40,9 @@ from aleph.packs import validate_pack  # noqa: E402
 
 class TestV290UpgradeRegressions(unittest.TestCase):
     def test_version_constants_bumped_to_2_9_0(self) -> None:
-        self.assertEqual(PACKAGE_VERSION, "2.9.0")
-        self.assertEqual(VALIDATOR_VERSION, "2.9.0")
+        parsed_pkg = tuple(int(part) for part in PACKAGE_VERSION.split("."))
+        self.assertGreaterEqual(parsed_pkg, (2, 9, 0))
+        self.assertEqual(VALIDATOR_VERSION, PACKAGE_VERSION)
 
     def test_component_lock_v380_and_gateway_routes_unlocked(self) -> None:
         lock = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))

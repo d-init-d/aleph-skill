@@ -158,8 +158,18 @@ def main() -> None:
     contract_body = {key: value for key, value in recorded.items() if key != "contract_hash"}
     contract_hash_ok = declared_contract_hash == canonical_hash(contract_body)
     raw_config = recorded.get("config")
+    use_legacy_cp = False
     try:
         compiled = compile_workspace(workspace, formula_version=str(formula_version))
+        if recorded.get("model_hash") and compiled.get("model_hash") != recorded.get("model_hash"):
+            legacy_compiled = compile_workspace(
+                workspace,
+                formula_version=str(formula_version),
+                include_legacy_change_point=True,
+            )
+            if legacy_compiled.get("model_hash") == recorded.get("model_hash"):
+                compiled = legacy_compiled
+                use_legacy_cp = True
         config = EngineConfig(**raw_config) if isinstance(raw_config, dict) else EngineConfig()
     except (TypeError, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc), "code": "MODEL_COMPILE"}, indent=2))
@@ -173,11 +183,23 @@ def main() -> None:
         print(json.dumps({"ok": False, "error": "manifest and run modes differ", "code": "MODE_MISMATCH"}, indent=2))
         raise SystemExit(EXIT_SEMANTIC)
     try:
+        cfg_path = workspace / "simulation-config.json"
+        cfg_data = _load_json_or_exit(cfg_path) if cfg_path.is_file() else {}
+        shocks = (
+            (raw_config.get("stochastic_shocks") if isinstance(raw_config, dict) else None)
+            or (cfg_data.get("stochastic_shocks") if isinstance(cfg_data, dict) else None)
+            or (manifest.get("stochastic_shocks") if isinstance(manifest, dict) else None)
+        )
         model = compile_model(
             nodes if isinstance(nodes, list) else [],
             edges if isinstance(edges, list) else [],
-            load_interventions(workspace, manifest if isinstance(manifest, dict) else {}),
+            load_interventions(
+                workspace,
+                manifest if isinstance(manifest, dict) else {},
+                include_legacy_change_point=use_legacy_cp,
+            ),
             formula_version=str(formula_version),
+            stochastic_shocks=shocks if isinstance(shocks, list) else None,
         )
     except (TypeError, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc), "code": "MODEL_COMPILE"}, indent=2))
@@ -323,7 +345,11 @@ def main() -> None:
                 config,
                 ticks=ticks,
                 run_id=0,
-                model_id=recorded.get("model_id", "model:compiled"),
+                model_id=str(
+                    (manifest.get("model_id") if isinstance(manifest, dict) else None)
+                    or compiled.get("model_id")
+                    or recorded.get("model_id", "model:compiled")
+                ),
                 formula_version=str(formula_version),
             )
             # Parameters hash verification

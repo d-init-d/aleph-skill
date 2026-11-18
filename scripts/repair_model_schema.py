@@ -19,8 +19,12 @@ from aleph.io import (
 from aleph.paths import resolve_in_workspace
 from aleph.schema import (
     GATE_COMPARE_OPS,
+    GATE_CONDITION_FIELDS,
+    GATE_FIELDS,
+    GATE_OPS,
     ID_PREFIXES,
     INTERVENTION_FIELDS,
+    INTERVENTION_OPS,
     NODE_TYPES,
     has_id_prefix,
     parse_duration_seconds,
@@ -348,57 +352,145 @@ def _prenormalize_node_items(items: list[Any], repairs: list[str]) -> list[Any]:
     return normalized
 
 
+_OP_ADD_ALIASES = frozenset(
+    {
+        "add",
+        "step",
+        "step_up",
+        "step_down",
+        "ramp",
+        "pulse",
+        "impulse",
+        "shock",
+        "shift",
+        "delta",
+        "additive",
+        "discrete",
+        "increase",
+        "decrease",
+    }
+)
+_OP_SET_ALIASES = frozenset({"set", "override", "fixed", "level", "replace", "clamp"})
+_OP_MUL_ALIASES = frozenset({"mul", "multiply", "scale", "factor", "ratio"})
+
+
+def _map_op_alias(raw_val: Any) -> str | None:
+    if not isinstance(raw_val, str):
+        return None
+    norm = raw_val.strip().lower()
+    if norm in _OP_ADD_ALIASES:
+        return "add"
+    if norm in _OP_SET_ALIASES:
+        return "set"
+    if norm in _OP_MUL_ALIASES:
+        return "multiply"
+    return None
+
+
+def _normalize_target_ref(raw_target: str, node_id_map: dict[str, str] | None) -> str:
+    cleaned = raw_target.strip()
+    if node_id_map and cleaned in node_id_map:
+        return node_id_map[cleaned]
+    if has_id_prefix(cleaned, "node") and not re.search(r"\s", cleaned):
+        return cleaned
+    return _normalize_node_id(cleaned, 0, "factor", set())
+
+
 def _repair_edge_gate(
     edge: dict[str, Any],
     eid: str,
     node_id_map: dict[str, str] | None,
     repairs: list[str],
+    *,
+    valid_node_ids: set[str] | None = None,
 ) -> None:
+    if "gate" not in edge or edge["gate"] is None:
+        return
     gate = edge.get("gate")
     if not isinstance(gate, dict):
+        edge.pop("gate", None)
+        repairs.append(f"{eid}:removed_non_object_gate")
         return
     fixed_gate = dict(gate)
+    for extra_gk in [k for k in list(fixed_gate.keys()) if k not in GATE_FIELDS]:
+        fixed_gate.pop(extra_gk, None)
+        repairs.append(f"{eid}:removed_gate_extra_field_{extra_gk}")
     raw_op = str(fixed_gate.get("op") or "").strip().lower()
     if raw_op in _GATE_OP_ALIASES:
         canon_op = _GATE_OP_ALIASES[raw_op]
         if canon_op != fixed_gate.get("op"):
             fixed_gate["op"] = canon_op
             repairs.append(f"{eid}:normalized_gate_op")
+    if fixed_gate.get("op") not in GATE_OPS:
+        edge.pop("gate", None)
+        repairs.append(f"{eid}:removed_invalid_gate_op")
+        return
     conds = fixed_gate.get("conditions")
-    if isinstance(conds, list):
-        fixed_conds: list[Any] = []
-        for idx, cond in enumerate(conds):
-            if not isinstance(cond, dict):
-                fixed_conds.append(cond)
+    if not isinstance(conds, list):
+        edge.pop("gate", None)
+        repairs.append(f"{eid}:removed_gate_without_conditions")
+        return
+    fixed_conds: list[dict[str, Any]] = []
+    for idx, cond in enumerate(conds):
+        if not isinstance(cond, dict):
+            repairs.append(f"{eid}:dropped_non_object_gate_condition_{idx}")
+            continue
+        fc = dict(cond)
+        if not fc.get("node"):
+            for nal in ("node_id", "variable", "target"):
+                if isinstance(fc.get(nal), str) and fc[nal].strip():
+                    fc["node"] = fc.pop(nal).strip()
+                    repairs.append(f"{eid}:gate_condition_node_from_{nal}_{idx}")
+                    break
+        for extra_ck in [k for k in list(fc.keys()) if k not in GATE_CONDITION_FIELDS]:
+            fc.pop(extra_ck, None)
+            repairs.append(f"{eid}:removed_gate_condition_extra_{extra_ck}_{idx}")
+        node_ref = fc.get("node")
+        if not isinstance(node_ref, str) or not node_ref.strip():
+            repairs.append(f"{eid}:dropped_gate_condition_missing_node_{idx}")
+            continue
+        node_ref_s = node_ref.strip()
+        if node_id_map and node_ref_s in node_id_map and node_id_map[node_ref_s] != node_ref_s:
+            node_ref_s = node_id_map[node_ref_s]
+            repairs.append(f"{eid}:remapped_gate_node_{idx}")
+        fc["node"] = node_ref_s
+        if valid_node_ids is not None and fc["node"] not in valid_node_ids:
+            prefixed_candidate = _normalize_target_ref(fc["node"], node_id_map)
+            if prefixed_candidate in valid_node_ids:
+                fc["node"] = prefixed_candidate
+                repairs.append(f"{eid}:resolved_gate_node_{idx}")
+            else:
+                repairs.append(f"{eid}:dropped_gate_condition_unknown_node_{idx}")
                 continue
-            fc = dict(cond)
-            node_ref = fc.get("node")
-            if isinstance(node_ref, str):
-                node_ref_s = node_ref.strip()
-                if node_id_map and node_ref_s in node_id_map and node_id_map[node_ref_s] != node_ref_s:
-                    fc["node"] = node_id_map[node_ref_s]
-                    repairs.append(f"{eid}:remapped_gate_node_{idx}")
-                elif node_ref_s != node_ref:
-                    fc["node"] = node_ref_s
-            cop = str(fc.get("op") or "").strip().lower()
-            if cop in _GATE_COMPARE_ALIASES:
-                canon_cop = _GATE_COMPARE_ALIASES[cop]
-                if canon_cop != fc.get("op") and canon_cop in GATE_COMPARE_OPS:
-                    fc["op"] = canon_cop
-                    repairs.append(f"{eid}:normalized_gate_condition_op_{idx}")
-            val = fc.get("value")
-            if isinstance(val, str):
-                try:
-                    fval = float(val.strip())
-                except ValueError:
-                    fval = math.nan
-                if math.isfinite(fval):
-                    fc["value"] = fval
-                    repairs.append(f"{eid}:coerced_gate_value_{idx}")
-            elif isinstance(val, int) and not isinstance(val, bool):
-                fc["value"] = float(val)
-            fixed_conds.append(fc)
-        fixed_gate["conditions"] = fixed_conds
+        cop = str(fc.get("op") or "").strip().lower()
+        if cop in _GATE_COMPARE_ALIASES:
+            canon_cop = _GATE_COMPARE_ALIASES[cop]
+            if canon_cop != fc.get("op") and canon_cop in GATE_COMPARE_OPS:
+                fc["op"] = canon_cop
+                repairs.append(f"{eid}:normalized_gate_condition_op_{idx}")
+        if fc.get("op") not in GATE_COMPARE_OPS:
+            repairs.append(f"{eid}:dropped_gate_condition_invalid_op_{idx}")
+            continue
+        val = fc.get("value")
+        if isinstance(val, str):
+            try:
+                fval = float(val.strip())
+            except ValueError:
+                fval = math.nan
+            if math.isfinite(fval):
+                fc["value"] = fval
+                repairs.append(f"{eid}:coerced_gate_value_{idx}")
+        elif isinstance(val, int) and not isinstance(val, bool):
+            fc["value"] = float(val)
+        if _finite_num(fc.get("value")) is None:
+            repairs.append(f"{eid}:dropped_gate_condition_nonfinite_value_{idx}")
+            continue
+        fixed_conds.append(fc)
+    if not fixed_conds:
+        edge.pop("gate", None)
+        repairs.append(f"{eid}:removed_empty_gate")
+        return
+    fixed_gate["conditions"] = fixed_conds
     edge["gate"] = fixed_gate
 
 
@@ -417,39 +509,62 @@ def _prenormalize_intervention_items(items: list[Any], repairs: list[str]) -> li
                 repairs.append(f"interventions[{idx}]:id_from_intervention_id")
             else:
                 repairs.append(f"{tag}:removed_intervention_id_alias")
-        if "target_node_id" in iv:
-            raw_target = iv.pop("target_node_id")
-            if not iv.get("target") and isinstance(raw_target, str) and raw_target.strip():
-                iv["target"] = raw_target.strip()
-                repairs.append(f"{tag}:target_from_target_node_id")
-            else:
-                repairs.append(f"{tag}:removed_target_node_id_alias")
-        for val_alias in ("magnitude", "delta"):
+        for target_alias in ("target_node_id", "target_node", "node_id", "variable", "node"):
+            if target_alias in iv:
+                raw_target = iv.pop(target_alias)
+                if not iv.get("target") and isinstance(raw_target, str) and raw_target.strip():
+                    iv["target"] = raw_target.strip()
+                    repairs.append(f"{tag}:target_from_{target_alias}")
+                else:
+                    repairs.append(f"{tag}:removed_{target_alias}_alias")
+        if isinstance(iv.get("value"), str):
+            try:
+                fval = float(iv["value"].strip())
+            except ValueError:
+                fval = math.nan
+            if math.isfinite(fval):
+                iv["value"] = fval
+                repairs.append(f"{tag}:coerced_string_value")
+        for val_alias in ("magnitude", "delta", "amount", "shock"):
             if val_alias in iv:
                 raw_mag = iv.pop(val_alias)
-                if iv.get("value") is None and _finite_num(raw_mag) is not None:
-                    iv["value"] = float(raw_mag)
+                num_mag = _finite_num(raw_mag)
+                if num_mag is None and isinstance(raw_mag, str):
+                    try:
+                        parsed = float(raw_mag.strip())
+                    except ValueError:
+                        parsed = math.nan
+                    if math.isfinite(parsed):
+                        num_mag = parsed
+                if iv.get("value") is None and num_mag is not None:
+                    iv["value"] = float(num_mag)
                     repairs.append(f"{tag}:value_from_{val_alias}")
                 else:
                     repairs.append(f"{tag}:removed_{val_alias}_alias")
-        if "mode" in iv:
-            raw_mode = iv.pop("mode")
-            norm_mode = str(raw_mode or "").strip().lower()
-            if not iv.get("op"):
-                if norm_mode in {"step", "delta", "additive", "pulse", "add"}:
-                    iv["op"] = "add"
-                    repairs.append(f"{tag}:op_add_from_mode_{norm_mode}")
-                elif norm_mode in {"set", "override", "level"}:
-                    iv["op"] = "set"
-                    repairs.append(f"{tag}:op_set_from_mode_{norm_mode}")
-                elif norm_mode in {"mul", "multiply", "scale", "factor"}:
-                    iv["op"] = "multiply"
-                    repairs.append(f"{tag}:op_multiply_from_mode_{norm_mode}")
-            else:
-                repairs.append(f"{tag}:removed_mode_alias")
-            if norm_mode == "pulse" and iv.get("op") == "set" and iv.get("release_policy") is None:
-                iv["release_policy"] = "reset_baseline"
-                repairs.append(f"{tag}:release_policy_from_mode_pulse")
+        if _finite_num(iv.get("value")) is None:
+            iv["value"] = 0.0
+            repairs.append(f"{tag}:default_value_0_missing_magnitude")
+        for op_alias in ("mode", "type"):
+            if op_alias in iv:
+                raw_alias_val = iv.pop(op_alias)
+                norm_alias_val = str(raw_alias_val or "").strip().lower()
+                mapped_op = _map_op_alias(norm_alias_val)
+                if not iv.get("op") and mapped_op is not None:
+                    iv["op"] = mapped_op
+                    repairs.append(f"{tag}:op_{mapped_op}_from_{op_alias}_{norm_alias_val}")
+                else:
+                    repairs.append(f"{tag}:removed_{op_alias}_alias")
+                if norm_alias_val == "pulse" and iv.get("op") == "set" and iv.get("release_policy") is None:
+                    iv["release_policy"] = "reset_baseline"
+                    repairs.append(f"{tag}:release_policy_from_{op_alias}_pulse")
+        if isinstance(iv.get("op"), str) and iv["op"].strip().lower() not in INTERVENTION_OPS:
+            mapped_direct = _map_op_alias(iv["op"])
+            if mapped_direct is not None:
+                iv["op"] = mapped_direct
+                repairs.append(f"{tag}:op_{mapped_direct}_from_op_alias")
+        if iv.get("op") not in INTERVENTION_OPS and _finite_num(iv.get("value")) is not None:
+            iv["op"] = "add"
+            repairs.append(f"{tag}:default_op_add")
         if iv.get("start_tick") is None:
             iv["start_tick"] = 0
             repairs.append(f"{tag}:default_start_tick_0")
@@ -572,6 +687,23 @@ def repair_nodes(
             elif raw_scale in {"level", "flow", "stock"} and raw_scale != node["scale"]:
                 node["scale"] = raw_scale
                 repairs.append(f"{nid}:normalized_scale_case")
+        if node.get("scale") != "stock":
+            for stock_only_key in (
+                "retention",
+                "retention_distribution",
+                "retention_unit",
+                "retention_mode",
+                "decay_rate",
+                "decay_rate_distribution",
+            ):
+                if stock_only_key in node:
+                    node.pop(stock_only_key, None)
+                    repairs.append(f"{nid}:removed_non_stock_{stock_only_key}")
+        if "inertia" in node:
+            inertia_num = _finite_num(node.get("inertia"))
+            if node.get("scale") == "stock" or inertia_num is None or not (0.0 <= inertia_num < 1.0):
+                node.pop("inertia", None)
+                repairs.append(f"{nid}:removed_invalid_inertia")
         out.append(node)
     return out, repairs
 
@@ -609,6 +741,7 @@ def repair_edges(
     *,
     node_id_map: dict[str, str] | None = None,
     id_map_out: dict[str, str] | None = None,
+    valid_node_ids: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     repairs: list[str] = []
     if isinstance(raw, dict) and isinstance(raw.get("edges"), list):
@@ -822,7 +955,7 @@ def repair_edges(
             elif norm_tf in {"linear", "elasticity", "identity", "logistic", "threshold"} and norm_tf != raw_tf:
                 edge["transform"] = norm_tf
                 repairs.append(f"{eid}:normalized_transform_case")
-        _repair_edge_gate(edge, eid, node_id_map, repairs)
+        _repair_edge_gate(edge, eid, node_id_map, repairs, valid_node_ids=valid_node_ids)
         if edge.get("relation") is None and edge.get("sign") in (-1, 1):
             edge["relation"] = "decreases" if edge["sign"] == -1 else "increases"
             repairs.append(f"{eid}:default_relation_{edge['relation']}_from_sign")
@@ -856,9 +989,9 @@ def repair_interventions(
         if not iv.get("id"):
             iv["id"] = iid
             repairs.append(f"interventions[{idx}]:assigned_id")
-        if node_id_map and isinstance(iv.get("target"), str) and iv["target"] in node_id_map:
+        if isinstance(iv.get("target"), str) and iv["target"].strip():
             old_target = iv["target"]
-            new_target = node_id_map[old_target]
+            new_target = _normalize_target_ref(old_target, node_id_map)
             if new_target != old_target:
                 iv["target"] = new_target
                 repairs.append(f"{iid}:remapped_target_{old_target}->{new_target}")
@@ -866,12 +999,10 @@ def repair_interventions(
         raw_op = iv.get("op")
         if isinstance(raw_op, str):
             norm_op = raw_op.strip().lower()
-            if norm_op == "mul":
-                iv["op"] = "multiply"
-                repairs.append(f"{iid}:op_mul_to_multiply")
-            elif norm_op in {"set", "add", "multiply"} and norm_op != raw_op:
-                iv["op"] = norm_op
-                repairs.append(f"{iid}:normalized_op_case")
+            mapped_op = _map_op_alias(norm_op)
+            if mapped_op is not None and mapped_op != raw_op:
+                iv["op"] = mapped_op
+                repairs.append(f"{iid}:normalized_op_{raw_op}_to_{mapped_op}")
 
         for tick_key in ("start_tick", "end_tick"):
             val = iv.get(tick_key)
@@ -883,10 +1014,10 @@ def repair_interventions(
             and not isinstance(iv.get("start_tick"), bool)
             and isinstance(iv.get("end_tick"), int)
             and not isinstance(iv.get("end_tick"), bool)
-            and iv["end_tick"] == iv["start_tick"]
+            and iv["end_tick"] <= iv["start_tick"]
         ):
             iv["end_tick"] = iv["start_tick"] + 1
-            repairs.append(f"{iid}:end_tick_eq_start_tick_to_single_tick_pulse")
+            repairs.append(f"{iid}:end_tick_le_start_tick_to_single_tick_pulse")
 
         rp = iv.get("release_policy")
         if isinstance(rp, str):
@@ -903,6 +1034,265 @@ def repair_interventions(
                 repairs.append(f"{iid}:normalized_release_policy_case")
         out.append(iv)
     return out, repairs
+
+
+def _augment_node_lookup_map(
+    nodes: list[dict[str, Any]],
+    base_map: dict[str, str] | None,
+) -> dict[str, str]:
+    lookup: dict[str, str] = dict(base_map or {})
+    by_suffix: dict[str, list[str]] = {}
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        nid = str(node.get("id") or "").strip()
+        if not nid:
+            continue
+        if ":" in nid:
+            suffix = nid.split(":", 1)[1]
+            by_suffix.setdefault(suffix, []).append(nid)
+            by_suffix.setdefault(suffix.lower(), []).append(nid)
+    for suffix, targets in by_suffix.items():
+        uniq = list(dict.fromkeys(targets))
+        if len(uniq) == 1 and suffix not in lookup:
+            lookup[suffix] = uniq[0]
+    return lookup
+
+
+def repair_stochastic_shocks(
+    raw: Any,
+    *,
+    node_id_map: dict[str, str] | None = None,
+    repairs: list[str] | None = None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    rep_log = repairs if repairs is not None else []
+    if raw is None:
+        return [], rep_log
+    if isinstance(raw, dict) and isinstance(raw.get("stochastic_shocks"), list):
+        items = raw["stochastic_shocks"]
+        rep_log.append("stochastic_shocks:unwrapped_object_to_list")
+    elif isinstance(raw, list):
+        items = raw
+    else:
+        raise ValueError("stochastic_shocks must be an array or an object containing 'stochastic_shocks'")
+    out: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    allowed_shock_keys = {
+        "id",
+        "target",
+        "op",
+        "probability_per_tick",
+        "magnitude",
+        "start_tick",
+        "end_tick",
+        "duration_ticks",
+        "gate",
+        "hazard_driver",
+    }
+    for idx, entry in enumerate(items):
+        if not isinstance(entry, dict):
+            continue
+        sk = dict(entry)
+        if "shock_id" in sk:
+            raw_sid = sk.pop("shock_id")
+            if not sk.get("id") and isinstance(raw_sid, str) and raw_sid.strip():
+                sk["id"] = raw_sid.strip()
+                rep_log.append(f"stochastic_shocks[{idx}]:id_from_shock_id")
+        sid = str(sk.get("id") or f"shock:auto-{idx + 1}").strip() or f"shock:auto-{idx + 1}"
+        base_sid = sid
+        counter = 2
+        while sid in seen_ids:
+            sid = f"{base_sid}_{counter}"
+            counter += 1
+        seen_ids.add(sid)
+        sk["id"] = sid
+
+        for target_alias in ("target_node_id", "target_node", "node_id", "variable", "node"):
+            if target_alias in sk:
+                raw_t = sk.pop(target_alias)
+                if not sk.get("target") and isinstance(raw_t, str) and raw_t.strip():
+                    sk["target"] = raw_t.strip()
+                    rep_log.append(f"{sid}:target_from_{target_alias}")
+        if isinstance(sk.get("target"), str) and sk["target"].strip():
+            old_t = sk["target"]
+            new_t = _normalize_target_ref(old_t, node_id_map)
+            if new_t != old_t:
+                sk["target"] = new_t
+                rep_log.append(f"{sid}:remapped_target_{old_t}->{new_t}")
+
+        for p_alias in ("probability", "prob"):
+            if p_alias in sk:
+                raw_p = sk.pop(p_alias)
+                if sk.get("probability_per_tick") is None and _finite_num(raw_p) is not None:
+                    sk["probability_per_tick"] = min(1.0, max(0.0, float(raw_p)))
+                    rep_log.append(f"{sid}:probability_per_tick_from_{p_alias}")
+        if sk.get("probability_per_tick") is None:
+            sk["probability_per_tick"] = 0.05
+            rep_log.append(f"{sid}:default_probability_per_tick")
+        elif _finite_num(sk.get("probability_per_tick")) is not None:
+            sk["probability_per_tick"] = min(1.0, max(0.0, float(sk["probability_per_tick"])))
+
+        for m_alias in ("value", "delta", "amount"):
+            if m_alias in sk:
+                raw_m = sk.pop(m_alias)
+                if sk.get("magnitude") is None and (isinstance(raw_m, dict) or _finite_num(raw_m) is not None):
+                    sk["magnitude"] = raw_m
+                    rep_log.append(f"{sid}:magnitude_from_{m_alias}")
+        if sk.get("magnitude") is None:
+            sk["magnitude"] = 0.0
+            rep_log.append(f"{sid}:default_magnitude_0")
+        for op_alias in ("mode", "type"):
+            if op_alias in sk:
+                raw_oa = sk.pop(op_alias)
+                mapped = _map_op_alias(raw_oa)
+                if not sk.get("op") and mapped is not None:
+                    sk["op"] = mapped
+                    rep_log.append(f"{sid}:op_{mapped}_from_{op_alias}")
+        if isinstance(sk.get("op"), str) and sk["op"].strip().lower() not in INTERVENTION_OPS:
+            mapped_op = _map_op_alias(sk["op"])
+            if mapped_op is not None:
+                sk["op"] = mapped_op
+                rep_log.append(f"{sid}:op_{mapped_op}_from_alias")
+        if sk.get("op") not in INTERVENTION_OPS:
+            sk["op"] = "add"
+            rep_log.append(f"{sid}:default_op_add")
+
+        start_tick = sk.get("start_tick", 0)
+        if not isinstance(start_tick, int) or isinstance(start_tick, bool) or start_tick < 0:
+            sk["start_tick"] = 0
+            rep_log.append(f"{sid}:default_start_tick_0")
+        end_tick = sk.get("end_tick")
+        if isinstance(end_tick, int) and not isinstance(end_tick, bool) and end_tick <= int(sk["start_tick"]):
+            sk["end_tick"] = int(sk["start_tick"]) + 1
+            rep_log.append(f"{sid}:normalized_end_tick_gt_start_tick")
+        dur = sk.get("duration_ticks", 1)
+        if not isinstance(dur, int) or isinstance(dur, bool) or dur < 1:
+            sk["duration_ticks"] = 1
+            rep_log.append(f"{sid}:default_duration_ticks_1")
+
+        _repair_edge_gate(sk, sid, node_id_map, rep_log)
+        if "hazard_driver" in sk and sk["hazard_driver"] is not None:
+            hd = sk["hazard_driver"]
+            if not isinstance(hd, dict):
+                sk.pop("hazard_driver", None)
+                rep_log.append(f"{sid}:removed_non_object_hazard_driver")
+            else:
+                hd_clean = dict(hd)
+                if isinstance(hd_clean.get("node"), str) and hd_clean["node"].strip():
+                    hd_clean["node"] = _normalize_target_ref(hd_clean["node"], node_id_map)
+                thr = _finite_num(hd_clean.get("threshold"))
+                slp = _finite_num(hd_clean.get("slope"))
+                for extra_hk in [k for k in list(hd_clean.keys()) if k not in {"node", "threshold", "slope", "max_probability"}]:
+                    hd_clean.pop(extra_hk, None)
+                if not isinstance(hd_clean.get("node"), str) or not hd_clean["node"] or thr is None or slp is None or slp < 0.0:
+                    sk.pop("hazard_driver", None)
+                    rep_log.append(f"{sid}:removed_invalid_hazard_driver")
+                else:
+                    hd_clean["threshold"] = float(thr)
+                    hd_clean["slope"] = float(slp)
+                    if "max_probability" in hd_clean:
+                        mp = _finite_num(hd_clean["max_probability"])
+                        if mp is None:
+                            hd_clean.pop("max_probability", None)
+                        else:
+                            hd_clean["max_probability"] = min(1.0, max(0.0, float(mp)))
+                    sk["hazard_driver"] = hd_clean
+        for extra_sk in [k for k in list(sk.keys()) if k not in allowed_shock_keys]:
+            sk.pop(extra_sk, None)
+            rep_log.append(f"{sid}:removed_extra_field_{extra_sk}")
+        out.append(sk)
+    return out, rep_log
+
+
+def synthesize_missing_target_nodes(
+    fixed_nodes: list[dict[str, Any]],
+    fixed_edges: list[dict[str, Any]],
+    fixed_ivs: list[dict[str, Any]],
+    fixed_shocks: list[dict[str, Any]] | None,
+    repairs: list[str],
+) -> list[dict[str, Any]]:
+    """Synthesize exogenous level nodes for any valid referenced variable missing from nodes.json."""
+    existing_ids = {
+        str(n.get("id")).strip()
+        for n in fixed_nodes
+        if isinstance(n, dict) and isinstance(n.get("id"), str) and n.get("id", "").strip()
+    }
+    referenced: list[str] = []
+    for edge in fixed_edges:
+        if not isinstance(edge, dict):
+            continue
+        for ep in ("from", "to"):
+            val = edge.get(ep)
+            if isinstance(val, str) and val.strip():
+                referenced.append(val.strip())
+        gate = edge.get("gate")
+        if isinstance(gate, dict) and isinstance(gate.get("conditions"), list):
+            for cond in gate["conditions"]:
+                if isinstance(cond, dict) and isinstance(cond.get("node"), str) and cond["node"].strip():
+                    referenced.append(cond["node"].strip())
+    for iv in fixed_ivs:
+        if isinstance(iv, dict) and isinstance(iv.get("target"), str) and iv["target"].strip():
+            referenced.append(iv["target"].strip())
+    for shock in fixed_shocks or []:
+        if not isinstance(shock, dict):
+            continue
+        if isinstance(shock.get("target"), str) and shock["target"].strip():
+            referenced.append(shock["target"].strip())
+        hd = shock.get("hazard_driver")
+        if isinstance(hd, dict) and isinstance(hd.get("node"), str) and hd["node"].strip():
+            referenced.append(hd["node"].strip())
+        sg = shock.get("gate")
+        if isinstance(sg, dict) and isinstance(sg.get("conditions"), list):
+            for cond in sg["conditions"]:
+                if isinstance(cond, dict) and isinstance(cond.get("node"), str) and cond["node"].strip():
+                    referenced.append(cond["node"].strip())
+
+    # Detect whether sibling nodes follow rich timeline-node contract
+    sample_node = next((n for n in fixed_nodes if isinstance(n, dict) and "state_before" in n), None)
+    default_time = str(sample_node.get("time") or "2026-01-01") if isinstance(sample_node, dict) else "2026-01-01"
+    default_ev: list[str] = []
+    if isinstance(sample_node, dict) and isinstance(sample_node.get("evidence_ids"), list) and sample_node["evidence_ids"]:
+        default_ev = [str(sample_node["evidence_ids"][0])]
+
+    added: list[dict[str, Any]] = []
+    for ref_id in referenced:
+        if not has_id_prefix(ref_id, "node") or ref_id in existing_ids:
+            continue
+        existing_ids.add(ref_id)
+        prefix, slug = ref_id.split(":", 1)
+        node_type = prefix if prefix in NODE_TYPES else "factor"
+        label = slug.replace("_", " ").replace("-", " ").strip().title() or ref_id
+        synth: dict[str, Any] = {
+            "id": ref_id,
+            "type": node_type,
+            "name": label,
+            "role": "exogenous",
+            "scale": "level",
+            "baseline": 0.0,
+        }
+        if sample_node is not None:
+            synth.update(
+                {
+                    "description": f"Synthesized exogenous driver node for '{ref_id}' referenced in edges/interventions.",
+                    "time": default_time,
+                    "state_before": {"summary": f"Baseline state for {label}.", "value": 0.0},
+                    "trigger": {"kind": "context", "description": "Exogenous driver or intervention target."},
+                    "mechanism": "External perturbation variable entering downstream causal channels through declared edge weights and documented transmission lags.",
+                    "state_after": {"summary": f"Simulated state for {label}.", "value": 0.0},
+                    "lag": "P0D",
+                    "evidence_ids": default_ev or ["assumption:synthesized-driver"],
+                    "status": "assumption",
+                    "timeline": "shared_baseline",
+                    "confidence": 0.5,
+                    "datatype": "continuous",
+                }
+            )
+            if not default_ev:
+                synth["evidence_ids"] = []
+                synth["assumption_ref"] = "assumption:change-point"
+        added.append(synth)
+        repairs.append(f"nodes:synthesized_missing_target:{ref_id}")
+    return added
 
 
 def _propagate_id_references(
@@ -1073,6 +1463,7 @@ def main(argv: list[str] | None = None) -> int:
     node_id_map: dict[str, str] = {}
     edge_id_map: dict[str, str] = {}
     fixed_nodes: list[dict[str, Any]] = []
+    fixed_edges: list[dict[str, Any]] = []
     fixed_ivs: list[dict[str, Any]] = []
 
     mf_data: dict[str, Any] | None = None
@@ -1091,7 +1482,8 @@ def main(argv: list[str] | None = None) -> int:
 
     nodes_rel = _artifact_rel("nodes", "nodes.json")
     nodes_path, nodes_issues = resolve_in_workspace(ws, nodes_rel, must_exist=False)
-    if not nodes_issues and nodes_path is not None and nodes_path.is_file():
+    has_nodes_file = bool(not nodes_issues and nodes_path is not None and nodes_path.is_file())
+    if has_nodes_file and nodes_path is not None:
         raw_nodes, load_issues = load_json_secure(nodes_path)
         if load_issues:
             print(json.dumps({"ok": False, "error": load_issues[0].message}), flush=True)
@@ -1099,10 +1491,9 @@ def main(argv: list[str] | None = None) -> int:
         fixed_nodes, node_repairs = repair_nodes(raw_nodes, id_map_out=node_id_map)
         repairs.extend(node_repairs)
         warnings.extend(_collect_plausibility_warnings(fixed_nodes, effective_timestep_days=effective_timestep_days))
-        nodes_count = len(fixed_nodes)
         node_scales = {str(n.get("id")): str(n.get("scale", "level")) for n in fixed_nodes if isinstance(n, dict) and n.get("id")}
-        if not dry_run:
-            write_json_atomic(target_dir / nodes_rel, fixed_nodes)
+
+    eff_node_map = _augment_node_lookup_map(fixed_nodes, node_id_map)
 
     edges_rel = _artifact_rel("edges", "edges.json")
     edges_path, edges_issues = resolve_in_workspace(ws, edges_rel, must_exist=False)
@@ -1111,7 +1502,7 @@ def main(argv: list[str] | None = None) -> int:
         if load_issues:
             print(json.dumps({"ok": False, "error": load_issues[0].message}), flush=True)
             return EXIT_SEMANTIC
-        fixed_edges, edge_repairs = repair_edges(raw_edges, node_id_map=node_id_map, id_map_out=edge_id_map)
+        fixed_edges, edge_repairs = repair_edges(raw_edges, node_id_map=eff_node_map, id_map_out=edge_id_map)
         repairs.extend(edge_repairs)
         edges_count = len(fixed_edges)
         if not dry_run:
@@ -1124,22 +1515,33 @@ def main(argv: list[str] | None = None) -> int:
         if load_issues:
             print(json.dumps({"ok": False, "error": load_issues[0].message}), flush=True)
             return EXIT_SEMANTIC
-        fixed_ivs, iv_repairs = repair_interventions(raw_ivs, node_scales=node_scales, node_id_map=node_id_map)
+        fixed_ivs, iv_repairs = repair_interventions(raw_ivs, node_scales=node_scales, node_id_map=eff_node_map)
         repairs.extend(iv_repairs)
         interventions_count = len(fixed_ivs)
         if not dry_run:
             write_json_atomic(target_dir / iv_rel, fixed_ivs)
 
     skip_stub_prop = False
+    mf_changed = False
     if isinstance(mf_data, dict):
-        mf_changed = False
+        if "stochastic_shocks" in mf_data and mf_data.get("stochastic_shocks") is not None:
+            shock_repairs: list[str] = []
+            fixed_shocks, _ = repair_stochastic_shocks(
+                mf_data["stochastic_shocks"],
+                node_id_map=eff_node_map,
+                repairs=shock_repairs,
+            )
+            if shock_repairs:
+                mf_data["stochastic_shocks"] = fixed_shocks
+                repairs.extend(shock_repairs)
+                mf_changed = True
         cp = mf_data.get("change_point")
         if isinstance(cp, dict):
             old_cp_target = cp.get("target")
-            if isinstance(old_cp_target, str) and old_cp_target in node_id_map and node_id_map[old_cp_target] != old_cp_target:
-                cp["target"] = node_id_map[old_cp_target]
+            if isinstance(old_cp_target, str) and old_cp_target in eff_node_map and eff_node_map[old_cp_target] != old_cp_target:
+                cp["target"] = eff_node_map[old_cp_target]
                 mf_changed = True
-                repairs.append(f"crossref:simulation-manifest.json:change_point.target:{old_cp_target}->{node_id_map[old_cp_target]}")
+                repairs.append(f"crossref:simulation-manifest.json:change_point.target:{old_cp_target}->{eff_node_map[old_cp_target]}")
             elif not dry_run and args.in_place and fixed_nodes and "factor:example" not in node_scales and cp.get("target") == "factor:example":
                 iv_targets = [
                     str(iv.get("target"))
@@ -1205,6 +1607,22 @@ def main(argv: list[str] | None = None) -> int:
             mf_dst, mf_dst_iss = resolve_in_workspace(target_dir, "simulation-manifest.json", must_exist=False, require_file=False)
             if not mf_dst_iss and mf_dst is not None:
                 write_json_atomic(mf_dst, mf_data)
+
+    if has_nodes_file:
+        synth_nodes = synthesize_missing_target_nodes(
+            fixed_nodes,
+            fixed_edges,
+            fixed_ivs,
+            mf_data.get("stochastic_shocks") if isinstance(mf_data, dict) and isinstance(mf_data.get("stochastic_shocks"), list) else None,
+            repairs,
+        )
+        if synth_nodes:
+            fixed_nodes.extend(synth_nodes)
+            for sn in synth_nodes:
+                node_scales[str(sn["id"])] = str(sn.get("scale", "level"))
+        nodes_count = len(fixed_nodes)
+        if not dry_run:
+            write_json_atomic(target_dir / nodes_rel, fixed_nodes)
 
     _propagate_id_references(
         ws,

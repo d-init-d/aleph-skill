@@ -392,10 +392,22 @@ def _normalise_stochastic_shocks(
         raise ValueError("stochastic_shocks must be an array")
     normalised: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
+    valid_nodes = set(variables)
     for index, raw in enumerate(raw_shocks):
         if not isinstance(raw, Mapping):
             raise ValueError(f"stochastic_shocks[{index}] must be an object")
-        allowed = {"id", "target", "op", "probability_per_tick", "magnitude", "start_tick", "end_tick", "duration_ticks"}
+        allowed = {
+            "id",
+            "target",
+            "op",
+            "probability_per_tick",
+            "magnitude",
+            "start_tick",
+            "end_tick",
+            "duration_ticks",
+            "gate",
+            "hazard_driver",
+        }
         unknown = set(raw) - allowed
         if unknown:
             raise ValueError(f"stochastic_shocks[{index}] unknown fields: {', '.join(sorted(unknown))}")
@@ -439,6 +451,41 @@ def _normalise_stochastic_shocks(
             "end_tick": end_tick,
             "duration_ticks": duration_ticks,
         }
+        if raw.get("gate") is not None:
+            norm_gate = _normalise_edge_gate(raw["gate"], f"shock:{shock_id}", valid_nodes)
+            if norm_gate is not None:
+                entry["gate"] = norm_gate
+        if raw.get("hazard_driver") is not None:
+            raw_hd = raw["hazard_driver"]
+            if not isinstance(raw_hd, Mapping):
+                raise ValueError(f"stochastic shock {shock_id} hazard_driver must be an object")
+            unknown_hd = set(raw_hd) - {"node", "threshold", "slope", "max_probability"}
+            if unknown_hd:
+                raise ValueError(
+                    f"stochastic shock {shock_id} hazard_driver unknown fields: {', '.join(sorted(unknown_hd))}"
+                )
+            driver_node = str(raw_hd.get("node", ""))
+            if not driver_node or driver_node not in variables:
+                raise ValueError(
+                    f"stochastic shock {shock_id} hazard_driver node {driver_node!r} must reference a model variable"
+                )
+            raw_thr = raw_hd.get("threshold")
+            if not _is_finite_number(raw_thr):
+                raise ValueError(f"stochastic shock {shock_id} hazard_driver threshold must be finite")
+            raw_slope = raw_hd.get("slope")
+            if not _is_finite_number(raw_slope) or float(cast(int | float, raw_slope)) < 0.0:
+                raise ValueError(f"stochastic shock {shock_id} hazard_driver slope must be finite and >= 0")
+            raw_max_prob = raw_hd.get("max_probability", 1.0)
+            if not _is_finite_number(raw_max_prob) or not (0.0 <= float(cast(int | float, raw_max_prob)) <= 1.0):
+                raise ValueError(
+                    f"stochastic shock {shock_id} hazard_driver max_probability must be finite in [0, 1]"
+                )
+            entry["hazard_driver"] = {
+                "node": driver_node,
+                "threshold": float(cast(int | float, raw_thr)),
+                "slope": float(cast(int | float, raw_slope)),
+                "max_probability": float(cast(int | float, raw_max_prob)),
+            }
         normalised.append(entry)
     return normalised
 
@@ -1822,18 +1869,39 @@ def _retained_stock_state(
     return previous_state * retention_factor
 
 
+def _evaluate_shock_probability(
+    shock: Mapping[str, Any],
+    state_map: Mapping[str, float],
+) -> float:
+    """Compute effective per-tick firing probability under optional hazard driver and gate."""
+    eff_prob = float(shock["probability_per_tick"])
+    hazard_driver = shock.get("hazard_driver")
+    if isinstance(hazard_driver, Mapping):
+        driver_node = str(hazard_driver["node"])
+        driver_val = float(state_map.get(driver_node, 0.0))
+        excess = max(0.0, driver_val - float(hazard_driver["threshold"]))
+        max_prob = float(hazard_driver.get("max_probability", 1.0))
+        eff_prob = min(max_prob, max(0.0, eff_prob + float(hazard_driver["slope"]) * excess))
+    gate = shock.get("gate")
+    if gate is not None:
+        eff_prob *= evaluate_edge_gate(gate, state_map)
+    return min(1.0, max(0.0, eff_prob))
+
+
 def _sample_run_shocks(
     model: ComputationalModel,
     config: EngineConfig,
     run_id: int,
     ticks: int,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Deterministically sample tail shocks for a single addressed simulation trajectory."""
+    """Deterministically sample static Bernoulli tail shocks for a single addressed trajectory."""
     if config.mode != "monte_carlo" or not model.stochastic_shocks or ticks <= 0:
         return [], []
     interventions: list[dict[str, Any]] = []
     fired: list[dict[str, Any]] = []
     for shock in sorted(model.stochastic_shocks, key=lambda item: str(item.get("id", ""))):
+        if "gate" in shock or "hazard_driver" in shock:
+            continue
         shock_id = str(shock["id"])
         target = str(shock["target"])
         op = str(shock.get("op", "add"))
@@ -1878,6 +1946,66 @@ def _sample_run_shocks(
                 )
                 active_until = end_t
     return interventions, fired
+
+
+def _sample_endogenous_tick_shocks(
+    endogenous_shocks: list[dict[str, Any]],
+    config: EngineConfig,
+    run_id: int,
+    tick: int,
+    ticks: int,
+    state: Mapping[str, float],
+    endo_active_until: dict[str, int],
+    shock_interventions: list[dict[str, Any]],
+    triggered_shocks: list[dict[str, Any]],
+) -> None:
+    """Evaluate and sample state-dependent endogenous shocks for the current tick."""
+    for shock in endogenous_shocks:
+        shock_id = str(shock["id"])
+        start_tick = int(shock.get("start_tick", 0))
+        raw_end = shock.get("end_tick")
+        horizon = min(ticks, int(raw_end)) if raw_end is not None else ticks
+        if tick < max(0, start_tick) or tick >= horizon:
+            continue
+        if tick < endo_active_until.get(shock_id, -1):
+            continue
+        eff_prob = _evaluate_shock_probability(shock, state)
+        if eff_prob <= 0.0:
+            continue
+        draw = uniform01(config.seed, run_id, shock_id, f"shock_trigger:{tick}")
+        if draw < eff_prob:
+            target = str(shock["target"])
+            op = str(shock.get("op", "add"))
+            raw_mag = shock["magnitude"]
+            duration = max(1, int(shock.get("duration_ticks", 1)))
+            val = (
+                _sample_distribution(raw_mag, config, run_id, shock_id, f"shock_mag:{tick}")
+                if isinstance(raw_mag, dict)
+                else float(raw_mag)
+            )
+            end_t = tick + duration
+            shock_interventions.append(
+                {
+                    "id": f"{shock_id}@t{tick}",
+                    "target": target,
+                    "op": op,
+                    "value": val,
+                    "start_tick": tick,
+                    "end_tick": end_t,
+                    "release_policy": "retain",
+                }
+            )
+            triggered_shocks.append(
+                {
+                    "id": shock_id,
+                    "target": target,
+                    "op": op,
+                    "value": val,
+                    "trigger_tick": tick,
+                    "end_tick": end_t,
+                }
+            )
+            endo_active_until[shock_id] = end_t
 
 
 def run_deterministic(
@@ -1941,9 +2069,30 @@ def run_deterministic(
         return _invalid_run_result(model, config, ticks=ticks, run_id=run_id, issues=issues)
 
     shock_interventions, triggered_shocks = _sample_run_shocks(model, config, run_id, ticks)
+    endogenous_shocks = (
+        sorted(
+            (s for s in model.stochastic_shocks if "gate" in s or "hazard_driver" in s),
+            key=lambda item: str(item.get("id", "")),
+        )
+        if config.mode == "monte_carlo" and model.stochastic_shocks and ticks > 0
+        else []
+    )
+    endo_active_until: dict[str, int] = {}
     diverged = False
 
     for tick in range(max(0, ticks)):
+        if endogenous_shocks:
+            _sample_endogenous_tick_shocks(
+                endogenous_shocks,
+                config,
+                run_id,
+                tick,
+                ticks,
+                state,
+                endo_active_until,
+                shock_interventions,
+                triggered_shocks,
+            )
         # Formula 2.1/2.2 use end-of-step history: stock carry/decay is applied on
         # every tick, then delayed inputs, interventions, and zero-lag rates.
         # Under Formula 2.2.0, un-intervened stocks decay toward baseline by default
@@ -2340,7 +2489,7 @@ def run_monte_carlo(model: ComputationalModel, config: EngineConfig, *, ticks: i
     if isinstance(ticks, bool) or not isinstance(ticks, int) or ticks < 0:
         config_issues.append(issue("RANGE", pointer="/ticks", actual=ticks, message="non-negative integer required"))
     if config_issues:
-        invalid_summary = {
+        invalid_summary: dict[str, Any] = {
             "model_hash": model_hash(model),
             "config_hash": _diagnostic_hash(config_payload(config)),
             "n_runs": 0,
@@ -2355,6 +2504,8 @@ def run_monte_carlo(model: ComputationalModel, config: EngineConfig, *, ticks: i
             "seed": config.seed,
             "workers": config.workers,
         }
+        if model.formula_version == FORMULA_VERSION_2_2:
+            invalid_summary["trajectory_quantiles"] = []
         invalid_summary["canonical_hash"] = _diagnostic_hash(
             {**invalid_summary, "workers": None, "issues": [value.to_dict() for value in config_issues]}
         )
@@ -2368,6 +2519,7 @@ def run_monte_carlo(model: ComputationalModel, config: EngineConfig, *, ticks: i
     maximum = max(minimum, config.max_runs)
     batch_size = max(1, config.batch_size)
     valid_results: list[tuple[int, dict[str, float], str]] = []
+    valid_histories: list[list[dict[str, float]]] = []
     hashes: list[str] = []
     invalid = 0
     n_runs = 0
@@ -2380,6 +2532,9 @@ def run_monte_carlo(model: ComputationalModel, config: EngineConfig, *, ticks: i
             hashes.append(result["run_hash"])
             if result["ok"]:
                 final_state = result["payload"]["final_state"]
+                hist = result.get("history")
+                if isinstance(hist, list):
+                    valid_histories.append(hist)
                 valid_results.append(
                     (
                         run_id,
@@ -2387,7 +2542,7 @@ def run_monte_carlo(model: ComputationalModel, config: EngineConfig, *, ticks: i
                         _signature(
                             final_state,
                             model,
-                            result.get("history"),
+                            hist,
                             timestep=config.timestep,
                             triggered_shocks=result["payload"].get("triggered_shocks"),
                         ),
@@ -2409,20 +2564,54 @@ def run_monte_carlo(model: ComputationalModel, config: EngineConfig, *, ticks: i
 
     unresolved_mass = invalid / n_runs
     valid_mass = len(valid_results) / n_runs
+    is_formula_22 = model.formula_version == FORMULA_VERSION_2_2
     quantiles: dict[str, dict[str, float]] = {}
+    trajectory_quantiles: list[dict[str, dict[str, float]]] = []
     if valid_results:
-        for key in sorted(valid_results[0][1]):
+        var_keys = sorted(valid_results[0][1])
+        for key in var_keys:
             values = sorted(result[key] for _, result, _signature_value in valid_results if key in result)
-            quantiles[key] = {"p05": _quantile(values, 0.05), "p50": _quantile(values, 0.5), "p95": _quantile(values, 0.95)}
+            if is_formula_22:
+                quantiles[key] = {
+                    "p05": _quantile(values, 0.05),
+                    "p10": _quantile(values, 0.10),
+                    "p50": _quantile(values, 0.50),
+                    "p90": _quantile(values, 0.90),
+                    "p95": _quantile(values, 0.95),
+                }
+            else:
+                quantiles[key] = {
+                    "p05": _quantile(values, 0.05),
+                    "p50": _quantile(values, 0.50),
+                    "p95": _quantile(values, 0.95),
+                }
+        if is_formula_22 and valid_histories and ticks > 0:
+            for tick_idx in range(ticks):
+                tick_q: dict[str, dict[str, float]] = {}
+                for key in var_keys:
+                    tick_vals = sorted(
+                        float(hist[tick_idx][key])
+                        for hist in valid_histories
+                        if tick_idx < len(hist) and key in hist[tick_idx]
+                    )
+                    if tick_vals:
+                        tick_q[key] = {
+                            "p05": _quantile(tick_vals, 0.05),
+                            "p10": _quantile(tick_vals, 0.10),
+                            "p50": _quantile(tick_vals, 0.50),
+                            "p90": _quantile(tick_vals, 0.90),
+                            "p95": _quantile(tick_vals, 0.95),
+                        }
+                trajectory_quantiles.append(tick_q)
     branches = _cluster_relative(
         valid_results,
         n_runs,
-        max_branches=12 if model.formula_version == FORMULA_VERSION_2_2 else None,
+        max_branches=12 if is_formula_22 else None,
     )
     weight_sum = sum(float(branch["relative_weight"]) for branch in branches)
     mass_error = abs((weight_sum + unresolved_mass) - 1.0)
     threshold_exceeded = unresolved_mass > config.max_invalid_fraction
-    summary = {
+    summary: dict[str, Any] = {
         "model_hash": model_hash(model),
         "config_hash": canonical_hash(config_payload(config)),
         "n_runs": n_runs,
@@ -2437,6 +2626,8 @@ def run_monte_carlo(model: ComputationalModel, config: EngineConfig, *, ticks: i
         "seed": config.seed,
         "workers": config.workers,
     }
+    if is_formula_22:
+        summary["trajectory_quantiles"] = trajectory_quantiles
     summary["canonical_hash"] = canonical_hash({**summary, "workers": None, "run_hashes": hashes})
     issues: list[dict[str, Any]] = []
     if threshold_exceeded:
@@ -2614,8 +2805,30 @@ def generate_numerical_execution_trace(
 
     edge_gate_state: dict[str, bool] = {}
     divergence_limit = _divergence_limit(model, config)
+    shock_interventions, triggered_shocks = _sample_run_shocks(model, config, run_id, ticks_int)
+    endogenous_shocks = (
+        sorted(
+            (s for s in model.stochastic_shocks if "gate" in s or "hazard_driver" in s),
+            key=lambda item: str(item.get("id", "")),
+        )
+        if config.mode == "monte_carlo" and model.stochastic_shocks and ticks_int > 0
+        else []
+    )
+    endo_active_until: dict[str, int] = {}
 
     for tick in range(ticks_int):
+        if endogenous_shocks:
+            _sample_endogenous_tick_shocks(
+                endogenous_shocks,
+                config,
+                run_id,
+                tick,
+                ticks_int,
+                state,
+                endo_active_until,
+                shock_interventions,
+                triggered_shocks,
+            )
         tick_steps_start = len(steps)
         released_resets = _reset_releases(model, tick)
         base: dict[str, float] = {}
@@ -2639,12 +2852,26 @@ def generate_numerical_execution_trace(
             else:
                 base[key] = variable.baseline
 
-        active = _active_interventions(model, tick)
+        active_shocks = [
+            item
+            for item in shock_interventions
+            if int(item["start_tick"]) <= tick < int(item["end_tick"])
+        ]
+        active = _active_interventions(model, tick) + active_shocks
         blocked = {str(value["target"]) for value in active if value.get("op") == "set"}
         interventions_by_target = {str(value["target"]): value for value in active}
 
         # Check releases from previous tick
-        previous_active = _active_interventions(model, tick - 1) if tick > 0 else []
+        prev_shocks = (
+            [
+                item
+                for item in shock_interventions
+                if int(item["start_tick"]) <= (tick - 1) < int(item["end_tick"])
+            ]
+            if tick > 0
+            else []
+        )
+        previous_active = (_active_interventions(model, tick - 1) + prev_shocks) if tick > 0 else []
         previous_targets = {str(value["target"]) for value in previous_active}
         current_targets = {str(value["target"]) for value in active}
         released_targets = previous_targets - current_targets

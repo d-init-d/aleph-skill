@@ -55,12 +55,19 @@ def infer_timeline_mode(change: dt.date, cutoff: dt.date, simulation_end: dt.dat
 def build_workspace(args: argparse.Namespace) -> Path:
     root = skill_root()
     templates = root / "templates"
-    slug = slugify(args.slug or args.change_point or "simulation-run")
-    out_base = Path(args.out_dir).resolve() if args.out_dir else (Path.cwd() / "simulation-output").resolve()
     resolved_root = root.resolve()
-    if out_base == resolved_root or resolved_root in out_base.parents:
-        raise ValueError("Simulation output cannot be created inside the installed skill. Pass --out-dir pointing to the user workspace.")
-    workspace = out_base / slug
+    raw_ws = getattr(args, "workspace", None)
+    if raw_ws:
+        workspace = Path(str(raw_ws)).resolve()
+        if workspace == resolved_root or resolved_root in workspace.parents:
+            raise ValueError("Simulation output cannot be created inside the installed skill. Pass --workspace outside the installed skill.")
+        slug = slugify(args.slug or workspace.name or args.change_point or "simulation-run")
+    else:
+        slug = slugify(args.slug or args.change_point or "simulation-run")
+        out_base = Path(args.out_dir).resolve() if args.out_dir else (Path.cwd() / "simulation-output").resolve()
+        if out_base == resolved_root or resolved_root in out_base.parents:
+            raise ValueError("Simulation output cannot be created inside the installed skill. Pass --out-dir pointing to the user workspace.")
+        workspace = out_base / slug
     workspace.mkdir(parents=True, exist_ok=args.force)
 
     change_date = parse_date(args.time)
@@ -287,6 +294,7 @@ def build_workspace(args: argparse.Namespace) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create an adaptive Aleph simulation workspace from templates.")
     parser.add_argument("--slug", help="Workspace slug.")
+    parser.add_argument("--workspace", help="Optional exact target workspace directory; overrides --out-dir/--slug folder creation while still using slugify for simulation_id.")
     parser.add_argument("--change-point", default="Example change point", help="Change point description.")
     parser.add_argument("--time", default=dt.date.today().isoformat(), help="Change point date.")
     parser.add_argument("--horizon", default="P24M", help="ISO simulation horizon from the change point.")

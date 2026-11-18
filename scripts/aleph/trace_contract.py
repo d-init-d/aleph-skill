@@ -75,6 +75,7 @@ ALLOWED_STEP_KEYS = frozenset({
     "input_mode",
     "input_effect",
     "source_baseline",
+    "gate_multiplier",
     "evidence_refs",
     "hash_chain",
 })
@@ -380,6 +381,12 @@ def validate_execution_trace_data(
         for optional_num in ("input_effect", "source_baseline"):
             if optional_num in step and not _is_finite_number(step[optional_num]):
                 issues.append(issue("TYPE", pointer=f"{p}/{optional_num}", actual=step[optional_num], message=f"{optional_num} must be a finite number"))
+        if "gate_multiplier" in step:
+            gm = step["gate_multiplier"]
+            if not _is_finite_number(gm):
+                issues.append(issue("TYPE", pointer=f"{p}/gate_multiplier", actual=gm, message="gate_multiplier must be a finite number"))
+            elif not (0.0 <= float(gm) <= 1.0):
+                issues.append(issue("RANGE", pointer=f"{p}/gate_multiplier", actual=gm, message="gate_multiplier must lie in [0, 1]"))
 
         # Check sampled_parameters
         if "sampled_parameters" in step:

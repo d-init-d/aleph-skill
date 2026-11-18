@@ -104,6 +104,13 @@ def render(workspace: Path) -> str:
     validation_path_rel = str(artifacts.get("validation_report", "validation-report.json"))
     vpath, viss = resolve_in_workspace(workspace, validation_path_rel, must_exist=False)
     validation = load_json(vpath) if vpath and vpath.exists() else {"status": "not-run", "warnings": [], "errors": []}
+    run_ledger: dict[str, Any] | None = None
+    run_rel = str(artifacts.get("run_ledger", "simulation-run.json"))
+    run_path, run_iss = resolve_in_workspace(workspace, run_rel, must_exist=False, require_file=True)
+    if not run_iss and run_path is not None and run_path.is_file():
+        loaded_run = load_json(run_path)
+        if isinstance(loaded_run, dict):
+            run_ledger = loaded_run
 
     change = manifest.get("change_point", {})
     frame = manifest.get("temporal_frame", {})
@@ -279,6 +286,44 @@ def render(workspace: Path) -> str:
                 ]
             )
         )
+
+    if isinstance(run_ledger, dict) and run_ledger.get("mode") == "monte_carlo":
+        run_result = run_ledger.get("result")
+        run_summary = run_result.get("summary") if isinstance(run_result, dict) else None
+        mc_quantiles = run_summary.get("quantiles") if isinstance(run_summary, dict) else None
+        traj_quantiles = run_summary.get("trajectory_quantiles") if isinstance(run_summary, dict) else None
+        if isinstance(mc_quantiles, dict) and mc_quantiles:
+            tick_count = len(traj_quantiles) if isinstance(traj_quantiles, list) else run_ledger.get("ticks", 0)
+            lines.extend(
+                [
+                    "",
+                    "### Monte Carlo quantile envelope",
+                    "",
+                    table_row(["Variable", "p05", "p10", "p50", "p90", "p95", "Ticks"]),
+                    table_row(["---", "---:", "---:", "---:", "---:", "---:", "---:"]),
+                ]
+            )
+            for var_id in sorted(mc_quantiles):
+                q = mc_quantiles.get(var_id)
+                if not isinstance(q, dict):
+                    continue
+                def _fmt_q(val: Any) -> str:
+                    if isinstance(val, (int, float)) and not isinstance(val, bool):
+                        return f"{float(val):.4g}"
+                    return "-"
+                lines.append(
+                    table_row(
+                        [
+                            f"`{var_id}`",
+                            _fmt_q(q.get("p05")),
+                            _fmt_q(q.get("p10")),
+                            _fmt_q(q.get("p50")),
+                            _fmt_q(q.get("p90")),
+                            _fmt_q(q.get("p95")),
+                            tick_count,
+                        ]
+                    )
+                )
 
     if frame.get("future_projection"):
         lines.extend(["", "## Future monitoring and likelihood updates", ""])

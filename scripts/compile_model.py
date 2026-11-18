@@ -47,7 +47,12 @@ def _load_json_or_raise(path: Path) -> Any:
     return data
 
 
-def load_interventions(workspace: Path, manifest: dict[str, Any]) -> list[dict[str, Any]]:
+def load_interventions(
+    workspace: Path,
+    manifest: dict[str, Any],
+    *,
+    include_legacy_change_point: bool = False,
+) -> list[dict[str, Any]]:
     interventions: list[dict[str, Any]] = []
     raw_paths = manifest.get("artifact_paths")
     artifact_paths = raw_paths if isinstance(raw_paths, dict) else {}
@@ -69,11 +74,19 @@ def load_interventions(workspace: Path, manifest: dict[str, Any]) -> list[dict[s
     declared = manifest.get("interventions")
     if isinstance(declared, list):
         interventions.extend(item for item in declared if isinstance(item, dict))
+    has_explicit_interventions = len(interventions) > 0
     change = manifest.get("change_point")
     from_value = change.get("value") if isinstance(change, dict) else None
     from_magnitude = change.get("magnitude") if isinstance(change, dict) else None
     cp_raw_val = from_value if is_number(from_value) else from_magnitude
-    if isinstance(change, dict) and change.get("target") and is_number(cp_raw_val):
+    cp_has_exec_fields = isinstance(change, dict) and any(
+        key in change for key in ("id", "op", "value", "start_tick", "end_tick", "release_policy")
+    )
+    if (
+        isinstance(change, dict)
+        and change.get("target")
+        and is_number(cp_raw_val)
+    ):
         cp_id = str(change.get("id", "intervention:change-point"))
         cp_target = str(change["target"])
         if change.get("release_policy") == "reset_baseline" and ("op" not in change or change.get("op") is None):
@@ -82,6 +95,21 @@ def load_interventions(workspace: Path, manifest: dict[str, Any]) -> list[dict[s
         cp_val = float(cp_raw_val)
         cp_start = int(change.get("start_tick", 0)) if isinstance(change.get("start_tick", 0), int) and not isinstance(change.get("start_tick", 0), bool) else 0
         cp_end = change.get("end_tick")
+
+        node_ids: set[str] | None = None
+        node_relative = str(artifact_paths.get("nodes", "nodes.json"))
+        node_path, node_issues = resolve_in_workspace(
+            workspace, node_relative, must_exist=False, require_file=False
+        )
+        if not node_issues and node_path is not None and node_path.is_file():
+            raw_nodes = _load_json_or_raise(node_path)
+            if isinstance(raw_nodes, list):
+                node_ids = {
+                    str(node.get("id"))
+                    for node in raw_nodes
+                    if isinstance(node, dict) and isinstance(node.get("id"), str) and node.get("id")
+                }
+
         duplicate = any(
             str(item.get("id", "")) == cp_id
             or (
@@ -98,39 +126,33 @@ def load_interventions(workspace: Path, manifest: dict[str, Any]) -> list[dict[s
             for item in interventions
         )
         if not duplicate:
-            skip_template_stub = False
-            if cp_target == "factor:example" and cp_id == "intervention:change-point":
-                explicit_has_cp = any(
-                    isinstance(item, dict) and str(item.get("id", "")) == "intervention:change-point"
-                    for item in interventions
-                )
-                if not explicit_has_cp:
-                    node_relative = str(artifact_paths.get("nodes", "nodes.json"))
-                    node_path, node_issues = resolve_in_workspace(
-                        workspace, node_relative, must_exist=False, require_file=False
-                    )
-                    if not node_issues and node_path is not None and node_path.is_file():
-                        raw_nodes = _load_json_or_raise(node_path)
-                        if isinstance(raw_nodes, list):
-                            node_ids = {
-                                str(node.get("id"))
-                                for node in raw_nodes
-                                if isinstance(node, dict) and isinstance(node.get("id"), str) and node.get("id")
-                            }
-                            if "factor:example" not in node_ids:
-                                skip_template_stub = True
+            explicit_has_cp = any(
+                isinstance(item, dict) and str(item.get("id", "")) == "intervention:change-point"
+                for item in interventions
+            )
+            skip_template_stub = (
+                cp_target == "factor:example"
+                and cp_id == "intervention:change-point"
+                and not explicit_has_cp
+                and node_ids is not None
+                and "factor:example" not in node_ids
+            )
             if not skip_template_stub:
-                interventions.append(
-                    {
-                        "id": cp_id,
-                        "target": cp_target,
-                        "op": cp_op,
-                        "value": cp_raw_val,
-                        "start_tick": cp_start,
-                        "end_tick": cp_end,
-                        "release_policy": str(change.get("release_policy", "retain")),
-                    }
-                )
+                if has_explicit_interventions and not cp_has_exec_fields and not include_legacy_change_point:
+                    if node_ids is not None and cp_target not in node_ids:
+                        raise ValueError(f"change_point target must reference a model variable: {cp_target}")
+                else:
+                    interventions.append(
+                        {
+                            "id": cp_id,
+                            "target": cp_target,
+                            "op": cp_op,
+                            "value": cp_raw_val,
+                            "start_tick": cp_start,
+                            "end_tick": cp_end,
+                            "release_policy": str(change.get("release_policy", "retain")),
+                        }
+                    )
     return interventions
 
 
@@ -231,7 +253,12 @@ def resolve_workspace_formula_version(workspace: Path, manifest: dict[str, Any])
     return next(iter(unique), FORMULA_VERSION)
 
 
-def compile_workspace(workspace: Path, *, formula_version: str | None = None) -> dict[str, Any]:
+def compile_workspace(
+    workspace: Path,
+    *,
+    formula_version: str | None = None,
+    include_legacy_change_point: bool = False,
+) -> dict[str, Any]:
     manifest_path = workspace / "simulation-manifest.json"
     manifest = _load_json_or_raise(manifest_path) if manifest_path.is_file() else {}
     if not isinstance(manifest, dict):
@@ -263,7 +290,11 @@ def compile_workspace(workspace: Path, *, formula_version: str | None = None) ->
     model = compile_model(
         nodes,
         edges,
-        load_interventions(workspace, manifest if isinstance(manifest, dict) else {}),
+        load_interventions(
+            workspace,
+            manifest if isinstance(manifest, dict) else {},
+            include_legacy_change_point=include_legacy_change_point,
+        ),
         formula_version=resolved_formula_version,
         stochastic_shocks=shocks if isinstance(shocks, list) else None,
     )

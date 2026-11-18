@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.10.0 - 2026-11-18
+
+### Added
+
+- **Per-tick Monte Carlo uncertainty fan charts (`trajectory_quantiles`) & `--forecast-steps`**: `run_monte_carlo` now emits `p05`, `p10`, `p50`, `p90`, and `p95` across every simulation tick (`summary.trajectory_quantiles[tick][var]`), rendered in `REPORT.md` via `### Monte Carlo quantile envelope`, and `scripts/run_simulation.py` accepts `--forecast-steps <H>` (`ticks = H + 1` including `T0` cutoff baseline).
+- **State-dependent endogenous `stochastic_shocks` (`gate` & `hazard_driver`)**: Shock rules in `simulation-manifest.json` and `simulation-config.json` now accept optional conditional `gate` blocks and continuous hazard drivers (`{"node", "threshold", "slope", "max_probability"}`) evaluated dynamically against prior-tick state while keeping static shock RNG hashes bit-identical.
+- **Explicit trace regeneration & mode sync**: Added `--regenerate-trace` (alias `--overwrite-trace`) and `--sync-manifest-mode` to `scripts/run_simulation.py` so parameter edits and `deterministic <-> monte_carlo` switches cleanly regenerate trace bindings while preserving default tamper/stale-trace rejection (`PARAMETERS_HASH_MISMATCH` / `TRACE_EMPTY`).
+- **Turn-key `--from-llm-json` & `--finalize` pipeline**: Added raw LLM JSON bundle (or raw workspace directory) ingestion, auto-hydration, schema repair, branch synchronization, atomic finalization, and `--mode final` verification directly in `scripts/run_pipeline.py`.
+
+### Fixed
+
+- **[P0] `gate_multiplier` trace contract deadlock**: Added `"gate_multiplier"` to `ALLOWED_STEP_KEYS` and numeric `[0.0, 1.0]` validation in `scripts/aleph/trace_contract.py`, and aligned `model_id` plus `stochastic_shocks` loading in `scripts/replay_simulation.py`.
+- **`validator.py` `computational_model` shock-hash mismatch**: Allowed `"stochastic_shocks"` on `computational_model` and included it in `model_hash` verification inside `validate_numerical_artifacts`, alongside manifest and workspace node-reference checks for `stochastic_shocks`.
+- **Zero ISO durations & silent `change_point` injection**: Allowed valid zero durations (`P0M`, `P0W`, `P0Y`, `PT0S`, etc.) in `parse_duration_seconds` (`scripts/aleph/schema.py`) and prevented unintended `manifest.change_point` double-injection in `load_interventions` (`scripts/compile_model.py`) when explicit `interventions.json` exists without execution overrides.
+- **Local-LLM schema repair gaps**: Hardened `scripts/repair_model_schema.py` to strip non-object/invalid edge gates, strip stock-only attributes from non-stock nodes and invalid `inertia`, map `target_node`/`variable`/`node` and `mode`/`type` intervention aliases, repair `stochastic_shocks`, normalize `end_tick <= start_tick`, and synthesize missing exogenous target nodes.
+- **Reporting contract alignment**: Aligned required H2 section names in `references/reporting-contract.md` with `REPORT_SECTIONS` in `scripts/aleph/schema.py`.
+
+See [release notes](.github/release-notes/v2.10.0.md) for compatibility, upgrade instructions, and verification details.
+
 ## 2.9.0 - 2026-11-18
 
 ### Added

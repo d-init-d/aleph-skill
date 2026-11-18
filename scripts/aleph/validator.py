@@ -819,6 +819,171 @@ def _validate_v2_manifest_contract(manifest: dict[str, Any], issues: list[Issue]
                 if num is not None and not (0.0 < num <= 1.0):
                     issues.append(issue("RANGE", pointer="engine_config.jacobi_relax", message="must be in (0, 1]", actual=num))
 
+    if "stochastic_shocks" in manifest and manifest.get("stochastic_shocks") is not None:
+        _validate_stochastic_shocks(manifest.get("stochastic_shocks"), issues, node_ids=None)
+
+
+def _validate_gate_object(
+    gate: Any,
+    pointer: str,
+    issues: list[Issue],
+    node_ids: set[str] | None = None,
+) -> None:
+    if not isinstance(gate, dict):
+        issues.append(issue("TYPE", pointer=pointer, message="gate must be object"))
+        return
+    reject_unknown_fields(gate, GATE_FIELDS, pointer, issues)
+    gate_op = gate.get("op")
+    if not isinstance(gate_op, str) or gate_op not in GATE_OPS:
+        issues.append(issue("ENUM", pointer=f"{pointer}/op", message="must be all, any, or veto", actual=gate_op))
+    conditions = gate.get("conditions")
+    if not isinstance(conditions, list) or not conditions:
+        issues.append(issue("MISSING_FIELD", pointer=f"{pointer}/conditions", message="requires non-empty conditions list"))
+        return
+    for ci, cond in enumerate(conditions):
+        cp = f"{pointer}/conditions/{ci}"
+        if not isinstance(cond, dict):
+            issues.append(issue("TYPE", pointer=cp, message="gate condition must be object"))
+            continue
+        reject_unknown_fields(cond, GATE_CONDITION_FIELDS, cp, issues)
+        cnode = cond.get("node")
+        if not nonempty_str(cnode):
+            issues.append(issue("MISSING_FIELD", pointer=f"{cp}/node", message="required"))
+        elif node_ids is not None and cnode not in node_ids:
+            issues.append(issue("UNKNOWN_REF", pointer=f"{cp}/node", actual=cnode))
+        cop = cond.get("op")
+        if not isinstance(cop, str) or cop not in GATE_COMPARE_OPS:
+            issues.append(issue("ENUM", pointer=f"{cp}/op", message="must be gt, gte, lt, or lte", actual=cop))
+        if "value" not in cond:
+            issues.append(issue("MISSING_FIELD", pointer=f"{cp}/value", message="required"))
+        else:
+            refuse_string_number(cond.get("value"), f"{cp}/value", issues)
+
+
+def _validate_stochastic_shocks(
+    raw_shocks: Any,
+    issues: list[Issue],
+    node_ids: set[str] | None = None,
+) -> None:
+    if not isinstance(raw_shocks, list):
+        issues.append(issue("TYPE", pointer="stochastic_shocks", message="must be array"))
+        return
+    seen_ids: set[str] = set()
+    allowed_shock_fields = frozenset(
+        {
+            "id",
+            "target",
+            "op",
+            "probability_per_tick",
+            "magnitude",
+            "start_tick",
+            "end_tick",
+            "duration_ticks",
+            "gate",
+            "hazard_driver",
+        }
+    )
+    allowed_hd_fields = frozenset({"node", "threshold", "slope", "max_probability"})
+    for idx, raw in enumerate(raw_shocks):
+        p = f"stochastic_shocks/{idx}"
+        if not isinstance(raw, dict):
+            issues.append(issue("TYPE", pointer=p, message="must be object"))
+            continue
+        reject_unknown_fields(raw, allowed_shock_fields, p, issues)
+        shock_id = raw.get("id")
+        if not nonempty_str(shock_id):
+            issues.append(issue("MISSING_FIELD", pointer=f"{p}/id", message="required"))
+        elif str(shock_id) in seen_ids:
+            issues.append(issue("DUPLICATE_ID", pointer=f"{p}/id", actual=shock_id))
+        else:
+            seen_ids.add(str(shock_id))
+        target = raw.get("target")
+        if not nonempty_str(target):
+            issues.append(issue("MISSING_FIELD", pointer=f"{p}/target", message="required"))
+        elif node_ids is not None and target not in node_ids:
+            issues.append(issue("UNKNOWN_REF", pointer=f"{p}/target", actual=target))
+        op = raw.get("op")
+        if not isinstance(op, str) or op not in INTERVENTION_OPS:
+            issues.append(issue("ENUM", pointer=f"{p}/op", message="must be set, add, or multiply", actual=op))
+        prob = refuse_string_number(raw.get("probability_per_tick"), f"{p}/probability_per_tick", issues)
+        if prob is not None and not 0.0 <= prob <= 1.0:
+            issues.append(issue("RANGE", pointer=f"{p}/probability_per_tick", message="must be in [0, 1]", actual=prob))
+        if "magnitude" not in raw:
+            issues.append(issue("MISSING_FIELD", pointer=f"{p}/magnitude", message="required"))
+        else:
+            _validate_scalar_spec(raw.get("magnitude"), f"{p}/magnitude", issues)
+        start_tick = raw.get("start_tick", 0)
+        if not isinstance(start_tick, int) or isinstance(start_tick, bool) or start_tick < 0:
+            issues.append(issue("RANGE", pointer=f"{p}/start_tick", message="must be integer >= 0", actual=start_tick))
+        if "end_tick" in raw and raw.get("end_tick") is not None:
+            end_tick = raw.get("end_tick")
+            if (
+                not isinstance(end_tick, int)
+                or isinstance(end_tick, bool)
+                or (isinstance(start_tick, int) and not isinstance(start_tick, bool) and end_tick <= start_tick)
+            ):
+                issues.append(issue("RANGE", pointer=f"{p}/end_tick", message="must be null or integer > start_tick", actual=end_tick))
+        if "duration_ticks" in raw and raw.get("duration_ticks") is not None:
+            dur = raw.get("duration_ticks")
+            if not isinstance(dur, int) or isinstance(dur, bool) or dur < 1:
+                issues.append(issue("RANGE", pointer=f"{p}/duration_ticks", message="must be integer >= 1", actual=dur))
+        if "gate" in raw and raw.get("gate") is not None:
+            _validate_gate_object(raw.get("gate"), f"{p}/gate", issues, node_ids=node_ids)
+        if "hazard_driver" in raw and raw.get("hazard_driver") is not None:
+            hd = raw.get("hazard_driver")
+            hdp = f"{p}/hazard_driver"
+            if not isinstance(hd, dict):
+                issues.append(issue("TYPE", pointer=hdp, message="hazard_driver must be object"))
+            else:
+                reject_unknown_fields(hd, allowed_hd_fields, hdp, issues)
+                hd_node = hd.get("node")
+                if not nonempty_str(hd_node):
+                    issues.append(issue("MISSING_FIELD", pointer=f"{hdp}/node", message="required"))
+                elif node_ids is not None and hd_node not in node_ids:
+                    issues.append(issue("UNKNOWN_REF", pointer=f"{hdp}/node", actual=hd_node))
+                if "threshold" not in hd:
+                    issues.append(issue("MISSING_FIELD", pointer=f"{hdp}/threshold", message="required"))
+                else:
+                    refuse_string_number(hd.get("threshold"), f"{hdp}/threshold", issues)
+                if "slope" not in hd:
+                    issues.append(issue("MISSING_FIELD", pointer=f"{hdp}/slope", message="required"))
+                else:
+                    slope_val = refuse_string_number(hd.get("slope"), f"{hdp}/slope", issues)
+                    if slope_val is not None and slope_val < 0.0:
+                        issues.append(issue("RANGE", pointer=f"{hdp}/slope", message="must be >= 0", actual=slope_val))
+                if "max_probability" in hd:
+                    mp = refuse_string_number(hd.get("max_probability"), f"{hdp}/max_probability", issues)
+                    if mp is not None and not 0.0 <= mp <= 1.0:
+                        issues.append(issue("RANGE", pointer=f"{hdp}/max_probability", message="must be in [0, 1]", actual=mp))
+
+
+def _validate_stochastic_shocks_refs(
+    raw_shocks: Any,
+    node_ids: set[str],
+    issues: list[Issue],
+) -> None:
+    if not isinstance(raw_shocks, list):
+        return
+    for idx, raw in enumerate(raw_shocks):
+        if not isinstance(raw, dict):
+            continue
+        p = f"stochastic_shocks/{idx}"
+        target = raw.get("target")
+        if nonempty_str(target) and target not in node_ids:
+            issues.append(issue("UNKNOWN_REF", pointer=f"{p}/target", actual=target))
+        gate = raw.get("gate")
+        if isinstance(gate, dict) and isinstance(gate.get("conditions"), list):
+            for ci, cond in enumerate(gate["conditions"]):
+                if isinstance(cond, dict):
+                    cnode = cond.get("node")
+                    if nonempty_str(cnode) and cnode not in node_ids:
+                        issues.append(issue("UNKNOWN_REF", pointer=f"{p}/gate/conditions/{ci}/node", actual=cnode))
+        hd = raw.get("hazard_driver")
+        if isinstance(hd, dict):
+            hd_node = hd.get("node")
+            if nonempty_str(hd_node) and hd_node not in node_ids:
+                issues.append(issue("UNKNOWN_REF", pointer=f"{p}/hazard_driver/node", actual=hd_node))
+
 
 def validate_manifest_core(manifest: dict[str, Any], mode: str) -> CheckResult:
     issues: list[Issue] = []
@@ -1980,36 +2145,7 @@ def validate_edges(
             if not numeric_present and "distribution" not in effect:
                 issues.append(issue("MISSING_FIELD", pointer=f"{p}/effect_parameter", message="requires numerical reference or distribution"))
         if "gate" in raw and raw["gate"] is not None:
-            gate = raw["gate"]
-            if not isinstance(gate, dict):
-                issues.append(issue("TYPE", pointer=f"{p}/gate", message="gate must be object"))
-            else:
-                reject_unknown_fields(gate, GATE_FIELDS, f"{p}/gate", issues)
-                gate_op = gate.get("op")
-                if not isinstance(gate_op, str) or gate_op not in GATE_OPS:
-                    issues.append(issue("ENUM", pointer=f"{p}/gate/op", message="must be all, any, or veto", actual=gate_op))
-                conditions = gate.get("conditions")
-                if not isinstance(conditions, list) or not conditions:
-                    issues.append(issue("MISSING_FIELD", pointer=f"{p}/gate/conditions", message="requires non-empty conditions list"))
-                else:
-                    for ci, cond in enumerate(conditions):
-                        cp = f"{p}/gate/conditions/{ci}"
-                        if not isinstance(cond, dict):
-                            issues.append(issue("TYPE", pointer=cp, message="gate condition must be object"))
-                            continue
-                        reject_unknown_fields(cond, GATE_CONDITION_FIELDS, cp, issues)
-                        cnode = cond.get("node")
-                        if not nonempty_str(cnode):
-                            issues.append(issue("MISSING_FIELD", pointer=f"{cp}/node", message="required"))
-                        elif cnode not in node_ids:
-                            issues.append(issue("UNKNOWN_REF", pointer=f"{cp}/node", actual=cnode))
-                        cop = cond.get("op")
-                        if not isinstance(cop, str) or cop not in GATE_COMPARE_OPS:
-                            issues.append(issue("ENUM", pointer=f"{cp}/op", message="must be gt, gte, lt, or lte", actual=cop))
-                        if "value" not in cond:
-                            issues.append(issue("MISSING_FIELD", pointer=f"{cp}/value", message="required"))
-                        else:
-                            refuse_string_number(cond.get("value"), f"{cp}/value", issues)
+            _validate_gate_object(raw["gate"], f"{p}/gate", issues, node_ids=node_ids)
     return _check("edges", issues, {"edges": len(by_id)}), by_id
 
 
@@ -5069,7 +5205,20 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
     if model is not None:
         reject_unknown_fields(
             model,
-            frozenset({"schema_version", "model_version", "formula_version", "model_hash", "variables", "edges", "interventions", "source_hashes", "source_set_hash"}),
+            frozenset(
+                {
+                    "schema_version",
+                    "model_version",
+                    "formula_version",
+                    "model_hash",
+                    "variables",
+                    "edges",
+                    "interventions",
+                    "stochastic_shocks",
+                    "source_hashes",
+                    "source_set_hash",
+                }
+            ),
             "computational_model",
             issues,
         )
@@ -5077,6 +5226,8 @@ def validate_numerical_artifacts(workspace: Path, manifest: dict[str, Any]) -> C
             if field not in model:
                 issues.append(issue("MISSING_FIELD", artifact="computational_model", pointer=field, message="required"))
         model_body = {key: model.get(key) for key in ("variables", "edges", "interventions")}
+        if model.get("stochastic_shocks"):
+            model_body["stochastic_shocks"] = model.get("stochastic_shocks")
         model_formula_version = str(model.get("formula_version", LEGACY_FORMULA_VERSION))
         if model_formula_version not in SUPPORTED_FORMULA_VERSIONS:
             issues.append(issue("SCHEMA", artifact="computational_model", pointer="formula_version", actual=model_formula_version))
@@ -5947,6 +6098,13 @@ def validate_workspace(
     c_nodes, node_ids = validate_nodes(nodes, evidence_ids, manifest, timestep_days=timestep_days)
     checks["nodes"] = c_nodes.to_dict()
     all_issues.extend(c_nodes.issues)
+    if manifest.get("stochastic_shocks") is not None:
+        shock_ref_issues: list[Issue] = []
+        _validate_stochastic_shocks_refs(manifest.get("stochastic_shocks"), node_ids, shock_ref_issues)
+        if shock_ref_issues:
+            all_issues.extend(shock_ref_issues)
+            merged_man_issues = [*c_man.issues, *shock_ref_issues]
+            checks["manifest"] = _check("manifest", merged_man_issues).to_dict()
 
     _, edges_raw, e_iss = load_workspace_artifact(workspace, rel("edges", "edges.json"), kind="json")
     all_issues.extend(e_iss)

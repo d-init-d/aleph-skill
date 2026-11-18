@@ -121,7 +121,40 @@
           "magnitude": {"oneOf": [{"type": "number"}, {"type": "object"}]},
           "start_tick": {"type": "integer", "minimum": 0},
           "end_tick": {"type": ["integer", "null"], "minimum": 0},
-          "duration_ticks": {"type": "integer", "minimum": 1}
+          "duration_ticks": {"type": "integer", "minimum": 1},
+          "gate": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["op", "conditions"],
+            "properties": {
+              "op": {"enum": ["all", "any", "veto"]},
+              "conditions": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["node", "op", "value"],
+                  "properties": {
+                    "node": {"type": "string", "minLength": 1},
+                    "op": {"enum": ["gt", "gte", "lt", "lte"]},
+                    "value": {"type": "number"}
+                  }
+                }
+              }
+            }
+          },
+          "hazard_driver": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["node", "threshold", "slope"],
+            "properties": {
+              "node": {"type": "string", "minLength": 1},
+              "threshold": {"type": "number"},
+              "slope": {"type": "number", "minimum": 0},
+              "max_probability": {"type": "number", "minimum": 0, "maximum": 1}
+            }
+          }
         }
       }
     }
