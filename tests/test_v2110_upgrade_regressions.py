@@ -24,7 +24,6 @@ from aleph.engine import (  # noqa: E402
     EngineConfig,
     ModelEdge,
     Variable,
-    compile_model,
     model_hash,
     model_payload,
     run_monte_carlo,

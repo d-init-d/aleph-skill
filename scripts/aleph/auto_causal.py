@@ -1397,12 +1397,13 @@ def apply_model(
                 "simulation_run_ok": False,
             }
         existing_manifest_doc, existing_m_issues = load_json_secure(manifest_path)
-        existing_paths_doc = (
+        raw_artifact_paths = (
             existing_manifest_doc.get("artifact_paths")
-            if not existing_m_issues
-            and isinstance(existing_manifest_doc, dict)
-            and isinstance(existing_manifest_doc.get("artifact_paths"), dict)
-            else {}
+            if not existing_m_issues and isinstance(existing_manifest_doc, dict)
+            else None
+        )
+        existing_paths_doc: dict[str, Any] = (
+            raw_artifact_paths if isinstance(raw_artifact_paths, dict) else {}
         )
         protected_files = {
             "execution-trace.json",
