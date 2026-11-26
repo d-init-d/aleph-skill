@@ -4,19 +4,21 @@ Aleph formula 2.2 (see `references/formula-2.2.md`) extends formula 2.1 with bas
 
 ## Level equation
 
-For each tick, `level` and `flow` variables start from their declared baseline. A `stock` carries its prior end-of-step state through timestep-invariant decay (`per_day` default) or direct per-tick retention (`per_tick`), then receives impulses and integrated rates:
+For each tick, `level` and `flow` variables start from their declared baseline (with optional `level` node `inertia` in `[0.0, 1.0)` carrying prior deviation). A `stock` carries its prior end-of-step state through timestep-invariant decay (`per_day` default) or direct per-tick retention (`per_tick`), governed by `retention_mode: "baseline"` (Formula 2.2 equilibrium default) or `"zero"`, then receives impulses and integrated rates:
 
 ```text
 retention_factor = retention if retention_unit == "per_tick" else exp(-decay_rate_per_day * timestep_days)
 # equivalent per_day retention form: retention_per_day ** timestep_days
 # effective edge input x_eff: (x_src - x_0) under deviation (2.2 default), ln(x_src / x_0) under log_ratio, x_src under level
 
-level_or_flow[t+1] = bounds(baseline + interventions + sum(edge_output))
+level_or_flow[t+1] = bounds(baseline + (inertia * (level[t] - baseline) if scale == "level" else 0) + interventions + sum(edge_output))
 
-stock[t+1] = bounds(retention_factor * stock[t]
+# stock retention_mode == "baseline" (Formula 2.2 default):
+stock[t+1] = bounds(baseline + retention_factor * (stock[t] - baseline)
                     + interventions
                     + sum(impulse_edge_output)
                     + timestep_days * sum(rate_edge_output))
+# stock retention_mode == "zero" (or Formula 2.1): omits baseline anchor above (retention_factor * stock[t] + ...)
 ```
 
 `do(set)` interventions replace the target and block incoming effects while active. A stock `set` declares `release_policy: retain|reset_baseline`; omitted policy is canonical `retain` for compatibility. `add` and `multiply` interventions apply on every active tick. Bounds are applied last to the computed end-of-step state.

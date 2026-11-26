@@ -23,12 +23,14 @@ from aleph.engine import (
     EngineConfig,
     compile_model,
     config_payload,
-    generate_numerical_execution_trace,
     inspect_execution_health,
     run_deterministic,
     run_monte_carlo,
 )
-from aleph.execution_binding import build_trace_execution_binding
+from aleph.execution_binding import (
+    build_trace_execution_binding,
+    generate_workspace_execution_trace,
+)
 from aleph.io import (
     canonical_hash,
     load_json_secure,
@@ -430,11 +432,11 @@ def main() -> None:
             raise SystemExit(EXIT_SEMANTIC)
         # Engine-derived numerical execution trace (R06 / F07 cold start)
         model_id = manifest.get("model_id", compiled.get("model_id", "model:compiled")) if isinstance(manifest, dict) else "model:compiled"
-        trace_data = generate_numerical_execution_trace(
+        trace_data = generate_workspace_execution_trace(
             model,
             config,
             ticks=ticks,
-            run_id=0,
+            result=result,
             model_id=str(model_id),
             formula_version=formula_version,
         )
@@ -571,11 +573,11 @@ def main() -> None:
                 if isinstance(manifest, dict)
                 else "model:compiled"
             )
-            expected_trace = generate_numerical_execution_trace(
+            expected_trace = generate_workspace_execution_trace(
                 model,
                 config,
                 ticks=ticks,
-                run_id=0,
+                result=result,
                 model_id=str(model_id),
                 formula_version=formula_version,
             )

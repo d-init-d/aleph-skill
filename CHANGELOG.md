@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.11.0 - 2026-11-26
+
+### Added
+
+- **Upstream-attested D Research `3.9.0` bundle**: Pins official D Research `v3.9.0` (`249` runtime files, `component-lock.json` verified against upstream Git tag & SLSA-attested release archives), delivering contraction-aware & multi-sentence source grounding, publisher-domain lineage clustering, NFC-normalized Vietnamese term harvesting, same-branch reconciliation, and structured missing-browser diagnostics across Aleph's locked `research_gateway.py`.
+- **Assumption-only sealed roleplay receipt verification**: Added `verify_assumption_roleplay_receipt()` in `scripts/aleph/packets.py` and updated `_roleplay_tier()` in `scripts/aleph/quality.py` so `assumption`/`fictional` actors with a single sealed root roleplay row and zero research rows pass receipt verification instead of downgrading to `"D"`. Also resolves `ALEPH_RECEIPT_KEY` and `D_RESEARCH_LEDGER_KEY` from the environment in `evaluate()` and `finalize_workspace()` when omitted.
+- **Elasticity plausibility warnings in `repair_model_schema.py`**: Emits `ELASTICITY_DEVIATION_INPUT` when `elasticity` edges use `input_mode == "deviation"` and `ELASTICITY_NONPOSITIVE_BASELINE` when non-deviation `elasticity` edges read from sources with `baseline <= 0`.
+
+### Fixed
+
+- **Monte Carlo representative `run_id` & total-unresolved trace generation**: Added `select_monte_carlo_trace_run_id()` and `generate_workspace_execution_trace()` in `scripts/aleph/execution_binding.py`, wired into `scripts/run_simulation.py` and `scripts/replay_simulation.py`, so traces bind the first valid sample when `run:0` fails and emit a schema-valid unresolved trace (`invalid_mass: 1.0`, `steps: []`) when `unresolved_mass == 1.0`.
+- **`--into-initialized` overwrite guard**: `apply_model(..., into_initialized=True)` in `scripts/aleph/auto_causal.py` now refuses workspaces with pre-existing `execution-trace.json`, `simulation-model.json`, `simulation-run.json`, `replay-report.json`, manifest-declared equivalents, or non-template `propagation-trace.jsonl` (`REFUSED_EXISTING_SIMULATION_DATA`).
+- **`run_sensitivity.py` shock compilation alignment**: Loads `simulation-config.json` and passes `stochastic_shocks` identically to `compile_model.py`, eliminating model-hash mismatches on shocked workspaces.
+- **`interactive_roleplay.py` ISO timestep & normalized `--spec` matching**: Parses ISO-8601 `timestep` values (e.g., `"P1M"`, `"P1D"`) in `cmd_init`, validates `_config_errors` and normalizes specs with `objectives`-synthesized `state_weights` in `init_roleplay_session()`, and matches normalized spec hashes during `cmd_advance`.
+- **`repair_model_schema.py` edge-case gaps**: Swaps reversed `[hi, lo]` node bounds (`REVERSED_BOUNDS_SWAPPED`), normalizes unprefixed `gate.conditions[].node` references so missing targets are synthesized, coerces string integer ticks, and clamps negative `start_tick` values safely.
+- **Validator negation & privacy severity consistency**: Ignores negated `"calibrated probability"` disclaimers (e.g., `"no calibrated probability"`, `"without calibrated probability"`) in `scripts/aleph/validator.py`, and aligns `privacy_intake()` `SUBJECT_CLASS`/`ENUM` severity to `"warning"` alongside `allowed: True`.
+- **Documentation & CLI accuracy**: Updated `SKILL.md` (`# Aleph Skill 2.11.0`, clear 3-path model entry guide under 150 lines, `compile_model.py` pre-roleplay step, corrected `simulate-branches --session <session.json> --workspace <run>`), `references/d-research-integration.md` (`formula_version: 2.2.0` default), `references/bundled-research-routing.md` (`research:harvest` route & `3.8.0` wording), `references/propagation-engine.md` (`retention_mode` & `inertia` formulas), and `references/artifact-contract.md` (`execution-trace.json`).
+
+See [release notes](.github/release-notes/v2.11.0.md) for compatibility, upgrade instructions, and verification details.
+
 ## 2.10.0 - 2026-11-18
 
 ### Added

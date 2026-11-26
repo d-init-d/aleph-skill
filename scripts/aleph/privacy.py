@@ -124,10 +124,10 @@ def privacy_intake(
     """
     issues: list[Issue] = []
     if subject_class not in SUBJECT_CLASS:
-        issues.append(issue("SUBJECT_CLASS", message="invalid subject_class", actual=subject_class))
+        issues.append(issue("SUBJECT_CLASS", severity="warning", message="invalid subject_class", actual=subject_class))
         subject_class = "unknown"
     if living_status not in VALID_LIVING_STATUS:
-        issues.append(issue("ENUM", pointer="living_status", actual=living_status))
+        issues.append(issue("ENUM", severity="warning", pointer="living_status", actual=living_status))
         living_status = "unknown"
     if living_status == "unknown":
         living_status = "living"

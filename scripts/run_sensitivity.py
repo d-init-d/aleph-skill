@@ -112,11 +112,18 @@ def main() -> None:
         formula_version = resolve_workspace_formula_version(
             workspace, manifest if isinstance(manifest, dict) else {}
         )
+        cfg_path = workspace / "simulation-config.json"
+        cfg_data = load_json(cfg_path) if cfg_path.is_file() else {}
+        shocks = (
+            (cfg_data.get("stochastic_shocks") if isinstance(cfg_data, dict) else None)
+            or (manifest.get("stochastic_shocks") if isinstance(manifest, dict) else None)
+        )
         model = compile_model(
             nodes if isinstance(nodes, list) else [],
             edges if isinstance(edges, list) else [],
             load_interventions(workspace, manifest if isinstance(manifest, dict) else {}),
             formula_version=formula_version,
+            stochastic_shocks=shocks if isinstance(shocks, list) else None,
         )
     except (TypeError, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc), "code": "MODEL_COMPILE"}, indent=2))

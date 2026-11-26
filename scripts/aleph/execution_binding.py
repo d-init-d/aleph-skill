@@ -11,6 +11,7 @@ from .engine import (
     ComputationalModel,
     EngineConfig,
     ModelEdge,
+    generate_numerical_execution_trace,
     run_deterministic,
     sampled_edge_parameters,
     sampled_retention_factor,
@@ -615,3 +616,86 @@ def build_trace_execution_binding(
             ]
         )
     return {**body, "binding_hash": canonical_hash(body)}, []
+
+
+def select_monte_carlo_trace_run_id(
+    model: ComputationalModel,
+    config: EngineConfig,
+    *,
+    ticks: int,
+    result: dict[str, Any],
+) -> int | None:
+    """Return the first valid run index in a Monte Carlo result, or None if all runs failed."""
+    summary = result.get("summary") if isinstance(result, dict) else None
+    if not isinstance(summary, dict):
+        return 0
+    n_runs = int(summary.get("n_runs", 0) or 0)
+    invalid_runs = int(summary.get("invalid_runs", 0) or 0)
+    if n_runs <= 0 or (n_runs - invalid_runs) <= 0:
+        return None
+    rep_ids: list[int] = []
+    for branch in summary.get("branches") or []:
+        if not isinstance(branch, dict):
+            continue
+        match = RUN_REF_RE.fullmatch(str(branch.get("representative_run") or ""))
+        if match is not None:
+            rid = int(match.group(1))
+            if 0 <= rid < n_runs:
+                rep_ids.append(rid)
+    if rep_ids:
+        return min(rep_ids)
+    for rid in range(n_runs):
+        if run_deterministic(model, config, ticks=ticks, run_id=rid).get("ok"):
+            return rid
+    return None
+
+
+def generate_workspace_execution_trace(
+    model: ComputationalModel,
+    config: EngineConfig,
+    *,
+    ticks: int,
+    result: dict[str, Any],
+    model_id: str = "model:compiled",
+    formula_version: str | None = None,
+) -> dict[str, Any]:
+    """Generate the canonical cold-start trace, handling invalid MC run:0 or 100% unresolved mass."""
+    if config.mode != "monte_carlo":
+        return generate_numerical_execution_trace(
+            model,
+            config,
+            ticks=ticks,
+            run_id=0,
+            model_id=model_id,
+            formula_version=formula_version,
+        )
+    summary = result.get("summary") if isinstance(result, dict) else {}
+    n_runs = int(summary.get("n_runs", 0) or 0) if isinstance(summary, dict) else 0
+    valid_run_id = select_monte_carlo_trace_run_id(model, config, ticks=ticks, result=result)
+    if valid_run_id is not None:
+        trace = generate_numerical_execution_trace(
+            model,
+            config,
+            ticks=ticks,
+            run_id=valid_run_id,
+            model_id=model_id,
+            formula_version=formula_version,
+        )
+        if valid_run_id > 0:
+            trace["total_samples"] = max(1, n_runs, valid_run_id + 1)
+        return trace
+    base = generate_numerical_execution_trace(
+        model,
+        config,
+        ticks=ticks,
+        run_id=0,
+        model_id=model_id,
+        formula_version=formula_version,
+    )
+    return {
+        **base,
+        "total_samples": max(1, n_runs),
+        "invalid_mass": 1.0,
+        "steps": [],
+        "replay_hash": "0" * 64,
+    }

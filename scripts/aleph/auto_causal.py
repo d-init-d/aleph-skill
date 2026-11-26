@@ -1396,6 +1396,54 @@ def apply_model(
                 "compilation_ok": False,
                 "simulation_run_ok": False,
             }
+        existing_manifest_doc, existing_m_issues = load_json_secure(manifest_path)
+        existing_paths_doc = (
+            existing_manifest_doc.get("artifact_paths")
+            if not existing_m_issues
+            and isinstance(existing_manifest_doc, dict)
+            and isinstance(existing_manifest_doc.get("artifact_paths"), dict)
+            else {}
+        )
+        protected_files = {
+            "execution-trace.json",
+            "simulation-model.json",
+            "simulation-run.json",
+            "replay-report.json",
+        }
+        for key in ("execution_trace", "computational_model", "run_ledger", "replay_report"):
+            rel_val = existing_paths_doc.get(key)
+            if isinstance(rel_val, str) and rel_val.strip():
+                protected_files.add(rel_val.strip().replace("\\", "/"))
+        for fname in sorted(protected_files):
+            candidate = target / fname
+            if candidate.exists():
+                raise ValueError(
+                    f"REFUSED_EXISTING_SIMULATION_DATA: {fname} already exists in initialized workspace"
+                )
+        prop_candidates = {"propagation-trace.jsonl"}
+        raw_prop_rel = existing_paths_doc.get("propagation_trace")
+        if isinstance(raw_prop_rel, str) and raw_prop_rel.strip():
+            prop_candidates.add(raw_prop_rel.strip().replace("\\", "/"))
+        for prop_rel in sorted(prop_candidates):
+            prop_path = target / prop_rel
+            if not prop_path.exists():
+                continue
+            if not prop_path.is_file():
+                raise ValueError(
+                    f"REFUSED_EXISTING_SIMULATION_DATA: {prop_rel} already exists in initialized workspace"
+                )
+            if prop_path.stat().st_size > 0:
+                stub_rows, stub_issues = load_jsonl_secure(prop_path)
+                is_template_stub = (
+                    not stub_issues
+                    and len(stub_rows) == 1
+                    and isinstance(stub_rows[0], dict)
+                    and stub_rows[0].get("edge_id") == "causal:example-increases-target"
+                )
+                if not is_template_stub:
+                    raise ValueError(
+                        f"REFUSED_EXISTING_SIMULATION_DATA: non-template {prop_rel} already exists in initialized workspace"
+                    )
     elif target.exists() and (not target.is_dir() or any(target.iterdir())):
         return {"ok": False, "error": "REFUSED_EXISTING_WORKSPACE: target must be new or empty",
                 "workspace_dir": str(target), "compilation_ok": False, "simulation_run_ok": False}

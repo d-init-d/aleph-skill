@@ -22,7 +22,10 @@ from aleph.engine import (
     run_monte_carlo,
     semantic_result_payload,
 )
-from aleph.execution_binding import build_trace_execution_binding
+from aleph.execution_binding import (
+    build_trace_execution_binding,
+    generate_workspace_execution_trace,
+)
 from aleph.io import canonical_hash, load_json_secure, sha256_file, write_json_atomic
 from aleph.issues import Issue, issue
 from aleph.paths import output_alias_issues, resolve_in_workspace
@@ -338,13 +341,11 @@ def main() -> None:
                 )
             )
         if trace_path.suffix == ".json" and isinstance(trace_json, dict):
-            from aleph.engine import generate_numerical_execution_trace
-
-            expected_trace = generate_numerical_execution_trace(
+            expected_trace = generate_workspace_execution_trace(
                 model,
                 config,
                 ticks=ticks,
-                run_id=0,
+                result=replay,
                 model_id=str(
                     (manifest.get("model_id") if isinstance(manifest, dict) else None)
                     or compiled.get("model_id")

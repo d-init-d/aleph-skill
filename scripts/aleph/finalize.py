@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -175,7 +176,17 @@ def finalize_workspace(
 
     transaction_id = f"finalize:{uuid.uuid4()}"
     committed_at = _utc()
-    quality = evaluate(workspace, validation=validation, final_receipt_verified=True)
+    env_actor_key = os.environ.get("ALEPH_RECEIPT_KEY")
+    env_research_key = os.environ.get("D_RESEARCH_LEDGER_KEY")
+    actor_hmac = env_actor_key.encode("utf-8") if env_actor_key else None
+    research_hmac = env_research_key.encode("utf-8") if env_research_key else None
+    quality = evaluate(
+        workspace,
+        validation=validation,
+        final_receipt_verified=True,
+        actor_receipt_hmac_key=actor_hmac,
+        d_research_hmac_key=research_hmac,
+    )
     assurance_tier = quality.get("assurance_tier")
     raw_exec = manifest.get("execution")
     raw_rc = raw_exec.get("research_control") if isinstance(raw_exec, dict) else None
@@ -284,7 +295,12 @@ def finalize_workspace(
                 "rolled_back": True,
             }
         write_json_atomic(workspace / "validation-report.json", post_validation)
-        post_quality = evaluate(workspace, validation=post_validation)
+        post_quality = evaluate(
+            workspace,
+            validation=post_validation,
+            actor_receipt_hmac_key=actor_hmac,
+            d_research_hmac_key=research_hmac,
+        )
         write_json_atomic(workspace / "quality-report.json", post_quality)
     except (OSError, ValueError, TypeError) as exc:
         _restore(backups)

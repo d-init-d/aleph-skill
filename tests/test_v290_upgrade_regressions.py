@@ -45,10 +45,14 @@ class TestV290UpgradeRegressions(unittest.TestCase):
         self.assertEqual(VALIDATOR_VERSION, PACKAGE_VERSION)
 
     def test_component_lock_v380_and_gateway_routes_unlocked(self) -> None:
+        from _component_policy import assert_component_provenance
+
         lock = json.loads((ROOT / "component-lock.json").read_text(encoding="utf-8"))
-        self.assertEqual(lock["version"], "3.8.0")
-        self.assertEqual(lock["components"]["d-research"]["version"], "3.8.0")
-        self.assertEqual(lock["components"]["d-research"]["source_tag"], "v3.8.0")
+        for ver in (lock["version"], lock["components"]["d-research"]["version"]):
+            parts = ver.split("-", 1)[0].split(".")
+            parsed = tuple(int(p) for p in parts[:3])
+            self.assertGreaterEqual(parsed, (3, 8, 0), f"Expected D Research >= 3.8.0, got {ver}")
+        assert_component_provenance(self, lock["components"]["d-research"])
 
         for route_name in ("research:execution-evidence", "research:grounding"):
             route = research_gateway.COMMAND_ROUTES.get(route_name)

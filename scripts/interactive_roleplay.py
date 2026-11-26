@@ -22,10 +22,12 @@ from aleph.interactive_roleplay import (
     finalize_roleplay_session,
     generate_actor_packets,
     init_roleplay_session,
+    normalize_roleplay_spec,
     replay_roleplay_session,
     simulate_roleplay_branches,
 )
 from aleph.io import canonical_hash, load_json_secure, write_json_atomic
+from aleph.schema import parse_timestep_seconds
 
 
 def _load_object(path: str | Path) -> dict[str, Any]:
@@ -60,10 +62,23 @@ def _resolve_model(args: argparse.Namespace) -> ComputationalModel:
     raise ValueError("Either --model or --workspace containing simulation-model.json must be provided")
 
 
+def _parse_config_object(raw_cfg: dict[str, Any]) -> EngineConfig:
+    parsed = dict(raw_cfg)
+    parsed.pop("formula_version", None)
+    parsed.pop("stochastic_shocks", None)
+    raw_ts = parsed.get("timestep")
+    if isinstance(raw_ts, str):
+        sec = parse_timestep_seconds(raw_ts)
+        if sec is None or sec <= 0:
+            raise ValueError(f"INVALID_ENGINE_CONFIG: timestep {raw_ts!r} must be a positive duration")
+        parsed["timestep"] = sec / 86400.0
+    return EngineConfig(**parsed)
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     spec = _load_object(args.spec)
     model = _resolve_model(args)
-    config = EngineConfig(**_load_object(args.config)) if args.config else EngineConfig(seed="42")
+    config = _parse_config_object(_load_object(args.config)) if args.config else EngineConfig(seed="42")
     session = init_roleplay_session(spec, model, config)
     out_path = Path(args.out) if args.out else Path(args.spec).parent / f"session-{quote(session['session_id'], safe='')}.json"
     write_json_atomic(out_path, session)
@@ -113,9 +128,14 @@ def cmd_commit(args: argparse.Namespace) -> int:
 def cmd_advance(args: argparse.Namespace) -> int:
     session_path = Path(args.session)
     session = _load_object(session_path)
-    if args.spec and canonical_hash(_load_object(args.spec)) != session.get("spec_hash"):
-        raise ValueError("SESSION_SPEC_MISMATCH: --spec differs from the initialized session")
     model = _resolve_model(args)
+    if args.spec:
+        raw_spec = _load_object(args.spec)
+        if (
+            canonical_hash(raw_spec) != session.get("spec_hash")
+            and canonical_hash(normalize_roleplay_spec(raw_spec, model)) != session.get("spec_hash")
+        ):
+            raise ValueError("SESSION_SPEC_MISMATCH: --spec differs from the initialized session")
     round_record = advance_roleplay_round(session, model, _session_config(session))
     write_json_atomic(session_path, session)
     print(json.dumps({

@@ -3736,6 +3736,41 @@ def validate_branches(
     return _check("branches", issues, metrics)
 
 
+_CALIBRATED_PROB_MENTION_RE = re.compile(r"\bcalibrated\s+probability\b", re.IGNORECASE)
+_CALIBRATED_PROB_NEG_PREFIX_RE = re.compile(
+    r"(?:"
+    r"\b(?:no|without|not\s+a|not|neither|nor|never|forbids?|forbidden|prohibits?|prohibited|excludes?|omits?)\b"
+    r"|\bdoes\s+not\s+(?:claim|use|assign|emit|support|assert|produce)\b"
+    r")\s*(?:(?:any|a|the)\s+)?$",
+    re.IGNORECASE,
+)
+_CALIBRATED_PROB_NEG_SUFFIX_RE = re.compile(
+    r"^\s*(?:is\s+(?:forbidden|prohibited|unavailable|not\s+(?:claimed|authorized|used|enabled|permitted|supported))|"
+    r"are\s+(?:forbidden|prohibited|unavailable|not\s+(?:claimed|authorized|used|enabled|permitted|supported))|"
+    r"(?:forbidden|prohibited|unavailable|disclaimed|omitted|claimed\s+only\s+when))",
+    re.IGNORECASE,
+)
+
+
+def _has_affirmative_calibrated_probability(text: str) -> bool:
+    for match in _CALIBRATED_PROB_MENTION_RE.finditer(text):
+        start_clause = max(
+            text.rfind(".", 0, match.start()),
+            text.rfind(";", 0, match.start()),
+            text.rfind("\n", 0, match.start()),
+            text.rfind("!", 0, match.start()),
+            text.rfind("?", 0, match.start()),
+        ) + 1
+        prefix = text[start_clause : match.start()]
+        end_candidates = [pos for sep in (".", ";", "\n", "!", "?") if (pos := text.find(sep, match.end())) != -1]
+        end_clause = min(end_candidates) if end_candidates else len(text)
+        suffix = text[match.end() : end_clause]
+        if _CALIBRATED_PROB_NEG_PREFIX_RE.search(prefix) or _CALIBRATED_PROB_NEG_SUFFIX_RE.search(suffix):
+            continue
+        return True
+    return False
+
+
 def validate_report(
     text: str,
     manifest: dict[str, Any],
@@ -3790,7 +3825,7 @@ def validate_report(
             issues.append(issue("UNKNOWN_REF", artifact="REPORT.md", pointer="source appendix", message="reported evidence reference missing from appendix", actual=missing))
 
     cal_mode = manifest.get("likelihood_mode") == "calibrated_probability"
-    if (not cal_mode or not calibration_verified) and re.search(r"\bcalibrated\s+probability\b", text, re.IGNORECASE):
+    if (not cal_mode or not calibration_verified) and _has_affirmative_calibrated_probability(text):
         issues.append(
             issue(
                 "VERBAL_PROBABILITY_CONTRADICTION",
@@ -6256,7 +6291,7 @@ def validate_workspace(
             for h_idx, h_row in enumerate(ht_rows):
                 if isinstance(h_row, dict):
                     h_text = str(h_row.get("response") or h_row.get("text") or h_row.get("content") or h_row.get("reasoning") or "")
-                    if re.search(r"\bcalibrated\s+probability\b", h_text, re.IGNORECASE):
+                    if _has_affirmative_calibrated_probability(h_text):
                         all_issues.append(
                             issue(
                                 "VERBAL_PROBABILITY_CONTRADICTION",

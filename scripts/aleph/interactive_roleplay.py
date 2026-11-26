@@ -14,7 +14,14 @@ import math
 from dataclasses import asdict
 from typing import Any
 
-from .engine import ComputationalModel, EngineConfig, config_payload, model_hash, run_deterministic
+from .engine import (
+    ComputationalModel,
+    EngineConfig,
+    _config_errors,
+    config_payload,
+    model_hash,
+    run_deterministic,
+)
 from .io import canonical_hash
 
 ROLEPLAY_SPEC_SCHEMA_VERSION = "1.0.0"
@@ -269,6 +276,33 @@ def validate_session_spec(
     return len(errors) == 0, errors
 
 
+def normalize_roleplay_spec(
+    spec: dict[str, Any],
+    model: ComputationalModel | dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return a canonical copy of spec with objective-synthesized state_weights applied."""
+    model_obj: ComputationalModel | None = None
+    if isinstance(model, dict):
+        from .engine import model_from_dict
+
+        model_obj = model_from_dict(model, formula_version=str(model.get("formula_version") or "2.0.0"))
+    else:
+        model_obj = model
+    spec_copy = copy.deepcopy(spec)
+    raw_spec_obj = spec_copy.get("objectives")
+    spec_objectives: dict[str, Any] = raw_spec_obj if isinstance(raw_spec_obj, dict) else {}
+    payoffs = spec_copy.get("payoffs")
+    if isinstance(payoffs, dict):
+        for actor in spec_copy.get("actors", []):
+            p_conf = payoffs.get(actor)
+            if isinstance(p_conf, dict) and "state_weights" not in p_conf:
+                raw_obj = p_conf.get("objectives", spec_objectives.get(actor))
+                if raw_obj is not None:
+                    sw, _ = _synthesize_state_weights_from_objectives(raw_obj, actor, model_obj)
+                    p_conf["state_weights"] = sw
+    return spec_copy
+
+
 def init_roleplay_session(
     spec: dict[str, Any],
     initial_model: ComputationalModel | dict[str, Any],
@@ -283,23 +317,20 @@ def init_roleplay_session(
     else:
         model_obj = initial_model
 
+    cfg = config or EngineConfig(seed="42")
+    cfg_issues = _config_errors(cfg)
+    if cfg_issues:
+        raise ValueError(
+            "Invalid engine config:\n  " + "\n  ".join(item.message or item.code for item in cfg_issues)
+        )
+
     ok, errors = validate_session_spec(spec, model_obj)
     if not ok:
         raise ValueError("Invalid roleplay session spec:\n  " + "\n  ".join(errors))
 
-    spec_copy = copy.deepcopy(spec)
-    raw_spec_obj = spec_copy.get("objectives")
-    spec_objectives: dict[str, Any] = raw_spec_obj if isinstance(raw_spec_obj, dict) else {}
-    for actor in spec_copy.get("actors", []):
-        p_conf = spec_copy["payoffs"][actor]
-        if "state_weights" not in p_conf:
-            raw_obj = p_conf.get("objectives", spec_objectives.get(actor))
-            if raw_obj is not None:
-                sw, _ = _synthesize_state_weights_from_objectives(raw_obj, actor, model_obj)
-                p_conf["state_weights"] = sw
+    spec_copy = normalize_roleplay_spec(spec, model_obj)
     spec_hash = canonical_hash(spec_copy)
     now = _iso_now()
-    cfg = config or EngineConfig(seed="42")
     m_hash = model_hash(model_obj) if model_obj else None
     c_hash = canonical_hash(config_payload(cfg))
 

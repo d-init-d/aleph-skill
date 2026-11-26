@@ -126,14 +126,20 @@ def _representative_stock_retention(node: dict[str, Any]) -> float | None:
 
 
 def _collect_plausibility_warnings(
-    nodes: list[dict[str, Any]], *, effective_timestep_days: float = 1.0
+    nodes: list[dict[str, Any]],
+    *,
+    effective_timestep_days: float = 1.0,
+    edges: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Emit non-fatal sanity warnings for likely mis-scaled macro/node baselines."""
+    """Emit non-fatal sanity warnings for likely mis-scaled macro/node baselines and edge inputs."""
     warnings: list[dict[str, Any]] = []
+    nodes_by_id: dict[str, dict[str, Any]] = {}
     for node in nodes:
         if not isinstance(node, dict):
             continue
         nid = str(node.get("id") or "")
+        if nid:
+            nodes_by_id[nid] = node
         name = str(node.get("name") or "")
         label = f"{nid} {name}".lower()
         unit = str(node.get("unit") or "").strip().lower()
@@ -209,6 +215,41 @@ def _collect_plausibility_warnings(
                         ),
                     }
                 )
+    for edge in edges or []:
+        if not isinstance(edge, dict):
+            continue
+        eid = str(edge.get("id") or "")
+        if str(edge.get("transform") or "").strip().lower() != "elasticity":
+            continue
+        input_mode = str(edge.get("input_mode") or "").strip().lower()
+        src_id = str(edge.get("from") or "")
+        src_node = nodes_by_id.get(src_id)
+        src_baseline = _finite_num(src_node.get("baseline")) if isinstance(src_node, dict) else None
+        if input_mode == "deviation":
+            warnings.append(
+                {
+                    "code": "ELASTICITY_DEVIATION_INPUT",
+                    "edge_id": eid,
+                    "source": src_id,
+                    "message": (
+                        f"Elasticity edge '{eid}' explicitly configures input_mode='deviation', passing raw "
+                        "differences into expm1() instead of normalized log_ratio."
+                    ),
+                }
+            )
+        elif src_baseline is not None and src_baseline <= 0.0:
+            warnings.append(
+                {
+                    "code": "ELASTICITY_NONPOSITIVE_BASELINE",
+                    "edge_id": eid,
+                    "source": src_id,
+                    "baseline": src_baseline,
+                    "message": (
+                        f"Elasticity edge '{eid}' defaults to input_mode='log_ratio' in formula 2.2.0, "
+                        f"which requires positive baseline on source '{src_id}' (got {src_baseline})."
+                    ),
+                }
+            )
     return warnings
 
 
@@ -449,19 +490,13 @@ def _repair_edge_gate(
         if not isinstance(node_ref, str) or not node_ref.strip():
             repairs.append(f"{eid}:dropped_gate_condition_missing_node_{idx}")
             continue
-        node_ref_s = node_ref.strip()
-        if node_id_map and node_ref_s in node_id_map and node_id_map[node_ref_s] != node_ref_s:
-            node_ref_s = node_id_map[node_ref_s]
-            repairs.append(f"{eid}:remapped_gate_node_{idx}")
+        node_ref_s = _normalize_target_ref(node_ref.strip(), node_id_map)
+        if node_ref_s != node_ref.strip():
+            repairs.append(f"{eid}:normalized_gate_node_{idx}")
         fc["node"] = node_ref_s
         if valid_node_ids is not None and fc["node"] not in valid_node_ids:
-            prefixed_candidate = _normalize_target_ref(fc["node"], node_id_map)
-            if prefixed_candidate in valid_node_ids:
-                fc["node"] = prefixed_candidate
-                repairs.append(f"{eid}:resolved_gate_node_{idx}")
-            else:
-                repairs.append(f"{eid}:dropped_gate_condition_unknown_node_{idx}")
-                continue
+            repairs.append(f"{eid}:dropped_gate_condition_unknown_node_{idx}")
+            continue
         cop = str(fc.get("op") or "").strip().lower()
         if cop in _GATE_COMPARE_ALIASES:
             canon_cop = _GATE_COMPARE_ALIASES[cop]
@@ -642,6 +677,13 @@ def repair_nodes(
             else:
                 node.pop("initial_value", None)
                 repairs.append(f"{nid}:removed_invalid_initial_value")
+        raw_bounds = node.get("bounds")
+        if isinstance(raw_bounds, list) and len(raw_bounds) == 2:
+            lo_num = _finite_num(raw_bounds[0])
+            hi_num = _finite_num(raw_bounds[1])
+            if lo_num is not None and hi_num is not None and lo_num > hi_num:
+                node["bounds"] = [hi_num, lo_num]
+                repairs.append(f"{nid}:swapped_reversed_bounds")
 
         if "unit" not in node and isinstance(node.get("units"), str):
             node["unit"] = node["units"]
@@ -963,6 +1005,23 @@ def repair_edges(
     return out, repairs
 
 
+def _coerce_int_tick(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if re.fullmatch(r"[+-]?\d+(?:\.0+)?", text):
+            try:
+                return int(float(text))
+            except (OverflowError, ValueError):
+                return None
+    return None
+
+
 def repair_interventions(
     raw: Any,
     node_scales: dict[str, str] | None = None,
@@ -1006,9 +1065,13 @@ def repair_interventions(
 
         for tick_key in ("start_tick", "end_tick"):
             val = iv.get(tick_key)
-            if isinstance(val, float) and not isinstance(val, bool) and math.isfinite(val) and val.is_integer():
-                iv[tick_key] = int(val)
+            coerced = _coerce_int_tick(val)
+            if coerced is not None and (isinstance(val, (float, str)) or type(val) is not int):
+                iv[tick_key] = coerced
                 repairs.append(f"{iid}:coerced_{tick_key}_int")
+        if isinstance(iv.get("start_tick"), int) and not isinstance(iv.get("start_tick"), bool) and iv["start_tick"] < 0:
+            iv["start_tick"] = 0
+            repairs.append(f"{iid}:clamped_negative_start_tick_0")
         if (
             isinstance(iv.get("start_tick"), int)
             and not isinstance(iv.get("start_tick"), bool)
@@ -1157,18 +1220,34 @@ def repair_stochastic_shocks(
             sk["op"] = "add"
             rep_log.append(f"{sid}:default_op_add")
 
-        start_tick = sk.get("start_tick", 0)
-        if not isinstance(start_tick, int) or isinstance(start_tick, bool) or start_tick < 0:
+        raw_start_tick = sk.get("start_tick", 0)
+        coerced_start = _coerce_int_tick(raw_start_tick)
+        if coerced_start is None:
             sk["start_tick"] = 0
             rep_log.append(f"{sid}:default_start_tick_0")
-        end_tick = sk.get("end_tick")
-        if isinstance(end_tick, int) and not isinstance(end_tick, bool) and end_tick <= int(sk["start_tick"]):
-            sk["end_tick"] = int(sk["start_tick"]) + 1
-            rep_log.append(f"{sid}:normalized_end_tick_gt_start_tick")
-        dur = sk.get("duration_ticks", 1)
-        if not isinstance(dur, int) or isinstance(dur, bool) or dur < 1:
+        elif coerced_start < 0:
+            sk["start_tick"] = 0
+            rep_log.append(f"{sid}:clamped_negative_start_tick_0")
+        elif coerced_start != raw_start_tick or isinstance(raw_start_tick, (float, str)):
+            sk["start_tick"] = coerced_start
+            rep_log.append(f"{sid}:coerced_start_tick_int")
+        raw_end_tick = sk.get("end_tick")
+        coerced_end = _coerce_int_tick(raw_end_tick)
+        if coerced_end is not None:
+            if coerced_end != raw_end_tick or isinstance(raw_end_tick, (float, str)):
+                sk["end_tick"] = coerced_end
+                rep_log.append(f"{sid}:coerced_end_tick_int")
+            if coerced_end <= int(sk["start_tick"]):
+                sk["end_tick"] = int(sk["start_tick"]) + 1
+                rep_log.append(f"{sid}:normalized_end_tick_gt_start_tick")
+        raw_dur = sk.get("duration_ticks", 1)
+        coerced_dur = _coerce_int_tick(raw_dur)
+        if coerced_dur is None or coerced_dur < 1:
             sk["duration_ticks"] = 1
             rep_log.append(f"{sid}:default_duration_ticks_1")
+        elif coerced_dur != raw_dur or isinstance(raw_dur, (float, str)):
+            sk["duration_ticks"] = coerced_dur
+            rep_log.append(f"{sid}:coerced_duration_ticks_int")
 
         _repair_edge_gate(sk, sid, node_id_map, rep_log)
         if "hazard_driver" in sk and sk["hazard_driver"] is not None:
@@ -1490,7 +1569,16 @@ def main(argv: list[str] | None = None) -> int:
             return EXIT_SEMANTIC
         fixed_nodes, node_repairs = repair_nodes(raw_nodes, id_map_out=node_id_map)
         repairs.extend(node_repairs)
-        warnings.extend(_collect_plausibility_warnings(fixed_nodes, effective_timestep_days=effective_timestep_days))
+        for nr in node_repairs:
+            if nr.endswith(":swapped_reversed_bounds"):
+                swapped_nid = nr.rsplit(":", 1)[0]
+                warnings.append(
+                    {
+                        "code": "REVERSED_BOUNDS_SWAPPED",
+                        "node_id": swapped_nid,
+                        "message": f"Node '{swapped_nid}' declared lower bound > upper bound; swapped to ascending [min, max].",
+                    }
+                )
         node_scales = {str(n.get("id")): str(n.get("scale", "level")) for n in fixed_nodes if isinstance(n, dict) and n.get("id")}
 
     eff_node_map = _augment_node_lookup_map(fixed_nodes, node_id_map)
@@ -1507,6 +1595,15 @@ def main(argv: list[str] | None = None) -> int:
         edges_count = len(fixed_edges)
         if not dry_run:
             write_json_atomic(target_dir / edges_rel, fixed_edges)
+
+    if fixed_nodes or fixed_edges:
+        warnings.extend(
+            _collect_plausibility_warnings(
+                fixed_nodes,
+                effective_timestep_days=effective_timestep_days,
+                edges=fixed_edges,
+            )
+        )
 
     iv_rel = _artifact_rel("interventions", "interventions.json")
     iv_path, iv_issues = resolve_in_workspace(ws, iv_rel, must_exist=False)

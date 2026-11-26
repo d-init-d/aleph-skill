@@ -46,8 +46,10 @@ def _run_cli(script: str, args: list[str]) -> subprocess.CompletedProcess[str]:
 
 class TestV2100UpgradeRegressions(unittest.TestCase):
     def test_version_constants_bumped_to_2_10_0(self) -> None:
-        self.assertEqual(PACKAGE_VERSION, "2.10.0")
-        self.assertEqual(VALIDATOR_VERSION, "2.10.0")
+        pkg_ver = tuple(int(part) for part in PACKAGE_VERSION.split("."))
+        val_ver = tuple(int(part) for part in VALIDATOR_VERSION.split("."))
+        self.assertGreaterEqual(pkg_ver, (2, 10, 0))
+        self.assertGreaterEqual(val_ver, (2, 10, 0))
 
     def test_gated_edge_trace_replay_butterfly_and_final_validation(self) -> None:
         bundle = {

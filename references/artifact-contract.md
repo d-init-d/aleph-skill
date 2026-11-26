@@ -57,7 +57,9 @@ Use `"pass"` as a machine-readable overall result only when every applicable sch
 
 Hindcast evidence uses an order-independent canonical snapshot digest. Hindcast commitment v3 maps each case ID to a commitment hash binding the formula version, cutoff, model hash, configuration hash, tick count, evidence snapshot, target IDs, and baselines. A boolean `precommitted` flag without a matching case commitment is not policy-locked and cannot support calibrated maturity.
 
-`propagation-trace.jsonl` is ordered, formula-versioned, hash-chained, and replayable. It retains sample references and temporal endpoints. Numerical rows additionally bind one `run:N`, source/target states, source tick, and sampled strength to the reconstructed run.
+`execution-trace.json` stores engine-derived numerical execution traces (`generation_mode: engine_derived` default for cold-start Formula `2.2.0` runs), recording per-step transitions, drawn parameters, gate multipliers, and cryptographic execution binding hashes.
+
+`propagation-trace.jsonl` is ordered, formula-versioned, hash-chained, and replayable for qualitative or `analyst_authored_legacy` traces. It retains sample references and temporal endpoints. Numerical rows additionally bind one `run:N`, source/target states, source tick, and sampled strength to the reconstructed run.
 
 `validation-report.json`, `quality-report.json`, artifact index, and final receipts record hard-gate results. Diagnostic quality score cannot elevate assurance.
 

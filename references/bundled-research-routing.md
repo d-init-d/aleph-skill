@@ -103,6 +103,7 @@ bindings. Stable task routes include:
 | Translation and semantic retrieval | `research:translate`, `research:embed` | translation/embedding helpers |
 | Citation graph and deduplication | `research:graph`, `research:dedup` | graph/dedup helpers |
 | Data cleaning and source scoring | `research:data`, `research:score` | data/quality helpers |
+| Vietnamese & domain term harvesting | `research:harvest` | `scripts/harvest_terms.py` |
 | Report rendering | `research:report` | `scripts/report_render.py` |
 | HTTP cache and run metadata | `research:cache`, `research:metadata` | cache/metadata helpers |
 | Quality and dogfood evaluation | `research:quality`, `research:dogfood`, `research:bench` | evaluation helpers |
@@ -111,7 +112,9 @@ bindings. Stable task routes include:
 | Browser smoke | `research:browser-smoke` | `scripts/browser_smoke.mjs` |
 
 Every other runnable file in `references/script-inventory.md` has a deterministic
-`research:script:<normalized-path>` audit alias. Use the friendly routes above
+`research:script:<normalized-path>` audit alias (replacing `/` and `.` with `-`,
+e.g. `scripts/harvest_terms.py` maps to `research:script:harvest_terms-py`
+alongside its friendly route `research:harvest`). Use the friendly routes above
 for normal work. There is no route that accepts a caller-supplied script path.
 
 Helper arguments go after `--`. Gateway options may appear before or after the
@@ -159,8 +162,8 @@ release jobs so a no-browser job cannot masquerade as a browser pass.
 
 Upstream 3.4.1 makes the social-snapshot self-test hermetic for known mocked
 fixture hosts while retaining the production resolver for private and malformed
-targets. The locked 3.5.0 component retains this behavior and reconciles only exact
-repository-only case `23`. Aleph retains the historical 3.4.0 DNS-policy
+targets. The locked D Research component (pinned at 3.9.0; policy active since
+3.5.0) retains this behavior and reconciles only exact repository-only case `23`. Aleph retains the historical 3.4.0 DNS-policy
 reconciliation for exact legacy bindings: if a host maps the public fixture
 name to a non-public address, only wrapper failures `22` and `26` may be
 reported as `CAPABILITY_DNS_POLICY` alongside case `23`. Any other failure set

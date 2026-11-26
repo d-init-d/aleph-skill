@@ -805,6 +805,61 @@ def verify_receipt_chain(
     return {"ok": not any(item.severity == "error" for item in issues), "issues": [item.to_dict() for item in issues]}
 
 
+def verify_assumption_roleplay_receipt(
+    receipt: dict[str, Any],
+    *,
+    roleplay_id: str,
+    hmac_key: bytes | None = None,
+    require_hmac: bool = True,
+) -> dict[str, Any]:
+    """Verify a standalone sealed roleplay receipt for an assumption-only actor."""
+    issues: list[Issue] = []
+    if not isinstance(receipt, dict):
+        issues.append(issue("TYPE", pointer="receipt", message="receipt must be a JSON object"))
+        return {"ok": False, "issues": [item.to_dict() for item in issues]}
+    if not _valid_id(roleplay_id):
+        issues.append(issue("RECEIPT_EXECUTION_ID", message="roleplay requires a stable execution ID"))
+    for key in sorted(set(receipt) - RECEIPT_FIELDS):
+        issues.append(issue("UNKNOWN_FIELD", pointer=f"receipt/{key}"))
+    execution_id = receipt.get("execution_id")
+    if execution_id != roleplay_id or not _valid_id(execution_id):
+        issues.append(issue("RECEIPT_EXECUTION_ID", pointer="receipt/execution_id", expected=roleplay_id, actual=execution_id))
+    if receipt.get("id") != f"receipt:{execution_id}":
+        issues.append(issue("RECEIPT_EXECUTION_ID", pointer="receipt/id", message="receipt ID does not match execution ID"))
+    if not _valid_id(receipt.get("runtime_id")) or not _valid_id(receipt.get("adapter_id")):
+        issues.append(issue("RECEIPT_EXECUTION_ID", pointer="receipt", message="runtime_id and adapter_id are required"))
+    if receipt.get("parent_execution_id") is not None:
+        issues.append(issue("RECEIPT_CHAIN", pointer="receipt/parent_execution_id", message="assumption-only roleplay receipt cannot have a parent"))
+    if receipt.get("previous_receipt_hash") is not None:
+        issues.append(issue("RECEIPT_CHAIN", pointer="receipt/previous_receipt_hash", message="assumption-only roleplay receipt cannot chain to a prior receipt"))
+    started = parse_time(receipt.get("started_at"))
+    completed = parse_time(receipt.get("completed_at"))
+    if started is None or completed is None or started > completed:
+        issues.append(issue("TRACK_ORDER", pointer="receipt", message="invalid receipt timestamps"))
+    if receipt.get("declared_network_policy") not in {"deny", "none", "offline"}:
+        issues.append(issue("ROLEPLAY_NETWORK", pointer="receipt/declared_network_policy", message="roleplay receipt must declare network denied"))
+    if receipt.get("declared_tool_policy") not in {"deny", "none"}:
+        issues.append(issue("ROLEPLAY_NETWORK", pointer="receipt/declared_tool_policy", message="roleplay receipt must declare tools denied"))
+    if receipt.get("observed_tool_calls") not in ([], None):
+        issues.append(issue("ROLEPLAY_NETWORK", pointer="receipt/observed_tool_calls", message="roleplay receipt reports observed tool calls"))
+    body = {key: value for key, value in receipt.items() if key not in {"receipt_hash", "hmac"}}
+    expected_hash = canonical_hash(body)
+    if receipt.get("receipt_hash") != expected_hash:
+        issues.append(issue("RECEIPT_CHAIN", pointer="receipt/receipt_hash", message="receipt hash mismatch", expected=expected_hash, actual=receipt.get("receipt_hash")))
+    if require_hmac:
+        if hmac_key is None:
+            issues.append(issue("HMAC_TAMPER", pointer="receipt/hmac", message="HMAC key is required"))
+        else:
+            expected_hmac = hmac.new(hmac_key, expected_hash.encode("ascii"), hashlib.sha256).hexdigest()
+            if not isinstance(receipt.get("hmac"), str) or not hmac.compare_digest(receipt["hmac"].lower(), expected_hmac):
+                issues.append(issue("HMAC_TAMPER", pointer="receipt/hmac", message="receipt HMAC mismatch"))
+    _validate_artifact_descriptors(receipt.get("inputs"), "receipt/inputs", issues)
+    _validate_artifact_descriptors(receipt.get("outputs"), "receipt/outputs", issues)
+    if not _valid_hash(receipt.get("capability_snapshot_hash")):
+        issues.append(issue("RECEIPT_CHAIN", pointer="receipt/capability_snapshot_hash", message="capability snapshot hash required"))
+    return {"ok": not any(item.severity == "error" for item in issues), "issues": [item.to_dict() for item in issues]}
+
+
 def _decision_actions(actor: dict[str, Any]) -> list[str]:
     graph = actor.get("decision_graph")
     if isinstance(graph, dict):

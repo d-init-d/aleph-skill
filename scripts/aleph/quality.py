@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from .io import canonical_hash, load_json_secure, load_jsonl_secure, sha256_file
 from .packets import (
     receipt_binds_ledger_artifacts,
     validate_actor_protocol,
+    verify_assumption_roleplay_receipt,
     verify_receipt_artifact_bytes,
     verify_receipt_chain,
 )
@@ -298,14 +300,25 @@ def _roleplay_tier(
     )
     semantic_valid = not any(item.severity == "error" for item in protocol_issues)
     for actor_id in actor_ids:
+        actor = actor_by_id[actor_id]
+        actor_basis = str(
+            actor.get("actor_basis")
+            or ("evidence" if actor.get("evidence_ids") else "assumption")
+        ).strip().lower()
+        is_assumption_only = actor_basis in {"assumption", "fictional"}
         research_rows = [row for row in rows if row.get("actor_id") == actor_id and row.get("track") == "research"]
         roleplay_rows = [row for row in rows if row.get("actor_id") == actor_id and row.get("track") == "roleplay"]
-        if len(research_rows) != 1 or len(roleplay_rows) != 1:
-            return "D"
-        research_row, roleplay_row = research_rows[0], roleplay_rows[0]
+        if is_assumption_only:
+            if len(research_rows) != 0 or len(roleplay_rows) != 1:
+                return "D"
+            expected_rows: tuple[dict[str, Any], ...] = (roleplay_rows[0],)
+        else:
+            if len(research_rows) != 1 or len(roleplay_rows) != 1:
+                return "D"
+            expected_rows = (research_rows[0], roleplay_rows[0])
         receipts: list[dict[str, Any]] = []
         references: set[str] = set()
-        for row in (research_row, roleplay_row):
+        for row in expected_rows:
             reference = row.get("receipt_ref")
             if not isinstance(reference, str) or not reference.strip():
                 have_references = False
@@ -322,10 +335,7 @@ def _roleplay_tier(
             hmac_valid = False
             continue
         by_execution = {str(value.get("execution_id")): value for value in receipts}
-        selected = [
-            by_execution.get(str(research_row.get("execution_id"))),
-            by_execution.get(str(roleplay_row.get("execution_id"))),
-        ]
+        selected = [by_execution.get(str(row.get("execution_id"))) for row in expected_rows]
         if not all(isinstance(value, dict) for value in selected):
             unsigned_valid = False
             hmac_valid = False
@@ -335,7 +345,7 @@ def _roleplay_tier(
             receipt.get("id") != row.get("receipt_id")
             or receipt.get("receipt_hash") != row.get("receipt_hash")
             or not receipt_binds_ledger_artifacts(receipt, row)
-            for receipt, row in zip(chain, (research_row, roleplay_row), strict=True)
+            for receipt, row in zip(chain, expected_rows, strict=True)
         ):
             unsigned_valid = False
             hmac_valid = False
@@ -349,19 +359,34 @@ def _roleplay_tier(
             unsigned_valid = False
             hmac_valid = False
             continue
-        unsigned = verify_receipt_chain(
-            chain,
-            research_id=str(research_row.get("execution_id")),
-            roleplay_id=str(roleplay_row.get("execution_id")),
-            require_hmac=False,
-        )
-        signed = verify_receipt_chain(
-            chain,
-            research_id=str(research_row.get("execution_id")),
-            roleplay_id=str(roleplay_row.get("execution_id")),
-            hmac_key=hmac_key,
-            require_hmac=True,
-        )
+        if is_assumption_only:
+            rp_exec_id = str(expected_rows[0].get("execution_id"))
+            unsigned = verify_assumption_roleplay_receipt(
+                chain[0],
+                roleplay_id=rp_exec_id,
+                require_hmac=False,
+            )
+            signed = verify_assumption_roleplay_receipt(
+                chain[0],
+                roleplay_id=rp_exec_id,
+                hmac_key=hmac_key,
+                require_hmac=True,
+            )
+        else:
+            res_row, rp_row = expected_rows
+            unsigned = verify_receipt_chain(
+                chain,
+                research_id=str(res_row.get("execution_id")),
+                roleplay_id=str(rp_row.get("execution_id")),
+                require_hmac=False,
+            )
+            signed = verify_receipt_chain(
+                chain,
+                research_id=str(res_row.get("execution_id")),
+                roleplay_id=str(rp_row.get("execution_id")),
+                hmac_key=hmac_key,
+                require_hmac=True,
+            )
         unsigned_valid = unsigned_valid and bool(unsigned.get("ok"))
         hmac_valid = hmac_valid and bool(signed.get("ok"))
     if semantic_valid and have_references and hmac_valid:
@@ -995,6 +1020,14 @@ def evaluate(
     d_research_hmac_key: bytes | None = None,
 ) -> dict[str, Any]:
     workspace = workspace.resolve()
+    if actor_receipt_hmac_key is None:
+        env_actor_key = os.environ.get("ALEPH_RECEIPT_KEY")
+        if env_actor_key:
+            actor_receipt_hmac_key = env_actor_key.encode("utf-8")
+    if d_research_hmac_key is None:
+        env_research_key = os.environ.get("D_RESEARCH_LEDGER_KEY")
+        if env_research_key:
+            d_research_hmac_key = env_research_key.encode("utf-8")
     validation = validation or validate_workspace(workspace, mode="final", require_report=True)
     hard_fail = validation.get("status") != "pass"
     error_codes = set(validation.get("error_codes") or [])
